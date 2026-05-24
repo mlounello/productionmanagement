@@ -32,6 +32,8 @@ Run migrations in `supabase/migrations` in order.
 
 The first migration creates only the new `app_production_management` schema and inserts the new app/roles into `core`. It does not mutate Playbill or Theatre Budget data.
 
+In Supabase Dashboard, add `app_production_management` to the exposed API schemas before deploying the app. The current hosted project exposes the existing app schemas, but not this new one yet.
+
 After migration, grant yourself app access:
 
 ```sql
@@ -48,4 +50,3 @@ set role = excluded.role,
 - Theatre Budget writes stay disabled until after June 1, 2026.
 - Playbill writes stay disabled until after June 7, 2026.
 - Until then, integrations should use read-only references and `external_links`.
-
