@@ -1,0 +1,2 @@
+-- Seed data is intentionally empty for now.
+-- Production data should be created through the app or reviewed migrations.
