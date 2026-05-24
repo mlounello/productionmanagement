@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { hasSupabaseEnv, SITE_URL } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/auth";
@@ -28,6 +29,28 @@ async function signIn(formData: FormData) {
   redirect("/login?sent=true");
 }
 
+async function signInWithGoogle() {
+  "use server";
+
+  const supabase = await createSupabaseServerClient();
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const proto = requestHeaders.get("x-forwarded-proto") ?? "https";
+  const origin = host ? `${proto}://${host}` : SITE_URL;
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${origin}/auth/callback?next=/projects`
+    }
+  });
+
+  if (error || !data.url) {
+    redirect(`/login?error=${encodeURIComponent(error?.message ?? "Could not start Google sign-in.")}`);
+  }
+
+  redirect(data.url);
+}
+
 export default async function LoginPage({
   searchParams
 }: {
@@ -44,7 +67,7 @@ export default async function LoginPage({
       <section className="panel" style={{ maxWidth: 520 }}>
         <p className="eyebrow">Siena Production Operations</p>
         <h1>Sign in</h1>
-        <p className="muted">Use your email to receive a magic link.</p>
+        <p className="muted">Use your Siena Google account or receive a magic link.</p>
         {!hasSupabaseEnv() ? (
           <div className="panel setup-warning">
             Supabase env vars are not configured yet. Add `.env.local` before signing in.
@@ -52,6 +75,9 @@ export default async function LoginPage({
         ) : null}
         {params?.error ? <p className="setup-warning">{params.error}</p> : null}
         {params?.sent ? <p>Check your email for the sign-in link.</p> : null}
+        <form action={signInWithGoogle} className="form-grid" style={{ marginBottom: 18 }}>
+          <button type="submit">Continue with Google</button>
+        </form>
         <form action={signIn} className="form-grid">
           <div className="field">
             <label htmlFor="email">Email</label>
