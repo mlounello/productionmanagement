@@ -50,3 +50,11 @@ set role = excluded.role,
 - Theatre Budget writes stay disabled until after June 1, 2026.
 - Playbill writes stay disabled until after June 7, 2026.
 - Until then, integrations should use read-only references and `external_links`.
+
+## Product architecture direction
+
+The app should use managed reference data for reusable institutional options rather than repeated free text. Core institutional entities such as departments and locations should have dedicated tables; lighter controlled vocabularies such as project types, event types, role groups, and future category lists should use a shared `reference_values` pattern.
+
+Forms should use reusable searchable selectors with controlled "add new" flows where appropriate. Historical records should keep working when reference records are archived/inactive.
+
+The long-term UI direction is a Siena-branded production-management shell inspired by clean Propared-style workflows: persistent left sidebar, top workspace header, compact lists/tables, right-side detail drawers, and a Settings/Admin area for reference data. Data integrity and selector patterns come before a full visual shell redesign.
