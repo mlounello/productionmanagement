@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { SITE_URL } from "@/lib/config";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
 function getOrigin(request: Request, requestHeaders: Headers) {
   const forwardedHost = requestHeaders.get("x-forwarded-host");
@@ -11,10 +11,10 @@ function getOrigin(request: Request, requestHeaders: Headers) {
   return host ? `${proto}://${host}` : SITE_URL;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const requestHeaders = await headers();
   const origin = getOrigin(request, requestHeaders);
-  const supabase = await createSupabaseServerClient();
+  const { applyCookies, supabase } = createSupabaseRouteClient(request);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -23,10 +23,12 @@ export async function GET(request: Request) {
   });
 
   if (error || !data.url) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error?.message ?? "Could not start Google sign-in.")}`, origin)
+    return applyCookies(
+      NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(error?.message ?? "Could not start Google sign-in.")}`, origin)
+      )
     );
   }
 
-  return NextResponse.redirect(data.url);
+  return applyCookies(NextResponse.redirect(data.url));
 }
