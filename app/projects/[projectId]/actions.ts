@@ -34,6 +34,23 @@ const runOfShowSchema = z.object({
   durationMinutes: z.coerce.number().int().min(0).max(24 * 60).optional()
 });
 
+const projectScopedRowSchema = z.object({
+  projectId: projectIdSchema,
+  id: z.string().uuid()
+});
+
+function requiredString(value: FormDataEntryValue | null) {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return value.trim() ? value : undefined;
+}
+
 function dateToTimestamp(value?: string) {
   if (!value) {
     return null;
@@ -57,14 +74,14 @@ function projectErrorPath(projectId: string, message: string) {
 export async function createCalendarItemAction(formData: FormData) {
   await requireUser();
   const parsed = calendarItemSchema.safeParse({
-    projectId: formData.get("projectId"),
-    title: formData.get("title"),
-    itemType: formData.get("itemType"),
-    department: formData.get("department"),
-    location: formData.get("location"),
-    startsOn: formData.get("startsOn"),
-    endsOn: formData.get("endsOn"),
-    dueOn: formData.get("dueOn")
+    projectId: requiredString(formData.get("projectId")),
+    title: requiredString(formData.get("title")),
+    itemType: requiredString(formData.get("itemType")),
+    department: optionalString(formData.get("department")),
+    location: optionalString(formData.get("location")),
+    startsOn: optionalString(formData.get("startsOn")),
+    endsOn: optionalString(formData.get("endsOn")),
+    dueOn: optionalString(formData.get("dueOn"))
   });
 
   if (!parsed.success) {
@@ -95,10 +112,10 @@ export async function createCalendarItemAction(formData: FormData) {
 export async function createProjectRoleAction(formData: FormData) {
   await requireUser();
   const parsed = projectRoleSchema.safeParse({
-    projectId: formData.get("projectId"),
-    name: formData.get("name"),
-    roleGroup: formData.get("roleGroup"),
-    department: formData.get("department")
+    projectId: requiredString(formData.get("projectId")),
+    name: requiredString(formData.get("name")),
+    roleGroup: requiredString(formData.get("roleGroup")),
+    department: optionalString(formData.get("department"))
   });
 
   if (!parsed.success) {
@@ -124,11 +141,11 @@ export async function createProjectRoleAction(formData: FormData) {
 export async function createRunOfShowItemAction(formData: FormData) {
   await requireUser();
   const parsed = runOfShowSchema.safeParse({
-    projectId: formData.get("projectId"),
-    cueNumber: formData.get("cueNumber"),
-    title: formData.get("title"),
-    startsAt: formData.get("startsAt"),
-    durationMinutes: formData.get("durationMinutes") || undefined
+    projectId: requiredString(formData.get("projectId")),
+    cueNumber: optionalString(formData.get("cueNumber")),
+    title: requiredString(formData.get("title")),
+    startsAt: optionalString(formData.get("startsAt")),
+    durationMinutes: optionalString(formData.get("durationMinutes"))
   });
 
   if (!parsed.success) {
@@ -144,6 +161,54 @@ export async function createRunOfShowItemAction(formData: FormData) {
     starts_at: datetimeToTimestamp(input.startsAt),
     duration_minutes: input.durationMinutes ?? null
   });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function deleteCalendarItemAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("id"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid calendar item.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("calendar_items").delete().eq("project_id", input.projectId).eq("id", input.id);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function deleteRunOfShowItemAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("id"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid run-of-show row.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("run_of_show_items")
+    .delete()
+    .eq("project_id", input.projectId)
+    .eq("id", input.id);
 
   if (error) {
     redirect(projectErrorPath(input.projectId, error.message));

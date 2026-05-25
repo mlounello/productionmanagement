@@ -6,7 +6,9 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   createCalendarItemAction,
   createProjectRoleAction,
-  createRunOfShowItemAction
+  createRunOfShowItemAction,
+  deleteCalendarItemAction,
+  deleteRunOfShowItemAction
 } from "@/app/projects/[projectId]/actions";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +95,26 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
+}
+
+function formatItemDates(item: CalendarItem) {
+  const start = formatDate(item.starts_at);
+  const end = formatDate(item.ends_at);
+  const due = formatDate(item.due_at);
+
+  if (item.starts_at && item.ends_at) {
+    return `${start} to ${end}`;
+  }
+
+  if (item.starts_at) {
+    return `Starts ${start}`;
+  }
+
+  if (item.due_at) {
+    return `Due ${due}`;
+  }
+
+  return "Unscheduled";
 }
 
 function itemRange(item: CalendarItem) {
@@ -198,6 +220,13 @@ export default async function ProjectPage({
 
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
 
+      <nav className="workspace-nav" aria-label="Project workspace sections">
+        <a href="#calendar">Calendar</a>
+        <a href="#gantt">Gantt</a>
+        <a href="#roles">Roles</a>
+        <a href="#run-of-show">Run of Show</a>
+      </nav>
+
       <section className="workspace-summary" aria-label="Project summary">
         <div>
           <span>{items.length}</span>
@@ -218,7 +247,7 @@ export default async function ProjectPage({
       </section>
 
       <div className="workspace-grid">
-        <section className="panel workspace-main">
+        <section className="panel workspace-main" id="gantt">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Production Calendar</p>
@@ -267,7 +296,7 @@ export default async function ProjectPage({
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="calendar">
           <p className="eyebrow">Create</p>
           <h2>Calendar Item</h2>
           <form action={createCalendarItemAction} className="form-grid">
@@ -314,8 +343,43 @@ export default async function ProjectPage({
         </section>
       </div>
 
+      <section className="panel workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Production Calendar</p>
+            <h2>Calendar Items</h2>
+          </div>
+        </div>
+        <div className="table-list">
+          {items.length ? (
+            items.map((item) => (
+              <div className="table-row" key={item.id}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>
+                    {titleCase(item.item_type)} · {titleCase(item.status)}
+                    {item.department ? ` · ${item.department}` : ""}
+                    {item.location ? ` · ${item.location}` : ""}
+                  </span>
+                </div>
+                <span>{formatItemDates(item)}</span>
+                <form action={deleteCalendarItemAction}>
+                  <input name="projectId" type="hidden" value={typedProject.id} />
+                  <input name="id" type="hidden" value={item.id} />
+                  <button className="button danger" type="submit">
+                    Delete
+                  </button>
+                </form>
+              </div>
+            ))
+          ) : (
+            <p className="muted">No calendar items yet.</p>
+          )}
+        </div>
+      </section>
+
       <div className="grid two workspace-lower">
-        <section className="panel">
+        <section className="panel" id="roles">
           <div className="section-heading">
             <div>
               <p className="eyebrow">People Structure</p>
@@ -354,7 +418,7 @@ export default async function ProjectPage({
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="run-of-show">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Event Flow</p>
@@ -373,14 +437,23 @@ export default async function ProjectPage({
             {runRows.length ? (
               runRows.map((row) => (
                 <div className="compact-row" key={row.id}>
-                  <strong>
-                    {row.cue_number ? `${row.cue_number} · ` : ""}
-                    {row.title}
-                  </strong>
-                  <span>
-                    {formatDateTime(row.starts_at)}
-                    {row.duration_minutes ? ` · ${row.duration_minutes} min` : ""}
-                  </span>
+                  <div>
+                    <strong>
+                      {row.cue_number ? `${row.cue_number} · ` : ""}
+                      {row.title}
+                    </strong>
+                    <span>
+                      {formatDateTime(row.starts_at)}
+                      {row.duration_minutes ? ` · ${row.duration_minutes} min` : ""}
+                    </span>
+                  </div>
+                  <form action={deleteRunOfShowItemAction}>
+                    <input name="projectId" type="hidden" value={typedProject.id} />
+                    <input name="id" type="hidden" value={row.id} />
+                    <button className="button danger" type="submit">
+                      Delete
+                    </button>
+                  </form>
                 </div>
               ))
             ) : (

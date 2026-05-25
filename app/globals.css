@@ -190,6 +190,28 @@ h2 {
   margin-top: 16px;
 }
 
+.workspace-section {
+  margin-top: 16px;
+}
+
+.workspace-nav {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -4px 0 16px;
+}
+
+.workspace-nav a {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #2b3c35;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
 .section-heading {
   align-items: flex-start;
   display: flex;
@@ -276,6 +298,12 @@ button {
 .button.secondary {
   background: #fff;
   color: var(--siena-green);
+}
+
+.button.danger {
+  background: #fff;
+  border-color: #f2b8b5;
+  color: var(--danger);
 }
 
 .setup-warning {
@@ -431,14 +459,48 @@ button {
 }
 
 .compact-row {
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
   padding: 12px;
+}
+
+.compact-row form {
+  flex: 0 0 auto;
+}
+
+.table-list {
+  display: grid;
+  gap: 10px;
+}
+
+.table-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto) auto;
+  padding: 12px;
+}
+
+.table-row strong,
+.table-row span {
+  display: block;
+}
+
+.table-row span {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 @media (max-width: 860px) {
   .grid.two,
   .project-row,
+  .table-row,
   .workspace-grid,
   .workspace-summary,
   .form-row,
@@ -453,5 +515,10 @@ button {
 
   .gantt {
     grid-template-columns: 180px minmax(520px, 1fr);
+  }
+
+  .compact-row {
+    align-items: stretch;
+    display: grid;
   }
 }
