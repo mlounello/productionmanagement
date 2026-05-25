@@ -9,12 +9,21 @@ export async function GET(request: NextRequest) {
   const next = url.searchParams.get("next") || "/projects";
   const origin = url.origin;
   const { applyCookies, supabase } = createSupabaseRouteClient(request);
+  const stampCallback = (response: NextResponse) => {
+    response.cookies.set("pm_callback_hit", String(Date.now()), {
+      path: "/",
+      sameSite: "lax",
+      secure: url.protocol === "https:",
+      maxAge: 60 * 10
+    });
+    return response;
+  };
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      return applyCookies(
-        NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin))
+      return stampCallback(
+        applyCookies(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin)))
       );
     }
   } else if (tokenHash && type) {
@@ -23,8 +32,8 @@ export async function GET(request: NextRequest) {
       type: type as "magiclink" | "recovery" | "invite" | "signup" | "email_change" | "email"
     });
     if (error) {
-      return applyCookies(
-        NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin))
+      return stampCallback(
+        applyCookies(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin)))
       );
     }
   } else {
@@ -32,10 +41,10 @@ export async function GET(request: NextRequest) {
       url.searchParams.get("error_description") ??
       url.searchParams.get("error") ??
       "Missing authentication code.";
-    return applyCookies(
-      NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(errorDescription)}`, origin))
+    return stampCallback(
+      applyCookies(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(errorDescription)}`, origin)))
     );
   }
 
-  return applyCookies(NextResponse.redirect(new URL(next, origin)));
+  return stampCallback(applyCookies(NextResponse.redirect(new URL(next, origin))));
 }
