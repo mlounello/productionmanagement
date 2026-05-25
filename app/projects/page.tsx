@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getMissingSupabaseEnvVars, hasSupabaseEnv } from "@/lib/config";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { ProjectCreateForm } from "@/app/projects/project-create-form";
 
 export const dynamic = "force-dynamic";
 
@@ -97,31 +98,7 @@ export default async function ProjectsPage({
               Your account is signed in but does not have access to create Production Management projects yet.
             </p>
           ) : null}
-          <form action="/projects/create" className="form-grid" method="post">
-            <div className="field">
-              <label htmlFor="title">Project title</label>
-              <input id="title" name="title" required />
-            </div>
-            <div className="field">
-              <label htmlFor="projectType">Project type</label>
-              <select id="projectType" name="projectType" defaultValue="theatre_production">
-                <option value="theatre_production">Theatre production</option>
-                <option value="campus_event">Campus event</option>
-                <option value="rental">Rental</option>
-                <option value="support_job">Support job</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="startsOn">Start date</label>
-              <input id="startsOn" name="startsOn" type="date" />
-            </div>
-            <div className="field">
-              <label htmlFor="endsOn">End date</label>
-              <input id="endsOn" name="endsOn" type="date" />
-            </div>
-            <button type="submit">Create project</button>
-          </form>
+          <ProjectCreateForm disabled={appRole === "none"} />
         </section>
       </div>
     </div>
