@@ -63,6 +63,21 @@ textarea {
   white-space: nowrap;
 }
 
+.nav-signout-form {
+  margin: 0;
+}
+
+.nav-signout-button {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  cursor: pointer;
+  font-weight: inherit;
+  min-height: auto;
+  padding: 0;
+}
+
 .page {
   margin: 0 auto;
   max-width: 1180px;

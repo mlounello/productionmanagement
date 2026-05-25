@@ -20,7 +20,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           </Link>
           <nav aria-label="Primary navigation">
             <Link href="/projects">Projects</Link>
-            {user ? <Link href="/logout">Sign out</Link> : <Link href="/login">Sign in</Link>}
+            {user ? (
+              <form action="/logout" className="nav-signout-form" method="post">
+                <button className="nav-signout-button" type="submit">
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <Link href="/login">Sign in</Link>
+            )}
           </nav>
         </header>
         <main>{children}</main>
