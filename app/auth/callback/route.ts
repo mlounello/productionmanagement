@@ -4,12 +4,24 @@ import { createSupabaseRouteClient } from "@/lib/supabase-route";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
+  const tokenHash = url.searchParams.get("token_hash");
+  const type = url.searchParams.get("type");
   const next = url.searchParams.get("next") || "/projects";
   const origin = url.origin;
   const { applyCookies, supabase } = createSupabaseRouteClient(request);
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      return applyCookies(
+        NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin))
+      );
+    }
+  } else if (tokenHash && type) {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: type as "magiclink" | "recovery" | "invite" | "signup" | "email_change" | "email"
+    });
     if (error) {
       return applyCookies(
         NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, origin))

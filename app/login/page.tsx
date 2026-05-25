@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasSupabaseEnv, SITE_URL } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/auth";
+import { GoogleLoginButton } from "@/app/login/google-login-button";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +53,7 @@ export default async function LoginPage({
         ) : null}
         {params?.error ? <p className="setup-warning">{params.error}</p> : null}
         {params?.sent ? <p>Check your email for the sign-in link.</p> : null}
-        <Link className="button" href="/auth/google" style={{ marginBottom: 18, width: "100%" }}>
-          Continue with Google
-        </Link>
+        <GoogleLoginButton />
         <form action={signIn} className="form-grid">
           <div className="field">
             <label htmlFor="email">Email</label>

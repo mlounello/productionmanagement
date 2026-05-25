@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { APP_SCHEMA } from "@/lib/config";
+import { APP_SCHEMA, getSupabaseAuthCookieName } from "@/lib/config";
 
 type CookieToSet = {
   name: string;
@@ -17,7 +17,20 @@ export function createSupabaseRouteClient(request: NextRequest) {
     throw new Error("Missing Supabase environment variables.");
   }
 
+  const cookieName = getSupabaseAuthCookieName(url);
+  const isSecure = request.nextUrl.protocol === "https:";
+
   const supabase = createServerClient(url, anon, {
+    ...(cookieName
+      ? {
+          cookieOptions: {
+            name: cookieName,
+            path: "/",
+            sameSite: "lax",
+            secure: isSecure
+          }
+        }
+      : {}),
     db: {
       schema: APP_SCHEMA
     },

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { APP_SCHEMA } from "@/lib/config";
+import { APP_SCHEMA, getSupabaseAuthCookieName } from "@/lib/config";
 
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
@@ -11,7 +11,10 @@ export async function createSupabaseServerClient() {
     throw new Error("Missing Supabase environment variables.");
   }
 
+  const cookieName = getSupabaseAuthCookieName(url);
+
   return createServerClient(url, anon, {
+    ...(cookieName ? { cookieOptions: { name: cookieName } } : {}),
     db: {
       schema: APP_SCHEMA
     },
