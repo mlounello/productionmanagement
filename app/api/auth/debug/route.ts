@@ -44,6 +44,7 @@ export async function GET() {
     user: user ? { id: user.id, email: user.email ?? null } : null,
     session_present: Boolean(session),
     callback_hit_cookie: cookieStore.get("pm_callback_hit")?.value ?? null,
+    callback_status_cookie: cookieStore.get("pm_callback_status")?.value ?? null,
     expected_cookie_name: expectedCookieName,
     cookie_names: allCookies.map((cookie) => cookie.name),
     auth_cookie_diagnostics: authCookies.map((cookie) => {

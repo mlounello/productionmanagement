@@ -36,9 +36,22 @@ export function createSupabaseRouteClient(request: NextRequest) {
     },
     cookies: {
       getAll() {
-        return request.cookies.getAll();
+        const existing = request.cookies.getAll();
+        if (cookiesToSet.length === 0) {
+          return existing;
+        }
+
+        const byName = new Map(existing.map((cookie) => [cookie.name, cookie]));
+        cookiesToSet.forEach((cookie) => {
+          byName.set(cookie.name, { name: cookie.name, value: cookie.value });
+        });
+
+        return Array.from(byName.values());
       },
       setAll(items) {
+        items.forEach(({ name, value }) => {
+          request.cookies.set(name, value);
+        });
         cookiesToSet.push(...items);
       }
     }
