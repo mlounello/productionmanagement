@@ -9,10 +9,12 @@ export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
 
   async function submitProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
     setError("");
     setPending(true);
 
-    const form = event.currentTarget;
     const supabase = createSupabaseBrowserClient();
     const {
       data: { session }
@@ -25,7 +27,7 @@ export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
     }
 
     const response = await fetch("/projects/create", {
-      body: new FormData(form),
+      body: formData,
       credentials: "include",
       headers: {
         Accept: "application/json",
