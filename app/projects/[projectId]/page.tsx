@@ -10,6 +10,12 @@ import {
   deleteCalendarItemAction,
   deleteRunOfShowItemAction
 } from "@/app/projects/[projectId]/actions";
+import {
+  DepartmentSelector,
+  LocationSelector,
+  ReferenceValueSelector
+} from "@/components/reference-selectors";
+import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +39,9 @@ type CalendarItem = {
   due_at: string | null;
   status: string;
   department: string;
+  department_id: string | null;
   location: string;
+  location_id: string | null;
 };
 
 type ProjectRole = {
@@ -178,10 +186,18 @@ export default async function ProjectPage({
   }
 
   const typedProject = project as Project;
-  const [{ data: calendarItems }, { data: projectRoles }, { data: runOfShowItems }] = await Promise.all([
+  const [
+    { data: calendarItems },
+    { data: projectRoles },
+    { data: runOfShowItems },
+    departments,
+    locations,
+    calendarItemTypes,
+    roleGroups
+  ] = await Promise.all([
     supabase
       .from("calendar_items")
-      .select("id, title, item_type, starts_at, ends_at, due_at, status, department, location")
+      .select("id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id")
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true }),
     supabase
@@ -195,7 +211,11 @@ export default async function ProjectPage({
       .select("id, cue_number, title, starts_at, duration_minutes")
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true })
-      .order("sort_order", { ascending: true })
+      .order("sort_order", { ascending: true }),
+    fetchActiveDepartments(),
+    fetchActiveLocations(),
+    fetchActiveReferenceValues("calendar_item_type"),
+    fetchActiveReferenceValues("role_group")
   ]);
 
   const items = (calendarItems ?? []) as CalendarItem[];
@@ -305,17 +325,14 @@ export default async function ProjectPage({
               <label htmlFor="title">Title</label>
               <input id="title" name="title" required />
             </div>
-            <div className="field">
-              <label htmlFor="itemType">Type</label>
-              <select id="itemType" name="itemType" defaultValue="window">
-                <option value="window">Window</option>
-                <option value="task">Task</option>
-                <option value="event">Event</option>
-                <option value="milestone">Milestone</option>
-                <option value="deadline">Deadline</option>
-                <option value="run_of_show">Run of show</option>
-              </select>
-            </div>
+            <ReferenceValueSelector
+              label="Type"
+              name="itemType"
+              options={calendarItemTypes}
+              placeholder="Select item type"
+              required
+              selectId="itemType"
+            />
             <div className="form-row">
               <div className="field">
                 <label htmlFor="startsOn">Start</label>
@@ -330,14 +347,8 @@ export default async function ProjectPage({
               <label htmlFor="dueOn">Due</label>
               <input id="dueOn" name="dueOn" type="date" />
             </div>
-            <div className="field">
-              <label htmlFor="department">Department</label>
-              <input id="department" name="department" />
-            </div>
-            <div className="field">
-              <label htmlFor="location">Location</label>
-              <input id="location" name="location" />
-            </div>
+            <DepartmentSelector departments={departments} name="departmentId" selectId="calendarDepartmentId" />
+            <LocationSelector locations={locations} name="locationId" selectId="calendarLocationId" />
             <button type="submit">Add item</button>
           </form>
         </section>
@@ -390,15 +401,20 @@ export default async function ProjectPage({
             <input name="projectId" type="hidden" value={typedProject.id} />
             <input aria-label="Role name" name="name" placeholder="Role name" required />
             <select aria-label="Role group" name="roleGroup" defaultValue="production_team">
-              <option value="production_team">Production team</option>
-              <option value="cast">Cast</option>
-              <option value="crew">Crew</option>
-              <option value="designer">Designer</option>
-              <option value="department_head">Department head</option>
-              <option value="staff">Staff</option>
-              <option value="guest_artist">Guest artist</option>
+              {roleGroups.map((roleGroup) => (
+                <option key={roleGroup.id} value={roleGroup.slug}>
+                  {roleGroup.label}
+                </option>
+              ))}
             </select>
-            <input aria-label="Department" name="department" placeholder="Department" />
+            <select aria-label="Department" name="departmentId" defaultValue="">
+              <option value="">Department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
             <button type="submit">Add role</button>
           </form>
           <div className="compact-list">

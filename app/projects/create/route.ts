@@ -7,6 +7,8 @@ import { APP_SCHEMA } from "@/lib/config";
 const projectSchema = z.object({
   title: z.string().trim().min(1, "Project title is required.").max(160),
   projectType: z.enum(["theatre_production", "campus_event", "rental", "support_job", "other"]),
+  departmentId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional(),
   startsOn: z.string().trim().optional(),
   endsOn: z.string().trim().optional()
 });
@@ -125,11 +127,15 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const rawTitle = requiredString(formData.get("title"));
   const rawProjectType = requiredString(formData.get("projectType"));
+  const rawDepartmentId = optionalString(formData.get("departmentId"));
+  const rawLocationId = optionalString(formData.get("locationId"));
   const rawStartsOn = optionalString(formData.get("startsOn"));
   const rawEndsOn = optionalString(formData.get("endsOn"));
   const parsed = projectSchema.safeParse({
     title: rawTitle,
     projectType: rawProjectType,
+    departmentId: rawDepartmentId,
+    locationId: rawLocationId,
     startsOn: rawStartsOn,
     endsOn: rawEndsOn
   });
@@ -148,6 +154,8 @@ export async function POST(request: Request) {
       title: input.title,
       slug,
       project_type: input.projectType,
+      primary_department_id: input.departmentId || null,
+      primary_location_id: input.locationId || null,
       starts_on: input.startsOn || null,
       ends_on: input.endsOn || null,
       created_by: authenticatedUser.id

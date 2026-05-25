@@ -1,9 +1,25 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import {
+  DepartmentSelector,
+  LocationSelector,
+  ReferenceValueSelector
+} from "@/components/reference-selectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import type { DepartmentOption, LocationOption, ReferenceValueOption } from "@/lib/reference-data";
 
-export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
+export function ProjectCreateForm({
+  departments,
+  disabled,
+  locations,
+  projectTypes
+}: {
+  departments: DepartmentOption[];
+  disabled: boolean;
+  locations: LocationOption[];
+  projectTypes: ReferenceValueOption[];
+}) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -61,16 +77,17 @@ export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
         <label htmlFor="title">Project title</label>
         <input disabled={disabled || pending} id="title" name="title" required />
       </div>
-      <div className="field">
-        <label htmlFor="projectType">Project type</label>
-        <select disabled={disabled || pending} id="projectType" name="projectType" defaultValue="theatre_production">
-          <option value="theatre_production">Theatre production</option>
-          <option value="campus_event">Campus event</option>
-          <option value="rental">Rental</option>
-          <option value="support_job">Support job</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
+      <ReferenceValueSelector
+        disabled={disabled || pending}
+        label="Project type"
+        name="projectType"
+        options={projectTypes}
+        placeholder="Select project type"
+        required
+        selectId="projectType"
+      />
+      <DepartmentSelector departments={departments} disabled={disabled || pending} name="departmentId" selectId="departmentId" />
+      <LocationSelector disabled={disabled || pending} locations={locations} name="locationId" selectId="locationId" />
       <div className="field">
         <label htmlFor="startsOn">Start date</label>
         <input disabled={disabled || pending} id="startsOn" name="startsOn" type="date" />

@@ -3,6 +3,7 @@ import { getMissingSupabaseEnvVars, hasSupabaseEnv } from "@/lib/config";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectCreateForm } from "@/app/projects/project-create-form";
+import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 
 export const dynamic = "force-dynamic";
 
@@ -42,12 +43,15 @@ export default async function ProjectsPage({
 
   const user = await requireUser();
   const supabase = await createSupabaseServerClient();
-  const [{ data, error }, { data: role }] = await Promise.all([
+  const [{ data, error }, { data: role }, departments, locations, projectTypes] = await Promise.all([
     supabase
       .from("projects")
       .select("id, title, project_type, status, starts_on, ends_on")
       .order("created_at", { ascending: false }),
-    supabase.rpc("get_user_role")
+    supabase.rpc("get_user_role"),
+    fetchActiveDepartments(),
+    fetchActiveLocations(),
+    fetchActiveReferenceValues("project_type")
   ]);
 
   const projects = (data ?? []) as ProjectRow[];
@@ -98,7 +102,12 @@ export default async function ProjectsPage({
               Your account is signed in but does not have access to create Production Management projects yet.
             </p>
           ) : null}
-          <ProjectCreateForm disabled={appRole === "none"} />
+          <ProjectCreateForm
+            departments={departments}
+            disabled={appRole === "none"}
+            locations={locations}
+            projectTypes={projectTypes}
+          />
         </section>
       </div>
     </div>

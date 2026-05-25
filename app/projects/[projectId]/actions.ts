@@ -12,8 +12,8 @@ const calendarItemSchema = z.object({
   projectId: projectIdSchema,
   title: z.string().trim().min(1, "Calendar title is required.").max(180),
   itemType: z.enum(["window", "task", "event", "milestone", "deadline", "run_of_show"]),
-  department: z.string().trim().max(80).optional(),
-  location: z.string().trim().max(120).optional(),
+  departmentId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional(),
   startsOn: z.string().trim().optional(),
   endsOn: z.string().trim().optional(),
   dueOn: z.string().trim().optional()
@@ -23,7 +23,7 @@ const projectRoleSchema = z.object({
   projectId: projectIdSchema,
   name: z.string().trim().min(1, "Role name is required.").max(120),
   roleGroup: z.enum(["production_team", "cast", "crew", "designer", "department_head", "staff", "guest_artist"]),
-  department: z.string().trim().max(80).optional()
+  departmentId: z.string().uuid().optional()
 });
 
 const runOfShowSchema = z.object({
@@ -71,14 +71,42 @@ function projectErrorPath(projectId: string, message: string) {
   return `/projects/${projectId}?error=${encodeURIComponent(message)}`;
 }
 
+async function getDepartmentName(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, id?: string) {
+  if (!id) {
+    return "";
+  }
+
+  const { data, error } = await supabase.from("departments").select("name").eq("id", id).maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof data?.name === "string" ? data.name : "";
+}
+
+async function getLocationName(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, id?: string) {
+  if (!id) {
+    return "";
+  }
+
+  const { data, error } = await supabase.from("locations").select("name").eq("id", id).maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof data?.name === "string" ? data.name : "";
+}
+
 export async function createCalendarItemAction(formData: FormData) {
   await requireUser();
   const parsed = calendarItemSchema.safeParse({
     projectId: requiredString(formData.get("projectId")),
     title: requiredString(formData.get("title")),
     itemType: requiredString(formData.get("itemType")),
-    department: optionalString(formData.get("department")),
-    location: optionalString(formData.get("location")),
+    departmentId: optionalString(formData.get("departmentId")),
+    locationId: optionalString(formData.get("locationId")),
     startsOn: optionalString(formData.get("startsOn")),
     endsOn: optionalString(formData.get("endsOn")),
     dueOn: optionalString(formData.get("dueOn"))
@@ -90,12 +118,25 @@ export async function createCalendarItemAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  let departmentName = "";
+  let locationName = "";
+  try {
+    [departmentName, locationName] = await Promise.all([
+      getDepartmentName(supabase, input.departmentId),
+      getLocationName(supabase, input.locationId)
+    ]);
+  } catch (error) {
+    redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve references."));
+  }
+
   const { error } = await supabase.from("calendar_items").insert({
     project_id: input.projectId,
     title: input.title,
     item_type: input.itemType,
-    department: input.department ?? "",
-    location: input.location ?? "",
+    department_id: input.departmentId ?? null,
+    location_id: input.locationId ?? null,
+    department: departmentName,
+    location: locationName,
     starts_at: dateToTimestamp(input.startsOn),
     ends_at: dateToTimestamp(input.endsOn),
     due_at: dateToTimestamp(input.dueOn),
@@ -115,7 +156,7 @@ export async function createProjectRoleAction(formData: FormData) {
     projectId: requiredString(formData.get("projectId")),
     name: requiredString(formData.get("name")),
     roleGroup: requiredString(formData.get("roleGroup")),
-    department: optionalString(formData.get("department"))
+    departmentId: optionalString(formData.get("departmentId"))
   });
 
   if (!parsed.success) {
@@ -124,11 +165,18 @@ export async function createProjectRoleAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  let departmentName = "";
+  try {
+    departmentName = await getDepartmentName(supabase, input.departmentId);
+  } catch (error) {
+    redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve department."));
+  }
+
   const { error } = await supabase.from("project_roles").insert({
     project_id: input.projectId,
     name: input.name,
     role_group: input.roleGroup,
-    department: input.department ?? ""
+    department: departmentName
   });
 
   if (error) {

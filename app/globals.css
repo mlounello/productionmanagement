@@ -453,6 +453,14 @@ button {
   grid-template-columns: 72px minmax(160px, 1fr) minmax(180px, 0.9fr) 86px auto;
 }
 
+.inline-create.reference-create {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.inline-create.reference-value-create {
+  grid-template-columns: minmax(180px, 0.6fr) minmax(220px, 1fr) auto;
+}
+
 .compact-list {
   display: grid;
   gap: 10px;
@@ -470,6 +478,46 @@ button {
 
 .compact-row form {
   flex: 0 0 auto;
+}
+
+.status-pill {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.status-pill.active {
+  background: #e8f6ef;
+  color: var(--siena-green);
+}
+
+.status-pill.inactive {
+  background: #f2f4f3;
+  color: var(--muted);
+}
+
+.settings-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reference-groups {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reference-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.reference-group h3 {
+  font-size: 16px;
+  margin: 0 0 12px;
 }
 
 .table-list {
@@ -503,6 +551,8 @@ button {
   .table-row,
   .workspace-grid,
   .workspace-summary,
+  .settings-grid,
+  .reference-groups,
   .form-row,
   .inline-create,
   .inline-create.run-create {
