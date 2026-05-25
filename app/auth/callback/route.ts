@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { persistSupabaseSessionCookie } from "@/lib/supabase-session-cookie";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
 export async function GET(request: NextRequest) {
@@ -8,15 +9,18 @@ export async function GET(request: NextRequest) {
   const type = url.searchParams.get("type");
   const next = url.searchParams.get("next") || "/projects";
   const origin = url.origin;
-  const { applyCookies, supabase } = createSupabaseRouteClient(request);
+  const { applyCookies, cookieName, isSecure, supabase } = createSupabaseRouteClient(request);
   const stampCallback = (
     response: NextResponse,
     status: {
+      cookieNames?: string[];
       error?: string | null;
       hasCode: boolean;
       hasSession?: boolean;
       hasTokenHash: boolean;
+      manualCookiePersisted?: boolean;
       ok: boolean;
+      sessionCookieChunks?: number;
     }
   ) => {
     response.cookies.set("pm_callback_hit", String(Date.now()), {
@@ -49,12 +53,25 @@ export async function GET(request: NextRequest) {
       );
     }
     const response = applyCookies(NextResponse.redirect(new URL(next, origin)));
+    const persisted =
+      cookieName && data?.session
+        ? persistSupabaseSessionCookie({
+            cookieName,
+            isSecure,
+            request,
+            response,
+            session: data.session
+          })
+        : null;
     return stampCallback(response, {
+      cookieNames: persisted?.cookieNames,
       error: null,
       hasCode: true,
       hasSession: Boolean(data?.session),
       hasTokenHash: false,
-      ok: Boolean(data?.session)
+      manualCookiePersisted: Boolean(persisted),
+      ok: Boolean(data?.session),
+      sessionCookieChunks: persisted?.chunkCount
     });
   } else if (tokenHash && type) {
     const { data, error } = await supabase.auth.verifyOtp({
@@ -74,12 +91,25 @@ export async function GET(request: NextRequest) {
       );
     }
     const response = applyCookies(NextResponse.redirect(new URL(next, origin)));
+    const persisted =
+      cookieName && data?.session
+        ? persistSupabaseSessionCookie({
+            cookieName,
+            isSecure,
+            request,
+            response,
+            session: data.session
+          })
+        : null;
     return stampCallback(response, {
+      cookieNames: persisted?.cookieNames,
       error: null,
       hasCode: false,
       hasSession: Boolean(data?.session),
       hasTokenHash: true,
-      ok: Boolean(data?.session)
+      manualCookiePersisted: Boolean(persisted),
+      ok: Boolean(data?.session),
+      sessionCookieChunks: persisted?.chunkCount
     });
   } else {
     const errorDescription =

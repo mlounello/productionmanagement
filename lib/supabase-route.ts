@@ -65,5 +65,5 @@ export function createSupabaseRouteClient(request: NextRequest) {
     return response;
   }
 
-  return { applyCookies, supabase };
+  return { applyCookies, cookieName, isSecure, supabase };
 }
