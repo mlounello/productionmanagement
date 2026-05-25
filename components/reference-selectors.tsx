@@ -29,12 +29,14 @@ function ManagedSelect({ disabled, label, name, options, placeholder = "Select o
 export function DepartmentSelector({
   departments,
   disabled,
+  label = "Department",
   name = "departmentId",
   required = false,
   selectId = "departmentId"
 }: {
   departments: DepartmentOption[];
   disabled?: boolean;
+  label?: string;
   name?: string;
   required?: boolean;
   selectId?: string;
@@ -42,7 +44,7 @@ export function DepartmentSelector({
   return (
     <ManagedSelect
       disabled={disabled}
-      label="Department"
+      label={label}
       name={name}
       options={departments.map((department) => ({ label: department.name, value: department.id }))}
       placeholder="Select department"
@@ -54,12 +56,14 @@ export function DepartmentSelector({
 
 export function LocationSelector({
   disabled,
+  label = "Location",
   locations,
   name = "locationId",
   required = false,
   selectId = "locationId"
 }: {
   disabled?: boolean;
+  label?: string;
   locations: LocationOption[];
   name?: string;
   required?: boolean;
@@ -68,7 +72,7 @@ export function LocationSelector({
   return (
     <ManagedSelect
       disabled={disabled}
-      label="Location"
+      label={label}
       name={name}
       options={locations.map((location) => ({ label: location.name, value: location.id }))}
       placeholder="Select location"

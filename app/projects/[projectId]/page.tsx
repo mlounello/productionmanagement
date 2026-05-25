@@ -4,11 +4,14 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
+  addProjectLocationAction,
   createCalendarItemAction,
   createProjectRoleAction,
   createRunOfShowItemAction,
   deleteCalendarItemAction,
-  deleteRunOfShowItemAction
+  deleteProjectAction,
+  deleteRunOfShowItemAction,
+  removeProjectLocationAction
 } from "@/app/projects/[projectId]/actions";
 import {
   DepartmentSelector,
@@ -57,6 +60,18 @@ type RunOfShowItem = {
   title: string;
   starts_at: string | null;
   duration_minutes: number | null;
+};
+
+type ProjectLocation = {
+  id: string;
+  location_id: string;
+  locations: {
+    id: string;
+    name: string;
+    building: string;
+    room: string;
+    is_active: boolean;
+  } | null;
 };
 
 function titleCase(value: string) {
@@ -190,6 +205,7 @@ export default async function ProjectPage({
     { data: calendarItems },
     { data: projectRoles },
     { data: runOfShowItems },
+    { data: projectLocations },
     departments,
     locations,
     calendarItemTypes,
@@ -212,6 +228,11 @@ export default async function ProjectPage({
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true })
       .order("sort_order", { ascending: true }),
+    supabase
+      .from("project_locations")
+      .select("id, location_id, locations(id, name, building, room, is_active)")
+      .eq("project_id", typedProject.id)
+      .order("sort_order", { ascending: true }),
     fetchActiveDepartments(),
     fetchActiveLocations(),
     fetchActiveReferenceValues("calendar_item_type"),
@@ -221,6 +242,9 @@ export default async function ProjectPage({
   const items = (calendarItems ?? []) as CalendarItem[];
   const roles = (projectRoles ?? []) as ProjectRole[];
   const runRows = (runOfShowItems ?? []) as RunOfShowItem[];
+  const projectLocationRows = (projectLocations ?? []) as unknown as ProjectLocation[];
+  const linkedLocationIds = new Set(projectLocationRows.map((projectLocation) => projectLocation.location_id));
+  const availableProjectLocations = locations.filter((location) => !linkedLocationIds.has(location.id));
   const timeline = getTimeline(typedProject, items);
 
   return (
@@ -233,9 +257,17 @@ export default async function ProjectPage({
             {titleCase(typedProject.status)} · {formatDate(typedProject.starts_on)} to {formatDate(typedProject.ends_on)}
           </p>
         </div>
-        <Link className="button secondary" href="/projects">
-          Projects
-        </Link>
+        <div className="top-actions">
+          <Link className="button secondary" href="/projects">
+            Projects
+          </Link>
+          <form action={deleteProjectAction}>
+            <input name="projectId" type="hidden" value={typedProject.id} />
+            <button className="button danger" type="submit">
+              Delete Project
+            </button>
+          </form>
+        </div>
       </div>
 
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
@@ -263,6 +295,55 @@ export default async function ProjectPage({
         <div>
           <span>{timeline.weeks.length}</span>
           <p>Timeline Weeks</p>
+        </div>
+      </section>
+
+      <section className="panel workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Project Scope</p>
+            <h2>Project Locations</h2>
+            <p className="muted">
+              Add the locations this project is likely to use. Calendar items can still choose their exact location.
+            </p>
+          </div>
+        </div>
+        <form action={addProjectLocationAction} className="inline-create reference-create">
+          <input name="projectId" type="hidden" value={typedProject.id} />
+          <select aria-label="Add project location" name="locationId" defaultValue="" required>
+            <option value="">Add location</option>
+            {availableProjectLocations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+          <button type="submit">Add</button>
+        </form>
+        <div className="compact-list">
+          {projectLocationRows.length ? (
+            projectLocationRows.map((projectLocation) => (
+              <div className="compact-row" key={projectLocation.id}>
+                <div>
+                  <strong>{projectLocation.locations?.name ?? "Unknown location"}</strong>
+                  <span>
+                    {projectLocation.locations?.building ?? ""}
+                    {projectLocation.locations?.room ? ` · ${projectLocation.locations.room}` : ""}
+                    {projectLocation.locations && !projectLocation.locations.is_active ? " · Archived" : ""}
+                  </span>
+                </div>
+                <form action={removeProjectLocationAction}>
+                  <input name="projectId" type="hidden" value={typedProject.id} />
+                  <input name="id" type="hidden" value={projectLocation.id} />
+                  <button className="button danger" type="submit">
+                    Remove
+                  </button>
+                </form>
+              </div>
+            ))
+          ) : (
+            <p className="muted">No project-level locations yet.</p>
+          )}
         </div>
       </section>
 

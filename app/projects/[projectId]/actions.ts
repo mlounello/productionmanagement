@@ -39,6 +39,11 @@ const projectScopedRowSchema = z.object({
   id: z.string().uuid()
 });
 
+const projectLocationSchema = z.object({
+  projectId: projectIdSchema,
+  locationId: z.string().uuid()
+});
+
 function requiredString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : "";
 }
@@ -263,4 +268,70 @@ export async function deleteRunOfShowItemAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function addProjectLocationAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectLocationSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    locationId: requiredString(formData.get("locationId"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid project location.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("project_locations").insert({
+    project_id: input.projectId,
+    location_id: input.locationId
+  });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function removeProjectLocationAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("id"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid project location.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("project_locations").delete().eq("project_id", input.projectId).eq("id", input.id);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function deleteProjectAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectIdSchema.safeParse(formData.get("projectId"));
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent("Invalid project.")}`);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("projects").delete().eq("id", parsed.data);
+
+  if (error) {
+    redirect(projectErrorPath(parsed.data, error.message));
+  }
+
+  revalidatePath("/projects");
+  redirect("/projects");
 }

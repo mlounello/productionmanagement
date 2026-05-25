@@ -86,8 +86,20 @@ export function ProjectCreateForm({
         required
         selectId="projectType"
       />
-      <DepartmentSelector departments={departments} disabled={disabled || pending} name="departmentId" selectId="departmentId" />
-      <LocationSelector disabled={disabled || pending} locations={locations} name="locationId" selectId="locationId" />
+      <DepartmentSelector
+        departments={departments}
+        disabled={disabled || pending}
+        label="Primary department"
+        name="departmentId"
+        selectId="departmentId"
+      />
+      <LocationSelector
+        disabled={disabled || pending}
+        label="Primary location"
+        locations={locations}
+        name="locationId"
+        selectId="locationId"
+      />
       <div className="field">
         <label htmlFor="startsOn">Start date</label>
         <input disabled={disabled || pending} id="startsOn" name="startsOn" type="date" />
