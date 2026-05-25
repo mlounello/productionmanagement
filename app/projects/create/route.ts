@@ -80,6 +80,18 @@ function createTokenSupabaseClient(accessToken: string) {
   });
 }
 
+function requiredString(value: FormDataEntryValue | null) {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  return value.trim() ? value : undefined;
+}
+
 export async function POST(request: Request) {
   let supabase = (await createSupabaseServerClient()) as SupabaseClient<any, any, any>;
   const {
@@ -111,11 +123,15 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  const rawTitle = requiredString(formData.get("title"));
+  const rawProjectType = requiredString(formData.get("projectType"));
+  const rawStartsOn = optionalString(formData.get("startsOn"));
+  const rawEndsOn = optionalString(formData.get("endsOn"));
   const parsed = projectSchema.safeParse({
-    title: formData.get("title"),
-    projectType: formData.get("projectType"),
-    startsOn: formData.get("startsOn"),
-    endsOn: formData.get("endsOn")
+    title: rawTitle,
+    projectType: rawProjectType,
+    startsOn: rawStartsOn,
+    endsOn: rawEndsOn
   });
 
   if (!parsed.success) {
