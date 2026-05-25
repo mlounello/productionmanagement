@@ -27,6 +27,28 @@ function projectErrorPath(message: string) {
   return `/projects?error=${encodeURIComponent(message)}`;
 }
 
+function wantsJson(request: Request) {
+  return request.headers.get("accept")?.includes("application/json") ?? false;
+}
+
+function failureResponse(request: Request, message: string, status = 400) {
+  if (wantsJson(request)) {
+    return NextResponse.json({ error: message }, { status });
+  }
+
+  return redirectTo(request, projectErrorPath(message));
+}
+
+function successResponse(request: Request, projectId: string) {
+  const redirectPath = `/projects/${projectId}`;
+
+  if (wantsJson(request)) {
+    return NextResponse.json({ redirectTo: redirectPath });
+  }
+
+  return redirectTo(request, redirectPath);
+}
+
 function getBearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
   const [scheme, token] = authorization.split(" ");
@@ -79,7 +101,13 @@ export async function POST(request: Request) {
   }
 
   if (!authenticatedUser) {
-    return redirectTo(request, "/login?error=Please sign in before creating a project.");
+    return failureResponse(
+      request,
+      accessToken
+        ? "The create request included a browser session token, but Supabase could not validate it."
+        : "The create request did not include a Supabase session. Sign out, sign in again, and retry.",
+      401
+    );
   }
 
   const formData = await request.formData();
@@ -91,7 +119,7 @@ export async function POST(request: Request) {
   });
 
   if (!parsed.success) {
-    return redirectTo(request, projectErrorPath(parsed.error.issues[0]?.message ?? "Invalid project."));
+    return failureResponse(request, parsed.error.issues[0]?.message ?? "Invalid project.");
   }
 
   const input = parsed.data;
@@ -112,7 +140,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !project) {
-    return redirectTo(request, projectErrorPath(error?.message ?? "Could not create project."));
+    return failureResponse(request, error?.message ?? "Could not create project.");
   }
 
   const { error: membershipError } = await supabase.from("project_memberships").insert({
@@ -123,8 +151,8 @@ export async function POST(request: Request) {
   });
 
   if (membershipError) {
-    return redirectTo(request, projectErrorPath(membershipError.message));
+    return failureResponse(request, membershipError.message);
   }
 
-  return redirectTo(request, `/projects/${String(project.id)}`);
+  return successResponse(request, String(project.id));
 }

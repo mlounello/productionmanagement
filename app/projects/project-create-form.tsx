@@ -28,25 +28,28 @@ export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
       body: new FormData(form),
       credentials: "include",
       headers: {
+        Accept: "application/json",
         Authorization: `Bearer ${session.access_token}`
       },
       method: "POST",
-      redirect: "follow"
+      redirect: "manual"
     });
 
     setPending(false);
 
-    if (response.redirected) {
-      window.location.assign(response.url);
-      return;
-    }
+    const result = (await response.json().catch(() => null)) as { error?: string; redirectTo?: string } | null;
 
     if (!response.ok) {
-      setError("The project could not be created. Reload, confirm you are signed in, and try again.");
+      setError(result?.error ?? "The project could not be created. Reload, confirm you are signed in, and try again.");
       return;
     }
 
-    window.location.assign(response.url || "/projects");
+    if (result?.redirectTo) {
+      window.location.assign(result.redirectTo);
+      return;
+    }
+
+    window.location.assign("/projects");
   }
 
   return (
