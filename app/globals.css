@@ -108,6 +108,11 @@ h2 {
   color: var(--muted);
 }
 
+.session-note {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+
 .grid {
   display: grid;
   gap: 16px;

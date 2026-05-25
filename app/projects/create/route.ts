@@ -1,10 +1,6 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { requireUser } from "@/lib/auth";
 
 const projectSchema = z.object({
   title: z.string().trim().min(1, "Project title is required.").max(160),
@@ -21,8 +17,25 @@ function slugify(value: string) {
     .slice(0, 70);
 }
 
-export async function createProjectAction(formData: FormData) {
-  const user = await requireUser();
+function redirectTo(request: Request, path: string) {
+  return NextResponse.redirect(new URL(path, new URL(request.url).origin));
+}
+
+function projectErrorPath(message: string) {
+  return `/projects?error=${encodeURIComponent(message)}`;
+}
+
+export async function POST(request: Request) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return redirectTo(request, "/login?error=Please sign in before creating a project.");
+  }
+
+  const formData = await request.formData();
   const parsed = projectSchema.safeParse({
     title: formData.get("title"),
     projectType: formData.get("projectType"),
@@ -31,11 +44,10 @@ export async function createProjectAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid project.")}`);
+    return redirectTo(request, projectErrorPath(parsed.error.issues[0]?.message ?? "Invalid project."));
   }
 
   const input = parsed.data;
-  const supabase = await createSupabaseServerClient();
   const slugBase = slugify(input.title) || "project";
   const slug = `${slugBase}-${Date.now().toString(36)}`;
 
@@ -53,20 +65,19 @@ export async function createProjectAction(formData: FormData) {
     .single();
 
   if (error || !project) {
-    redirect(`/projects?error=${encodeURIComponent(error?.message ?? "Could not create project.")}`);
+    return redirectTo(request, projectErrorPath(error?.message ?? "Could not create project."));
   }
 
   const { error: membershipError } = await supabase.from("project_memberships").insert({
-    project_id: project.id,
+    project_id: String(project.id),
     user_id: user.id,
     role: "project_manager",
     title: "Project Manager"
   });
 
   if (membershipError) {
-    redirect(`/projects?error=${encodeURIComponent(membershipError.message)}`);
+    return redirectTo(request, projectErrorPath(membershipError.message));
   }
 
-  revalidatePath("/projects");
-  redirect(`/projects/${project.id}`);
+  return redirectTo(request, `/projects/${String(project.id)}`);
 }

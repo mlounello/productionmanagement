@@ -2,7 +2,6 @@ import Link from "next/link";
 import { getMissingSupabaseEnvVars, hasSupabaseEnv } from "@/lib/config";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { createProjectAction } from "@/app/projects/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,14 +39,18 @@ export default async function ProjectsPage({
     );
   }
 
-  await requireUser();
+  const user = await requireUser();
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("projects")
-    .select("id, title, project_type, status, starts_on, ends_on")
-    .order("created_at", { ascending: false });
+  const [{ data, error }, { data: role }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, title, project_type, status, starts_on, ends_on")
+      .order("created_at", { ascending: false }),
+    supabase.rpc("get_user_role")
+  ]);
 
   const projects = (data ?? []) as ProjectRow[];
+  const appRole = typeof role === "string" ? role : "none";
 
   return (
     <div className="page">
@@ -57,6 +60,9 @@ export default async function ProjectsPage({
           <h1>Projects</h1>
           <p className="muted">
             Create theatre productions, events, rentals, support jobs, and future operational work.
+          </p>
+          <p className="muted session-note">
+            Signed in as {user.email ?? "unknown user"} · Production Management role: {appRole}
           </p>
         </div>
       </div>
@@ -86,7 +92,12 @@ export default async function ProjectsPage({
 
         <section className="panel">
           <h2>Create Project</h2>
-          <form action={createProjectAction} className="form-grid">
+          {appRole === "none" ? (
+            <p className="setup-warning">
+              Your account is signed in but does not have access to create Production Management projects yet.
+            </p>
+          ) : null}
+          <form action="/projects/create" className="form-grid" method="post">
             <div className="field">
               <label htmlFor="title">Project title</label>
               <input id="title" name="title" required />
