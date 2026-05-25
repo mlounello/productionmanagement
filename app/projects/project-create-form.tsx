@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
   const [error, setError] = useState("");
@@ -12,9 +13,23 @@ export function ProjectCreateForm({ disabled }: { disabled: boolean }) {
     setPending(true);
 
     const form = event.currentTarget;
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setPending(false);
+      setError("The browser does not have an active Supabase session. Sign out, sign in again, and retry.");
+      return;
+    }
+
     const response = await fetch("/projects/create", {
       body: new FormData(form),
       credentials: "include",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      },
       method: "POST",
       redirect: "follow"
     });

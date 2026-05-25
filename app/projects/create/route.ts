@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { APP_SCHEMA } from "@/lib/config";
 
 const projectSchema = z.object({
   title: z.string().trim().min(1, "Project title is required.").max(160),
@@ -25,13 +27,58 @@ function projectErrorPath(message: string) {
   return `/projects?error=${encodeURIComponent(message)}`;
 }
 
-export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+function getBearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") ?? "";
+  const [scheme, token] = authorization.split(" ");
 
-  if (!user) {
+  return scheme.toLowerCase() === "bearer" && token ? token : null;
+}
+
+function createTokenSupabaseClient(accessToken: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    throw new Error("Missing Supabase environment variables.");
+  }
+
+  return createClient(url, anon, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    },
+    db: {
+      schema: APP_SCHEMA
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }
+  });
+}
+
+export async function POST(request: Request) {
+  let supabase = (await createSupabaseServerClient()) as SupabaseClient<any, any, any>;
+  const {
+    data: { user: cookieUser }
+  } = await supabase.auth.getUser();
+  const accessToken = getBearerToken(request);
+  let authenticatedUser = cookieUser;
+
+  if (!authenticatedUser && accessToken) {
+    const tokenClient = createTokenSupabaseClient(accessToken);
+    const {
+      data: { user: tokenUser }
+    } = await tokenClient.auth.getUser(accessToken);
+
+    if (tokenUser) {
+      supabase = tokenClient;
+      authenticatedUser = tokenUser;
+    }
+  }
+
+  if (!authenticatedUser) {
     return redirectTo(request, "/login?error=Please sign in before creating a project.");
   }
 
@@ -59,7 +106,7 @@ export async function POST(request: Request) {
       project_type: input.projectType,
       starts_on: input.startsOn || null,
       ends_on: input.endsOn || null,
-      created_by: user.id
+      created_by: authenticatedUser.id
     })
     .select("id")
     .single();
@@ -70,7 +117,7 @@ export async function POST(request: Request) {
 
   const { error: membershipError } = await supabase.from("project_memberships").insert({
     project_id: String(project.id),
-    user_id: user.id,
+    user_id: authenticatedUser.id,
     role: "project_manager",
     title: "Project Manager"
   });
