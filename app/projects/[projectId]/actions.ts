@@ -12,6 +12,8 @@ const calendarItemSchema = z.object({
   projectId: projectIdSchema,
   title: z.string().trim().min(1, "Calendar title is required.").max(180),
   itemType: z.enum(["window", "task", "event", "milestone", "deadline", "run_of_show"]),
+  timelineGroupId: z.string().uuid().optional(),
+  newTimelineGroupName: z.string().trim().max(120).optional(),
   departmentId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
   startsOn: z.string().trim().optional(),
@@ -44,6 +46,11 @@ const projectLocationSchema = z.object({
   locationId: z.string().uuid()
 });
 
+const timelineGroupSchema = z.object({
+  projectId: projectIdSchema,
+  name: z.string().trim().min(1, "Timeline group name is required.").max(120)
+});
+
 function requiredString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : "";
 }
@@ -74,6 +81,16 @@ function datetimeToTimestamp(value?: string) {
 
 function projectErrorPath(projectId: string, message: string) {
   return `/projects/${projectId}?error=${encodeURIComponent(message)}`;
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 90);
 }
 
 async function getDepartmentName(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, id?: string) {
@@ -110,6 +127,8 @@ export async function createCalendarItemAction(formData: FormData) {
     projectId: requiredString(formData.get("projectId")),
     title: requiredString(formData.get("title")),
     itemType: requiredString(formData.get("itemType")),
+    timelineGroupId: optionalString(formData.get("timelineGroupId")),
+    newTimelineGroupName: optionalString(formData.get("newTimelineGroupName")),
     departmentId: optionalString(formData.get("departmentId")),
     locationId: optionalString(formData.get("locationId")),
     startsOn: optionalString(formData.get("startsOn")),
@@ -123,6 +142,31 @@ export async function createCalendarItemAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  let timelineGroupId = input.timelineGroupId ?? null;
+
+  if (input.newTimelineGroupName) {
+    const slug = slugify(input.newTimelineGroupName);
+    if (!slug) {
+      redirect(projectErrorPath(input.projectId, "Timeline group name is required."));
+    }
+
+    const { data: group, error: groupError } = await supabase
+      .from("project_timeline_groups")
+      .insert({
+        project_id: input.projectId,
+        name: input.newTimelineGroupName,
+        slug
+      })
+      .select("id")
+      .single();
+
+    if (groupError || !group) {
+      redirect(projectErrorPath(input.projectId, groupError?.message ?? "Could not create timeline group."));
+    }
+
+    timelineGroupId = String(group.id);
+  }
+
   let departmentName = "";
   let locationName = "";
   try {
@@ -138,6 +182,7 @@ export async function createCalendarItemAction(formData: FormData) {
     project_id: input.projectId,
     title: input.title,
     item_type: input.itemType,
+    timeline_group_id: timelineGroupId,
     department_id: input.departmentId ?? null,
     location_id: input.locationId ?? null,
     department: departmentName,
@@ -334,4 +379,61 @@ export async function deleteProjectAction(formData: FormData) {
 
   revalidatePath("/projects");
   redirect("/projects");
+}
+
+export async function createTimelineGroupAction(formData: FormData) {
+  await requireUser();
+  const parsed = timelineGroupSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    name: requiredString(formData.get("name"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid timeline group.")}`);
+  }
+
+  const input = parsed.data;
+  const slug = slugify(input.name);
+  if (!slug) {
+    redirect(projectErrorPath(input.projectId, "Timeline group name is required."));
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("project_timeline_groups").insert({
+    project_id: input.projectId,
+    name: input.name,
+    slug
+  });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function archiveTimelineGroupAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("id"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid timeline group.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("project_timeline_groups")
+    .update({ is_active: false })
+    .eq("project_id", input.projectId)
+    .eq("id", input.id);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
 }

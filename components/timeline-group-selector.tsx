@@ -1,0 +1,39 @@
+"use client";
+
+import { useState } from "react";
+
+export type TimelineGroupOption = {
+  id: string;
+  name: string;
+  is_active: boolean;
+};
+
+export function TimelineGroupSelector({ groups }: { groups: TimelineGroupOption[] }) {
+  const [mode, setMode] = useState("ungrouped");
+
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="timelineGroupId">Timeline group</label>
+        <select id="timelineGroupId" onChange={(event) => setMode(event.target.value)} value={mode}>
+          <option value="ungrouped">Ungrouped</option>
+          {groups
+            .filter((group) => group.is_active)
+            .map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          <option value="new">Add new timeline group...</option>
+        </select>
+      </div>
+      <input name="timelineGroupId" type="hidden" value={mode === "new" || mode === "ungrouped" ? "" : mode} />
+      {mode === "new" ? (
+        <div className="field">
+          <label htmlFor="newTimelineGroupName">New timeline group</label>
+          <input id="newTimelineGroupName" name="newTimelineGroupName" placeholder="Tech Week" required />
+        </div>
+      ) : null}
+    </>
+  );
+}

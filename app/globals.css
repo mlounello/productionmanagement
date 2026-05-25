@@ -422,6 +422,26 @@ button {
   background: var(--siena-green);
 }
 
+.gantt-group-row .gantt-title {
+  background: #edf7f1;
+}
+
+.gantt-group-row .gantt-track {
+  background-color: #f7fbf9;
+}
+
+.gantt-group-bar {
+  background: var(--siena-green);
+}
+
+.gantt-group-gray {
+  background: #64736d;
+}
+
+.gantt-child-title {
+  padding-left: 28px;
+}
+
 .gantt-task {
   background: #3b82f6;
 }

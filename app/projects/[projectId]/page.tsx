@@ -1,13 +1,15 @@
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   addProjectLocationAction,
+  archiveTimelineGroupAction,
   createCalendarItemAction,
   createProjectRoleAction,
   createRunOfShowItemAction,
+  createTimelineGroupAction,
   deleteCalendarItemAction,
   deleteProjectAction,
   deleteRunOfShowItemAction,
@@ -18,6 +20,7 @@ import {
   LocationSelector,
   ReferenceValueSelector
 } from "@/components/reference-selectors";
+import { TimelineGroupSelector } from "@/components/timeline-group-selector";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +48,23 @@ type CalendarItem = {
   department_id: string | null;
   location: string;
   location_id: string | null;
+  timeline_group_id: string | null;
+};
+
+type TimelineGroup = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  color_key: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type GanttSection = {
+  group: TimelineGroup | null;
+  items: CalendarItem[];
+  range: { start: Date; end: Date } | null;
 };
 
 type ProjectRole = {
@@ -151,6 +171,44 @@ function itemRange(item: CalendarItem) {
   return { start, end: end < start ? start : end };
 }
 
+function sectionRange(items: CalendarItem[]) {
+  const ranges = items.map(itemRange).filter((range): range is { start: Date; end: Date } => Boolean(range));
+
+  if (!ranges.length) {
+    return null;
+  }
+
+  return {
+    start: new Date(Math.min(...ranges.map((range) => range.start.getTime()))),
+    end: new Date(Math.max(...ranges.map((range) => range.end.getTime())))
+  };
+}
+
+function buildGanttSections(items: CalendarItem[], groups: TimelineGroup[]) {
+  const groupsById = new Map(groups.map((group) => [group.id, group]));
+  const sections: GanttSection[] = groups
+    .map((group) => {
+      const childItems = items.filter((item) => item.timeline_group_id === group.id);
+      return {
+        group,
+        items: childItems,
+        range: sectionRange(childItems)
+      };
+    })
+    .filter((section) => section.items.length || section.group.is_active);
+
+  const ungroupedItems = items.filter((item) => !item.timeline_group_id || !groupsById.has(item.timeline_group_id));
+  if (ungroupedItems.length) {
+    sections.push({
+      group: null,
+      items: ungroupedItems,
+      range: sectionRange(ungroupedItems)
+    });
+  }
+
+  return sections;
+}
+
 function getTimeline(project: Project, items: CalendarItem[]) {
   const ranges = items.map(itemRange).filter((range): range is { start: Date; end: Date } => Boolean(range));
   const projectStart = parseDate(project.starts_on);
@@ -206,6 +264,7 @@ export default async function ProjectPage({
     { data: projectRoles },
     { data: runOfShowItems },
     { data: projectLocations },
+    { data: timelineGroups },
     departments,
     locations,
     calendarItemTypes,
@@ -213,7 +272,9 @@ export default async function ProjectPage({
   ] = await Promise.all([
     supabase
       .from("calendar_items")
-      .select("id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id")
+      .select(
+        "id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id, timeline_group_id"
+      )
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true }),
     supabase
@@ -233,6 +294,12 @@ export default async function ProjectPage({
       .select("id, location_id, locations(id, name, building, room, is_active)")
       .eq("project_id", typedProject.id)
       .order("sort_order", { ascending: true }),
+    supabase
+      .from("project_timeline_groups")
+      .select("id, name, slug, description, color_key, sort_order, is_active")
+      .eq("project_id", typedProject.id)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
     fetchActiveDepartments(),
     fetchActiveLocations(),
     fetchActiveReferenceValues("calendar_item_type"),
@@ -243,9 +310,13 @@ export default async function ProjectPage({
   const roles = (projectRoles ?? []) as ProjectRole[];
   const runRows = (runOfShowItems ?? []) as RunOfShowItem[];
   const projectLocationRows = (projectLocations ?? []) as unknown as ProjectLocation[];
+  const groups = (timelineGroups ?? []) as TimelineGroup[];
+  const activeGroups = groups.filter((group) => group.is_active);
+  const groupsById = new Map(groups.map((group) => [group.id, group]));
   const linkedLocationIds = new Set(projectLocationRows.map((projectLocation) => projectLocation.location_id));
   const availableProjectLocations = locations.filter((location) => !linkedLocationIds.has(location.id));
   const timeline = getTimeline(typedProject, items);
+  const ganttSections = buildGanttSections(items, groups);
 
   return (
     <div className="page workspace-page">
@@ -275,6 +346,7 @@ export default async function ProjectPage({
       <nav className="workspace-nav" aria-label="Project workspace sections">
         <a href="#calendar">Calendar</a>
         <a href="#gantt">Gantt</a>
+        <a href="#timeline-groups">Timeline Groups</a>
         <a href="#roles">Roles</a>
         <a href="#run-of-show">Run of Show</a>
       </nav>
@@ -295,6 +367,53 @@ export default async function ProjectPage({
         <div>
           <span>{timeline.weeks.length}</span>
           <p>Timeline Weeks</p>
+        </div>
+      </section>
+
+      <section className="panel workspace-section" id="timeline-groups">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Planning Core</p>
+            <h2>Timeline Groups</h2>
+            <p className="muted">
+              Group calendar items into project-specific Gantt phases without changing each item&apos;s type.
+            </p>
+          </div>
+        </div>
+        <form action={createTimelineGroupAction} className="inline-create reference-create">
+          <input name="projectId" type="hidden" value={typedProject.id} />
+          <input aria-label="Timeline group name" name="name" placeholder="Rehearsals" required />
+          <button type="submit">Add group</button>
+        </form>
+        <div className="compact-list">
+          {groups.length ? (
+            groups.map((group) => {
+              const attachedCount = items.filter((item) => item.timeline_group_id === group.id).length;
+
+              return (
+                <div className="compact-row" key={group.id}>
+                  <div>
+                    <strong>{group.name}</strong>
+                    <span>
+                      {attachedCount} item{attachedCount === 1 ? "" : "s"}
+                      {!group.is_active ? " · Archived" : ""}
+                    </span>
+                  </div>
+                  {group.is_active ? (
+                    <form action={archiveTimelineGroupAction}>
+                      <input name="projectId" type="hidden" value={typedProject.id} />
+                      <input name="id" type="hidden" value={group.id} />
+                      <button className="button secondary" type="submit">
+                        Archive
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : (
+            <p className="muted">No timeline groups yet.</p>
+          )}
         </div>
       </section>
 
@@ -362,35 +481,65 @@ export default async function ProjectPage({
                 <span key={week.toISOString()}>{formatDate(week.toISOString())}</span>
               ))}
             </div>
-            {items.length ? (
-              items.map((item) => {
-                const range = itemRange(item);
-
-                return (
-                  <div className="gantt-row" key={item.id}>
+            {ganttSections.length ? (
+              ganttSections.map((section) => (
+                <Fragment key={section.group?.id ?? "ungrouped"}>
+                  <div className="gantt-row gantt-group-row">
                     <div className="gantt-title">
-                      <strong>{item.title}</strong>
+                      <strong>{section.group?.name ?? "Ungrouped"}</strong>
                       <span>
-                        {titleCase(item.item_type)}
-                        {item.department ? ` · ${item.department}` : ""}
+                        {section.items.length} item{section.items.length === 1 ? "" : "s"}
+                        {section.group && !section.group.is_active ? " · Archived" : ""}
                       </span>
                     </div>
                     <div className="gantt-track">
-                      {range ? (
+                      {section.range ? (
                         <div
-                          className={`gantt-bar gantt-${item.item_type}`}
-                          style={ganttStyle(range, timeline.start)}
-                          title={`${item.title}: ${formatDate(range.start.toISOString())} to ${formatDate(range.end.toISOString())}`}
+                          className={`gantt-bar gantt-group-bar gantt-group-${section.group?.color_key ?? "gray"}`}
+                          style={ganttStyle(section.range, timeline.start)}
+                          title={`${section.group?.name ?? "Ungrouped"}: ${formatDate(
+                            section.range.start.toISOString()
+                          )} to ${formatDate(section.range.end.toISOString())}`}
                         >
-                          <span>{item.title}</span>
+                          <span>{section.group?.name ?? "Ungrouped"}</span>
                         </div>
                       ) : (
-                        <span className="gantt-unscheduled">Unscheduled</span>
+                        <span className="gantt-unscheduled">No scheduled items</span>
                       )}
                     </div>
                   </div>
-                );
-              })
+                  {section.items.map((item) => {
+                    const range = itemRange(item);
+
+                    return (
+                      <div className="gantt-row" key={item.id}>
+                        <div className="gantt-title gantt-child-title">
+                          <strong>{item.title}</strong>
+                          <span>
+                            {titleCase(item.item_type)}
+                            {item.department ? ` · ${item.department}` : ""}
+                          </span>
+                        </div>
+                        <div className="gantt-track">
+                          {range ? (
+                            <div
+                              className={`gantt-bar gantt-${item.item_type}`}
+                              style={ganttStyle(range, timeline.start)}
+                              title={`${item.title}: ${formatDate(range.start.toISOString())} to ${formatDate(
+                                range.end.toISOString()
+                              )}`}
+                            >
+                              <span>{item.title}</span>
+                            </div>
+                          ) : (
+                            <span className="gantt-unscheduled">Unscheduled</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))
             ) : (
               <div className="empty-state">Add calendar items to build the first production timeline.</div>
             )}
@@ -414,6 +563,7 @@ export default async function ProjectPage({
               required
               selectId="itemType"
             />
+            <TimelineGroupSelector groups={activeGroups} />
             <div className="form-row">
               <div className="field">
                 <label htmlFor="startsOn">Start</label>
@@ -444,26 +594,31 @@ export default async function ProjectPage({
         </div>
         <div className="table-list">
           {items.length ? (
-            items.map((item) => (
-              <div className="table-row" key={item.id}>
-                <div>
-                  <strong>{item.title}</strong>
-                  <span>
-                    {titleCase(item.item_type)} · {titleCase(item.status)}
-                    {item.department ? ` · ${item.department}` : ""}
-                    {item.location ? ` · ${item.location}` : ""}
-                  </span>
+            items.map((item) => {
+              const itemGroup = item.timeline_group_id ? groupsById.get(item.timeline_group_id) : null;
+
+              return (
+                <div className="table-row" key={item.id}>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>
+                      {titleCase(item.item_type)} · {titleCase(item.status)}
+                      {itemGroup ? ` · ${itemGroup.name}${!itemGroup.is_active ? " (Archived)" : ""}` : ""}
+                      {item.department ? ` · ${item.department}` : ""}
+                      {item.location ? ` · ${item.location}` : ""}
+                    </span>
+                  </div>
+                  <span>{formatItemDates(item)}</span>
+                  <form action={deleteCalendarItemAction}>
+                    <input name="projectId" type="hidden" value={typedProject.id} />
+                    <input name="id" type="hidden" value={item.id} />
+                    <button className="button danger" type="submit">
+                      Delete
+                    </button>
+                  </form>
                 </div>
-                <span>{formatItemDates(item)}</span>
-                <form action={deleteCalendarItemAction}>
-                  <input name="projectId" type="hidden" value={typedProject.id} />
-                  <input name="id" type="hidden" value={item.id} />
-                  <button className="button danger" type="submit">
-                    Delete
-                  </button>
-                </form>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="muted">No calendar items yet.</p>
           )}

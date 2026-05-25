@@ -15,6 +15,7 @@
 - Run-of-show view.
 - Managed reference-data foundation for reusable institutional options.
 - Reusable selectors for departments, locations, and lightweight reference values.
+- Project-scoped timeline groups for calendar/Gantt grouping.
 
 ## Phase 2A Reference Data Foundation
 

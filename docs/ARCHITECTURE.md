@@ -71,6 +71,8 @@ Reference records should support display name/label, slug, description, sort ord
 
 Forms should use reusable searchable selectors for managed reference data. Selectors should show active records, support search, allow authorized users to add new records where appropriate, prevent duplicates through slug normalization and existing-record checks, and continue displaying inactive records on historical data.
 
+Some managed selectable records are project-scoped rather than global reference values. Timeline groups belong to a single project and group calendar/Gantt items into planning phases such as rehearsals, tech week, or marketing. They do not replace calendar item type/category, recurrence, title, dates, department, or location.
+
 ## Access Model
 
 App-level access comes from `core.app_memberships` with `app_id = 'production_management'`.
