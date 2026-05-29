@@ -190,6 +190,10 @@ h2 {
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
 }
 
+.workspace-grid.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workspace-main {
   overflow: hidden;
 }
@@ -508,6 +512,159 @@ button {
   flex: 0 0 auto;
 }
 
+.calendar-workspace {
+  overflow: hidden;
+}
+
+.calendar-workspace .fc {
+  color: #183c2e;
+  font: inherit;
+}
+
+.calendar-workspace .fc .fc-toolbar {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.calendar-workspace .fc .fc-toolbar-title {
+  color: #173b2d;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.calendar-workspace .fc .fc-button {
+  background: var(--siena-green);
+  border: 1px solid var(--siena-green);
+  border-radius: 6px;
+  box-shadow: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 10px;
+  text-transform: capitalize;
+}
+
+.calendar-workspace .fc .fc-button:disabled {
+  opacity: 0.6;
+}
+
+.calendar-workspace .fc .fc-button-primary:not(:disabled).fc-button-active,
+.calendar-workspace .fc .fc-button-primary:not(:disabled):active {
+  background: #d6a619;
+  border-color: #d6a619;
+  color: #173b2d;
+}
+
+.calendar-workspace .fc .fc-scrollgrid,
+.calendar-workspace .fc-theme-standard td,
+.calendar-workspace .fc-theme-standard th {
+  border-color: var(--line);
+}
+
+.calendar-workspace .fc .fc-col-header-cell {
+  background: #f8fbf9;
+  color: #315245;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.calendar-workspace .fc .fc-daygrid-day-number {
+  color: #315245;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.calendar-workspace .fc .fc-day-today {
+  background: #fff8e2;
+}
+
+.calendar-workspace .fc .fc-event {
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 4px;
+}
+
+.calendar-event-window {
+  background: var(--siena-green);
+}
+
+.calendar-event-task {
+  background: #3b82f6;
+}
+
+.calendar-event-event,
+.calendar-event-run_of_show {
+  background: #7c3aed;
+}
+
+.calendar-event-milestone {
+  background: #c2410c;
+}
+
+.calendar-event-deadline {
+  background: #be123c;
+}
+
+.calendar-event-run-of-show {
+  box-shadow: inset 0 -3px 0 #d6a619;
+}
+
+.modal-backdrop {
+  align-items: flex-start;
+  background: rgba(14, 35, 27, 0.42);
+  display: flex;
+  inset: 0;
+  justify-content: flex-end;
+  overflow-y: auto;
+  padding: 24px;
+  position: fixed;
+  z-index: 50;
+}
+
+.event-modal {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(8, 30, 22, 0.24);
+  max-width: 620px;
+  padding: 22px;
+  width: min(620px, 100%);
+}
+
+.checkbox-field {
+  align-items: center;
+  color: #243d33;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 10px;
+}
+
+.checkbox-field input {
+  height: 18px;
+  width: 18px;
+}
+
+.run-fields {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.modal-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .status-pill {
   border-radius: 999px;
   font-size: 12px;
@@ -598,5 +755,15 @@ button {
   .compact-row {
     align-items: stretch;
     display: grid;
+  }
+
+  .calendar-workspace .fc .fc-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modal-backdrop {
+    justify-content: center;
+    padding: 12px;
   }
 }

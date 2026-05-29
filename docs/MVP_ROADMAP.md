@@ -9,6 +9,7 @@
 ## Phase 2 Planning Core
 
 - Production calendar.
+- Google Calendar-style calendar UI foundation for creating and editing `calendar_items`.
 - Gantt chart over the same calendar data.
 - Run-of-show view over the same `calendar_items` production-event data.
 - Parent windows with expandable child tasks/events.

@@ -6,21 +6,14 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   addProjectLocationAction,
   archiveTimelineGroupAction,
-  createCalendarItemAction,
   createProjectRoleAction,
-  createRunOfShowItemAction,
   createTimelineGroupAction,
   deleteCalendarItemAction,
   deleteProjectAction,
   deleteRunOfShowItemAction,
   removeProjectLocationAction
 } from "@/app/projects/[projectId]/actions";
-import {
-  DepartmentSelector,
-  LocationSelector,
-  ReferenceValueSelector
-} from "@/components/reference-selectors";
-import { TimelineGroupSelector } from "@/components/timeline-group-selector";
+import { ProjectCalendar } from "@/components/project-calendar";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +36,9 @@ type CalendarItem = {
   starts_at: string | null;
   ends_at: string | null;
   due_at: string | null;
+  all_day: boolean;
   status: string;
+  description: string;
   department: string;
   department_id: string | null;
   location: string;
@@ -297,7 +292,7 @@ export default async function ProjectPage({
     supabase
       .from("calendar_items")
       .select(
-        "id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id, timeline_group_id, is_run_of_show_relevant, run_of_show_order, cue_number, duration_minutes, run_of_show_notes"
+        "id, title, item_type, starts_at, ends_at, due_at, all_day, status, description, department, department_id, location, location_id, timeline_group_id, is_run_of_show_relevant, run_of_show_order, cue_number, duration_minutes, run_of_show_notes"
       )
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true }),
@@ -387,6 +382,32 @@ export default async function ProjectPage({
           <p>Timeline Weeks</p>
         </div>
       </section>
+
+      <ProjectCalendar
+        calendarItemTypes={calendarItemTypes.map((itemType) => ({
+          id: itemType.id,
+          label: itemType.label,
+          value: itemType.slug
+        }))}
+        departments={departments.map((department) => ({
+          id: department.id,
+          label: department.name,
+          value: department.id
+        }))}
+        items={items}
+        locations={locations.map((location) => ({
+          id: location.id,
+          label: location.name,
+          value: location.id
+        }))}
+        projectId={typedProject.id}
+        timelineGroups={activeGroups.map((group) => ({
+          id: group.id,
+          label: group.name,
+          value: group.id,
+          isActive: group.is_active
+        }))}
+      />
 
       <section className="panel workspace-section" id="timeline-groups">
         <div className="section-heading">
@@ -484,7 +505,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <div className="workspace-grid">
+      <div className="workspace-grid single">
         <section className="panel workspace-main" id="gantt">
           <div className="section-heading">
             <div>
@@ -564,43 +585,6 @@ export default async function ProjectPage({
           </div>
         </section>
 
-        <section className="panel" id="calendar">
-          <p className="eyebrow">Create</p>
-          <h2>Calendar Item</h2>
-          <form action={createCalendarItemAction} className="form-grid">
-            <input name="projectId" type="hidden" value={typedProject.id} />
-            <div className="field">
-              <label htmlFor="title">Title</label>
-              <input id="title" name="title" required />
-            </div>
-            <ReferenceValueSelector
-              label="Type"
-              name="itemType"
-              options={calendarItemTypes}
-              placeholder="Select item type"
-              required
-              selectId="itemType"
-            />
-            <TimelineGroupSelector groups={activeGroups} />
-            <div className="form-row">
-              <div className="field">
-                <label htmlFor="startsOn">Start</label>
-                <input id="startsOn" name="startsOn" type="date" />
-              </div>
-              <div className="field">
-                <label htmlFor="endsOn">End</label>
-                <input id="endsOn" name="endsOn" type="date" />
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="dueOn">Due</label>
-              <input id="dueOn" name="dueOn" type="date" />
-            </div>
-            <DepartmentSelector departments={departments} name="departmentId" selectId="calendarDepartmentId" />
-            <LocationSelector locations={locations} name="locationId" selectId="calendarLocationId" />
-            <button type="submit">Add item</button>
-          </form>
-        </section>
       </div>
 
       <section className="panel workspace-section">
@@ -696,65 +680,6 @@ export default async function ProjectPage({
               <p className="muted">Run-of-show rows are calendar items marked for this view.</p>
             </div>
           </div>
-          <form action={createRunOfShowItemAction} className="form-grid">
-            <input name="projectId" type="hidden" value={typedProject.id} />
-            <div className="form-row">
-              <div className="field">
-                <label htmlFor="runCueNumber">Cue</label>
-                <input id="runCueNumber" name="cueNumber" placeholder="A1" />
-              </div>
-              <div className="field">
-                <label htmlFor="runOfShowOrder">Order</label>
-                <input id="runOfShowOrder" min="0" name="runOfShowOrder" placeholder="10" type="number" />
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="runTitle">Title</label>
-              <input id="runTitle" name="title" required />
-            </div>
-            <div className="field">
-              <label htmlFor="runItemType">Type</label>
-              <select id="runItemType" name="itemType" defaultValue="run_of_show" required>
-                {calendarItemTypes.map((itemType) => (
-                  <option key={itemType.id} value={itemType.slug}>
-                    {itemType.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <TimelineGroupSelector groups={activeGroups} newInputId="runNewTimelineGroupName" selectId="runTimelineGroupId" />
-            <div className="form-row">
-              <div className="field">
-                <label htmlFor="runStartsAt">Start</label>
-                <input id="runStartsAt" name="startsAt" type="datetime-local" />
-              </div>
-              <div className="field">
-                <label htmlFor="runEndsAt">End</label>
-                <input id="runEndsAt" name="endsAt" type="datetime-local" />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="field">
-                <label htmlFor="runDueAt">Due</label>
-                <input id="runDueAt" name="dueAt" type="datetime-local" />
-              </div>
-              <div className="field">
-                <label htmlFor="runDurationMinutes">Duration</label>
-                <input id="runDurationMinutes" min="0" name="durationMinutes" placeholder="Min" type="number" />
-              </div>
-            </div>
-            <DepartmentSelector departments={departments} name="departmentId" selectId="runDepartmentId" />
-            <LocationSelector locations={locations} name="locationId" selectId="runLocationId" />
-            <div className="field">
-              <label htmlFor="runDescription">Description</label>
-              <textarea id="runDescription" name="description" rows={3} />
-            </div>
-            <div className="field">
-              <label htmlFor="runNotes">Run-of-show notes</label>
-              <textarea id="runNotes" name="runOfShowNotes" rows={3} />
-            </div>
-            <button type="submit">Add row</button>
-          </form>
           <div className="compact-list">
             {runRows.length ? (
               runRows.map((row) => (

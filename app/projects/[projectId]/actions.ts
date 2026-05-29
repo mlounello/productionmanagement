@@ -16,9 +16,24 @@ const calendarItemSchema = z.object({
   newTimelineGroupName: z.string().trim().max(120).optional(),
   departmentId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
+  status: z.enum(["planned", "in_progress", "blocked", "completed", "cancelled"]),
   startsOn: z.string().trim().optional(),
   endsOn: z.string().trim().optional(),
-  dueOn: z.string().trim().optional()
+  dueOn: z.string().trim().optional(),
+  startsAt: z.string().trim().optional(),
+  endsAt: z.string().trim().optional(),
+  dueAt: z.string().trim().optional(),
+  allDay: z.boolean(),
+  description: z.string().trim().max(2000).optional(),
+  includeRunOfShow: z.boolean(),
+  cueNumber: z.string().trim().max(40).optional(),
+  durationMinutes: z.coerce.number().int().min(0).max(24 * 60).optional(),
+  runOfShowOrder: z.coerce.number().int().min(0).max(100000).optional(),
+  runOfShowNotes: z.string().trim().max(2000).optional()
+});
+
+const calendarItemUpdateSchema = calendarItemSchema.extend({
+  id: z.string().uuid()
 });
 
 const projectRoleSchema = z.object({
@@ -87,6 +102,10 @@ function datetimeToTimestamp(value?: string) {
   }
 
   return new Date(value).toISOString();
+}
+
+function timestampFromInput(datetimeValue?: string, dateValue?: string) {
+  return datetimeToTimestamp(datetimeValue) ?? dateToTimestamp(dateValue);
 }
 
 function projectErrorPath(projectId: string, message: string) {
@@ -158,9 +177,8 @@ async function getLocationName(supabase: Awaited<ReturnType<typeof createSupabas
   return typeof data?.name === "string" ? data.name : "";
 }
 
-export async function createCalendarItemAction(formData: FormData) {
-  await requireUser();
-  const parsed = calendarItemSchema.safeParse({
+function calendarItemInputFromFormData(formData: FormData) {
+  return {
     projectId: requiredString(formData.get("projectId")),
     title: requiredString(formData.get("title")),
     itemType: requiredString(formData.get("itemType")),
@@ -168,19 +186,28 @@ export async function createCalendarItemAction(formData: FormData) {
     newTimelineGroupName: optionalString(formData.get("newTimelineGroupName")),
     departmentId: optionalString(formData.get("departmentId")),
     locationId: optionalString(formData.get("locationId")),
+    status: optionalString(formData.get("status")) ?? "planned",
     startsOn: optionalString(formData.get("startsOn")),
     endsOn: optionalString(formData.get("endsOn")),
-    dueOn: optionalString(formData.get("dueOn"))
-  });
+    dueOn: optionalString(formData.get("dueOn")),
+    startsAt: optionalString(formData.get("startsAt")),
+    endsAt: optionalString(formData.get("endsAt")),
+    dueAt: optionalString(formData.get("dueAt")),
+    allDay: formData.get("allDay") === "on",
+    description: optionalString(formData.get("description")),
+    includeRunOfShow: formData.get("includeRunOfShow") === "on",
+    cueNumber: optionalString(formData.get("cueNumber")),
+    durationMinutes: optionalString(formData.get("durationMinutes")),
+    runOfShowOrder: optionalString(formData.get("runOfShowOrder")),
+    runOfShowNotes: optionalString(formData.get("runOfShowNotes"))
+  };
+}
 
-  if (!parsed.success) {
-    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid calendar item.")}`);
-  }
-
-  const input = parsed.data;
-  const supabase = await createSupabaseServerClient();
+async function buildCalendarItemPayload(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: z.infer<typeof calendarItemSchema>
+) {
   let timelineGroupId = input.timelineGroupId ?? null;
-
   if (input.newTimelineGroupName) {
     timelineGroupId = await createProjectTimelineGroup(supabase, input.projectId, input.newTimelineGroupName);
   }
@@ -196,20 +223,68 @@ export async function createCalendarItemAction(formData: FormData) {
     redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve references."));
   }
 
-  const { error } = await supabase.from("calendar_items").insert({
+  return {
     project_id: input.projectId,
     title: input.title,
     item_type: input.itemType,
+    status: input.status,
     timeline_group_id: timelineGroupId,
     department_id: input.departmentId ?? null,
     location_id: input.locationId ?? null,
     department: departmentName,
     location: locationName,
-    starts_at: dateToTimestamp(input.startsOn),
-    ends_at: dateToTimestamp(input.endsOn),
-    due_at: dateToTimestamp(input.dueOn),
-    all_day: true
+    starts_at: timestampFromInput(input.startsAt, input.startsOn),
+    ends_at: timestampFromInput(input.endsAt, input.endsOn),
+    due_at: timestampFromInput(input.dueAt, input.dueOn),
+    all_day: input.allDay,
+    description: input.description ?? "",
+    is_run_of_show_relevant: input.includeRunOfShow,
+    run_of_show_order: input.includeRunOfShow ? input.runOfShowOrder ?? null : null,
+    cue_number: input.includeRunOfShow ? input.cueNumber ?? "" : "",
+    duration_minutes: input.includeRunOfShow ? input.durationMinutes ?? null : null,
+    run_of_show_notes: input.includeRunOfShow ? input.runOfShowNotes ?? "" : ""
+  };
+}
+
+export async function createCalendarItemAction(formData: FormData) {
+  await requireUser();
+  const parsed = calendarItemSchema.safeParse(calendarItemInputFromFormData(formData));
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid calendar item.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const payload = await buildCalendarItemPayload(supabase, input);
+  const { error } = await supabase.from("calendar_items").insert(payload);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function updateCalendarItemAction(formData: FormData) {
+  await requireUser();
+  const parsed = calendarItemUpdateSchema.safeParse({
+    id: requiredString(formData.get("id")),
+    ...calendarItemInputFromFormData(formData)
   });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid calendar item.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const payload = await buildCalendarItemPayload(supabase, input);
+  const { error } = await supabase
+    .from("calendar_items")
+    .update(payload)
+    .eq("project_id", input.projectId)
+    .eq("id", input.id);
 
   if (error) {
     redirect(projectErrorPath(input.projectId, error.message));
