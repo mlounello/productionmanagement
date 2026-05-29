@@ -1,4 +1,3 @@
-import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -14,6 +13,7 @@ import {
   removeProjectLocationAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
+import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 
 export const dynamic = "force-dynamic";
@@ -248,15 +248,6 @@ function getTimeline(project: Project, items: CalendarItem[]) {
   };
 }
 
-function ganttStyle(range: { start: Date; end: Date }, timelineStart: Date): CSSProperties {
-  const startWeek = Math.floor(daysBetween(timelineStart, range.start) / 7);
-  const spanWeeks = Math.max(1, Math.ceil((daysBetween(range.start, range.end) + 1) / 7));
-
-  return {
-    gridColumn: `${startWeek + 1} / span ${spanWeeks}`
-  };
-}
-
 export default async function ProjectPage({
   params,
   searchParams
@@ -330,6 +321,29 @@ export default async function ProjectPage({
   const availableProjectLocations = locations.filter((location) => !linkedLocationIds.has(location.id));
   const timeline = getTimeline(typedProject, items);
   const ganttSections = buildGanttSections(items, groups);
+  const serializedGanttSections: ProjectGanttSection[] = ganttSections.map((section) => ({
+    id: section.group?.id ?? "ungrouped",
+    name: section.group?.name ?? "Ungrouped",
+    color_key: section.group?.color_key ?? "gray",
+    is_active: section.group?.is_active ?? true,
+    is_ungrouped: !section.group,
+    items: section.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      item_type: item.item_type,
+      department: item.department,
+      location: item.location,
+      starts_at: item.starts_at,
+      ends_at: item.ends_at,
+      due_at: item.due_at
+    })),
+    range: section.range
+      ? {
+          start: section.range.start.toISOString(),
+          end: section.range.end.toISOString()
+        }
+      : null
+  }));
 
   return (
     <div className="page workspace-page">
@@ -511,78 +525,16 @@ export default async function ProjectPage({
             <div>
               <p className="eyebrow">Production Calendar</p>
               <h2>Gantt</h2>
+              <p className="muted">Timeline groups start collapsed. Open a group to inspect its calendar items.</p>
             </div>
           </div>
-          <div className="gantt" style={{ "--gantt-columns": timeline.weeks.length } as CSSProperties}>
-            <div className="gantt-label">Workstream</div>
-            <div className="gantt-weeks">
-              {timeline.weeks.map((week) => (
-                <span key={week.toISOString()}>{formatDate(week.toISOString())}</span>
-              ))}
-            </div>
-            {ganttSections.length ? (
-              ganttSections.map((section) => (
-                <Fragment key={section.group?.id ?? "ungrouped"}>
-                  <div className="gantt-row gantt-group-row">
-                    <div className="gantt-title">
-                      <strong>{section.group?.name ?? "Ungrouped"}</strong>
-                      <span>
-                        {section.items.length} item{section.items.length === 1 ? "" : "s"}
-                        {section.group && !section.group.is_active ? " · Archived" : ""}
-                      </span>
-                    </div>
-                    <div className="gantt-track">
-                      {section.range ? (
-                        <div
-                          className={`gantt-bar gantt-group-bar gantt-group-${section.group?.color_key ?? "gray"}`}
-                          style={ganttStyle(section.range, timeline.start)}
-                          title={`${section.group?.name ?? "Ungrouped"}: ${formatDate(
-                            section.range.start.toISOString()
-                          )} to ${formatDate(section.range.end.toISOString())}`}
-                        >
-                          <span>{section.group?.name ?? "Ungrouped"}</span>
-                        </div>
-                      ) : (
-                        <span className="gantt-unscheduled">No scheduled items</span>
-                      )}
-                    </div>
-                  </div>
-                  {section.items.map((item) => {
-                    const range = itemRange(item);
-
-                    return (
-                      <div className="gantt-row" key={item.id}>
-                        <div className="gantt-title gantt-child-title">
-                          <strong>{item.title}</strong>
-                          <span>
-                            {titleCase(item.item_type)}
-                            {item.department ? ` · ${item.department}` : ""}
-                          </span>
-                        </div>
-                        <div className="gantt-track">
-                          {range ? (
-                            <div
-                              className={`gantt-bar gantt-${item.item_type}`}
-                              style={ganttStyle(range, timeline.start)}
-                              title={`${item.title}: ${formatDate(range.start.toISOString())} to ${formatDate(
-                                range.end.toISOString()
-                              )}`}
-                            >
-                              <span>{item.title}</span>
-                            </div>
-                          ) : (
-                            <span className="gantt-unscheduled">Unscheduled</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))
-            ) : (
-              <div className="empty-state">Add calendar items to build the first production timeline.</div>
-            )}
-          </div>
+          <ProjectGantt
+            sections={serializedGanttSections}
+            timeline={{
+              start: timeline.start.toISOString(),
+              weeks: timeline.weeks.map((week) => week.toISOString())
+            }}
+          />
         </section>
 
       </div>
