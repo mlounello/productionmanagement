@@ -92,6 +92,24 @@ function defaultEnd(startValue: string) {
   return toDateTimeLocal(new Date(start.getTime() + 60 * 60 * 1000));
 }
 
+function localDateTimeToIso(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function normalizeDateTimeFields(formData: FormData) {
+  for (const field of ["startsAt", "endsAt", "dueAt"]) {
+    const value = localDateTimeToIso(formData.get(field));
+    if (value) {
+      formData.set(field, value);
+    }
+  }
+}
+
 function eventStart(item: ProjectCalendarItem) {
   return item.starts_at ?? item.due_at ?? item.ends_at;
 }
@@ -186,6 +204,7 @@ export function ProjectCalendar({
   async function submitForm(formData: FormData) {
     setSaving(true);
     try {
+      normalizeDateTimeFields(formData);
       if (draft?.mode === "edit") {
         await updateCalendarItemAction(formData);
       } else {
