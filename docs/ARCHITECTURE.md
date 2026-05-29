@@ -29,13 +29,17 @@ Production Management owns:
 - Durable people profiles
 - Project team memberships
 - Production roles and assignments
-- Calendars, Gantt windows, tasks, milestones, run-of-show rows
+- `calendar_items` as the production-event planning source of truth for calendars, Gantt windows, tasks, milestones, and run-of-show projections
 - Audition slots and submissions
 - Email templates/messages/audit
 - Recognition and accomplishment history
 - Operational links to external apps
 
 It does not initially own Playbill bios or Theatre Budget contracts.
+
+Calendar, Gantt, and Run of Show must stay synchronized views over `app_production_management.calendar_items`. The calendar view reads and edits calendar items directly. The Gantt view reads the same calendar items and groups them through project-scoped `project_timeline_groups`. The Run of Show view reads calendar items where `is_run_of_show_relevant = true`; run-of-show cue, order, duration, and note fields live on the same calendar item row.
+
+The existing `run_of_show_items` table is legacy/future extension detail only. It should not be used as the primary source for independent run-of-show events. If it remains long term, rows should extend a source calendar item through `calendar_item_id` rather than duplicating event title/date data. Full recurrence behavior is deferred and should be designed carefully before implementation, including single-occurrence edits, entire-series edits, and this-and-following series splits.
 
 ## Managed Reference Data
 

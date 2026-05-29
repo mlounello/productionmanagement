@@ -10,12 +10,14 @@
 
 - Production calendar.
 - Gantt chart over the same calendar data.
+- Run-of-show view over the same `calendar_items` production-event data.
 - Parent windows with expandable child tasks/events.
 - Recurring event rules and generated occurrences.
-- Run-of-show view.
 - Managed reference-data foundation for reusable institutional options.
 - Reusable selectors for departments, locations, and lightweight reference values.
 - Project-scoped timeline groups for calendar/Gantt grouping.
+
+Planning architecture rule: Calendar, Gantt, and Run of Show are synchronized projections over `calendar_items`. Do not create separate Gantt-only or run-of-show-only event records. The legacy `run_of_show_items` table remains available only for future extension detail linked back to a source calendar item.
 
 ## Phase 2A Reference Data Foundation
 

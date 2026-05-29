@@ -31,9 +31,19 @@ const projectRoleSchema = z.object({
 const runOfShowSchema = z.object({
   projectId: projectIdSchema,
   cueNumber: z.string().trim().max(40).optional(),
-  title: z.string().trim().min(1, "Run-of-show title is required.").max(160),
+  title: z.string().trim().min(1, "Run-of-show title is required.").max(180),
+  itemType: z.enum(["window", "task", "event", "milestone", "deadline", "run_of_show"]),
+  timelineGroupId: z.string().uuid().optional(),
+  newTimelineGroupName: z.string().trim().max(120).optional(),
+  departmentId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional(),
   startsAt: z.string().trim().optional(),
-  durationMinutes: z.coerce.number().int().min(0).max(24 * 60).optional()
+  endsAt: z.string().trim().optional(),
+  dueAt: z.string().trim().optional(),
+  durationMinutes: z.coerce.number().int().min(0).max(24 * 60).optional(),
+  runOfShowOrder: z.coerce.number().int().min(0).max(100000).optional(),
+  description: z.string().trim().max(2000).optional(),
+  runOfShowNotes: z.string().trim().max(2000).optional()
 });
 
 const projectScopedRowSchema = z.object({
@@ -93,6 +103,33 @@ function slugify(value: string) {
     .slice(0, 90);
 }
 
+async function createProjectTimelineGroup(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  projectId: string,
+  name: string
+) {
+  const slug = slugify(name);
+  if (!slug) {
+    redirect(projectErrorPath(projectId, "Timeline group name is required."));
+  }
+
+  const { data: group, error } = await supabase
+    .from("project_timeline_groups")
+    .insert({
+      project_id: projectId,
+      name,
+      slug
+    })
+    .select("id")
+    .single();
+
+  if (error || !group) {
+    redirect(projectErrorPath(projectId, error?.message ?? "Could not create timeline group."));
+  }
+
+  return String(group.id);
+}
+
 async function getDepartmentName(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, id?: string) {
   if (!id) {
     return "";
@@ -145,26 +182,7 @@ export async function createCalendarItemAction(formData: FormData) {
   let timelineGroupId = input.timelineGroupId ?? null;
 
   if (input.newTimelineGroupName) {
-    const slug = slugify(input.newTimelineGroupName);
-    if (!slug) {
-      redirect(projectErrorPath(input.projectId, "Timeline group name is required."));
-    }
-
-    const { data: group, error: groupError } = await supabase
-      .from("project_timeline_groups")
-      .insert({
-        project_id: input.projectId,
-        name: input.newTimelineGroupName,
-        slug
-      })
-      .select("id")
-      .single();
-
-    if (groupError || !group) {
-      redirect(projectErrorPath(input.projectId, groupError?.message ?? "Could not create timeline group."));
-    }
-
-    timelineGroupId = String(group.id);
+    timelineGroupId = await createProjectTimelineGroup(supabase, input.projectId, input.newTimelineGroupName);
   }
 
   let departmentName = "";
@@ -242,8 +260,18 @@ export async function createRunOfShowItemAction(formData: FormData) {
     projectId: requiredString(formData.get("projectId")),
     cueNumber: optionalString(formData.get("cueNumber")),
     title: requiredString(formData.get("title")),
+    itemType: requiredString(formData.get("itemType")),
+    timelineGroupId: optionalString(formData.get("timelineGroupId")),
+    newTimelineGroupName: optionalString(formData.get("newTimelineGroupName")),
+    departmentId: optionalString(formData.get("departmentId")),
+    locationId: optionalString(formData.get("locationId")),
     startsAt: optionalString(formData.get("startsAt")),
-    durationMinutes: optionalString(formData.get("durationMinutes"))
+    endsAt: optionalString(formData.get("endsAt")),
+    dueAt: optionalString(formData.get("dueAt")),
+    durationMinutes: optionalString(formData.get("durationMinutes")),
+    runOfShowOrder: optionalString(formData.get("runOfShowOrder")),
+    description: optionalString(formData.get("description")),
+    runOfShowNotes: optionalString(formData.get("runOfShowNotes"))
   });
 
   if (!parsed.success) {
@@ -252,12 +280,42 @@ export async function createRunOfShowItemAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("run_of_show_items").insert({
+  let timelineGroupId = input.timelineGroupId ?? null;
+
+  if (input.newTimelineGroupName) {
+    timelineGroupId = await createProjectTimelineGroup(supabase, input.projectId, input.newTimelineGroupName);
+  }
+
+  let departmentName = "";
+  let locationName = "";
+  try {
+    [departmentName, locationName] = await Promise.all([
+      getDepartmentName(supabase, input.departmentId),
+      getLocationName(supabase, input.locationId)
+    ]);
+  } catch (error) {
+    redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve references."));
+  }
+
+  const { error } = await supabase.from("calendar_items").insert({
     project_id: input.projectId,
-    cue_number: input.cueNumber ?? "",
     title: input.title,
+    item_type: input.itemType,
+    timeline_group_id: timelineGroupId,
+    department_id: input.departmentId ?? null,
+    location_id: input.locationId ?? null,
+    department: departmentName,
+    location: locationName,
     starts_at: datetimeToTimestamp(input.startsAt),
-    duration_minutes: input.durationMinutes ?? null
+    ends_at: datetimeToTimestamp(input.endsAt),
+    due_at: datetimeToTimestamp(input.dueAt),
+    all_day: false,
+    description: input.description ?? "",
+    is_run_of_show_relevant: true,
+    run_of_show_order: input.runOfShowOrder ?? null,
+    cue_number: input.cueNumber ?? "",
+    duration_minutes: input.durationMinutes ?? null,
+    run_of_show_notes: input.runOfShowNotes ?? ""
   });
 
   if (error) {
@@ -302,11 +360,7 @@ export async function deleteRunOfShowItemAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
-    .from("run_of_show_items")
-    .delete()
-    .eq("project_id", input.projectId)
-    .eq("id", input.id);
+  const { error } = await supabase.from("calendar_items").delete().eq("project_id", input.projectId).eq("id", input.id);
 
   if (error) {
     redirect(projectErrorPath(input.projectId, error.message));
@@ -393,21 +447,8 @@ export async function createTimelineGroupAction(formData: FormData) {
   }
 
   const input = parsed.data;
-  const slug = slugify(input.name);
-  if (!slug) {
-    redirect(projectErrorPath(input.projectId, "Timeline group name is required."));
-  }
-
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("project_timeline_groups").insert({
-    project_id: input.projectId,
-    name: input.name,
-    slug
-  });
-
-  if (error) {
-    redirect(projectErrorPath(input.projectId, error.message));
-  }
+  await createProjectTimelineGroup(supabase, input.projectId, input.name);
 
   revalidatePath(`/projects/${input.projectId}`);
 }

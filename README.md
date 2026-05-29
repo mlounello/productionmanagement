@@ -57,4 +57,6 @@ The app should use managed reference data for reusable institutional options rat
 
 Forms should use reusable searchable selectors with controlled "add new" flows where appropriate. Historical records should keep working when reference records are archived/inactive.
 
+`calendar_items` is the production-event planning source of truth. Calendar, Gantt, and Run of Show should read from the same calendar item records; Run of Show is a projection of items marked `is_run_of_show_relevant`, not a separate event system. The existing `run_of_show_items` table is legacy/future extension detail only and should stay linked back to source calendar items if used later.
+
 The long-term UI direction is a Siena-branded production-management shell inspired by clean Propared-style workflows: persistent left sidebar, top workspace header, compact lists/tables, right-side detail drawers, and a Settings/Admin area for reference data. Data integrity and selector patterns come before a full visual shell redesign.

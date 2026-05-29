@@ -8,14 +8,22 @@ export type TimelineGroupOption = {
   is_active: boolean;
 };
 
-export function TimelineGroupSelector({ groups }: { groups: TimelineGroupOption[] }) {
+export function TimelineGroupSelector({
+  groups,
+  newInputId = "newTimelineGroupName",
+  selectId = "timelineGroupId"
+}: {
+  groups: TimelineGroupOption[];
+  newInputId?: string;
+  selectId?: string;
+}) {
   const [mode, setMode] = useState("ungrouped");
 
   return (
     <>
       <div className="field">
-        <label htmlFor="timelineGroupId">Timeline group</label>
-        <select id="timelineGroupId" onChange={(event) => setMode(event.target.value)} value={mode}>
+        <label htmlFor={selectId}>Timeline group</label>
+        <select id={selectId} onChange={(event) => setMode(event.target.value)} value={mode}>
           <option value="ungrouped">Ungrouped</option>
           {groups
             .filter((group) => group.is_active)
@@ -30,8 +38,8 @@ export function TimelineGroupSelector({ groups }: { groups: TimelineGroupOption[
       <input name="timelineGroupId" type="hidden" value={mode === "new" || mode === "ungrouped" ? "" : mode} />
       {mode === "new" ? (
         <div className="field">
-          <label htmlFor="newTimelineGroupName">New timeline group</label>
-          <input id="newTimelineGroupName" name="newTimelineGroupName" placeholder="Tech Week" required />
+          <label htmlFor={newInputId}>New timeline group</label>
+          <input id={newInputId} name="newTimelineGroupName" placeholder="Tech Week" required />
         </div>
       ) : null}
     </>

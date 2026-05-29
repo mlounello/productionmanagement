@@ -49,6 +49,11 @@ type CalendarItem = {
   location: string;
   location_id: string | null;
   timeline_group_id: string | null;
+  is_run_of_show_relevant: boolean;
+  run_of_show_order: number | null;
+  cue_number: string;
+  duration_minutes: number | null;
+  run_of_show_notes: string;
 };
 
 type TimelineGroup = {
@@ -72,14 +77,6 @@ type ProjectRole = {
   name: string;
   role_group: string;
   department: string;
-};
-
-type RunOfShowItem = {
-  id: string;
-  cue_number: string;
-  title: string;
-  starts_at: string | null;
-  duration_minutes: number | null;
 };
 
 type ProjectLocation = {
@@ -138,6 +135,34 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
+}
+
+function sortableEventTime(item: CalendarItem) {
+  return parseDate(item.starts_at) ?? parseDate(item.due_at) ?? parseDate(item.ends_at);
+}
+
+function compareRunOfShowItems(left: CalendarItem, right: CalendarItem) {
+  const leftTime = sortableEventTime(left);
+  const rightTime = sortableEventTime(right);
+  const leftTimestamp = leftTime?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const rightTimestamp = rightTime?.getTime() ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftTimestamp !== rightTimestamp) {
+    return leftTimestamp - rightTimestamp;
+  }
+
+  const leftOrder = left.run_of_show_order ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.run_of_show_order ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  const cueCompare = left.cue_number.localeCompare(right.cue_number, undefined, { numeric: true });
+  if (cueCompare !== 0) {
+    return cueCompare;
+  }
+
+  return left.title.localeCompare(right.title);
 }
 
 function formatItemDates(item: CalendarItem) {
@@ -262,7 +287,6 @@ export default async function ProjectPage({
   const [
     { data: calendarItems },
     { data: projectRoles },
-    { data: runOfShowItems },
     { data: projectLocations },
     { data: timelineGroups },
     departments,
@@ -273,7 +297,7 @@ export default async function ProjectPage({
     supabase
       .from("calendar_items")
       .select(
-        "id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id, timeline_group_id"
+        "id, title, item_type, starts_at, ends_at, due_at, status, department, department_id, location, location_id, timeline_group_id, is_run_of_show_relevant, run_of_show_order, cue_number, duration_minutes, run_of_show_notes"
       )
       .eq("project_id", typedProject.id)
       .order("starts_at", { ascending: true }),
@@ -283,12 +307,6 @@ export default async function ProjectPage({
       .eq("project_id", typedProject.id)
       .order("role_group", { ascending: true })
       .order("name", { ascending: true }),
-    supabase
-      .from("run_of_show_items")
-      .select("id, cue_number, title, starts_at, duration_minutes")
-      .eq("project_id", typedProject.id)
-      .order("starts_at", { ascending: true })
-      .order("sort_order", { ascending: true }),
     supabase
       .from("project_locations")
       .select("id, location_id, locations(id, name, building, room, is_active)")
@@ -308,7 +326,7 @@ export default async function ProjectPage({
 
   const items = (calendarItems ?? []) as CalendarItem[];
   const roles = (projectRoles ?? []) as ProjectRole[];
-  const runRows = (runOfShowItems ?? []) as RunOfShowItem[];
+  const runRows = items.filter((item) => item.is_run_of_show_relevant).sort(compareRunOfShowItems);
   const projectLocationRows = (projectLocations ?? []) as unknown as ProjectLocation[];
   const groups = (timelineGroups ?? []) as TimelineGroup[];
   const activeGroups = groups.filter((group) => group.is_active);
@@ -675,14 +693,66 @@ export default async function ProjectPage({
             <div>
               <p className="eyebrow">Event Flow</p>
               <h2>Run of Show</h2>
+              <p className="muted">Run-of-show rows are calendar items marked for this view.</p>
             </div>
           </div>
-          <form action={createRunOfShowItemAction} className="inline-create run-create">
+          <form action={createRunOfShowItemAction} className="form-grid">
             <input name="projectId" type="hidden" value={typedProject.id} />
-            <input aria-label="Cue number" name="cueNumber" placeholder="Cue" />
-            <input aria-label="Run row title" name="title" placeholder="Run row title" required />
-            <input aria-label="Start time" name="startsAt" type="datetime-local" />
-            <input aria-label="Duration" min="0" name="durationMinutes" placeholder="Min" type="number" />
+            <div className="form-row">
+              <div className="field">
+                <label htmlFor="runCueNumber">Cue</label>
+                <input id="runCueNumber" name="cueNumber" placeholder="A1" />
+              </div>
+              <div className="field">
+                <label htmlFor="runOfShowOrder">Order</label>
+                <input id="runOfShowOrder" min="0" name="runOfShowOrder" placeholder="10" type="number" />
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="runTitle">Title</label>
+              <input id="runTitle" name="title" required />
+            </div>
+            <div className="field">
+              <label htmlFor="runItemType">Type</label>
+              <select id="runItemType" name="itemType" defaultValue="run_of_show" required>
+                {calendarItemTypes.map((itemType) => (
+                  <option key={itemType.id} value={itemType.slug}>
+                    {itemType.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <TimelineGroupSelector groups={activeGroups} newInputId="runNewTimelineGroupName" selectId="runTimelineGroupId" />
+            <div className="form-row">
+              <div className="field">
+                <label htmlFor="runStartsAt">Start</label>
+                <input id="runStartsAt" name="startsAt" type="datetime-local" />
+              </div>
+              <div className="field">
+                <label htmlFor="runEndsAt">End</label>
+                <input id="runEndsAt" name="endsAt" type="datetime-local" />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="field">
+                <label htmlFor="runDueAt">Due</label>
+                <input id="runDueAt" name="dueAt" type="datetime-local" />
+              </div>
+              <div className="field">
+                <label htmlFor="runDurationMinutes">Duration</label>
+                <input id="runDurationMinutes" min="0" name="durationMinutes" placeholder="Min" type="number" />
+              </div>
+            </div>
+            <DepartmentSelector departments={departments} name="departmentId" selectId="runDepartmentId" />
+            <LocationSelector locations={locations} name="locationId" selectId="runLocationId" />
+            <div className="field">
+              <label htmlFor="runDescription">Description</label>
+              <textarea id="runDescription" name="description" rows={3} />
+            </div>
+            <div className="field">
+              <label htmlFor="runNotes">Run-of-show notes</label>
+              <textarea id="runNotes" name="runOfShowNotes" rows={3} />
+            </div>
             <button type="submit">Add row</button>
           </form>
           <div className="compact-list">
@@ -697,7 +767,10 @@ export default async function ProjectPage({
                     <span>
                       {formatDateTime(row.starts_at)}
                       {row.duration_minutes ? ` · ${row.duration_minutes} min` : ""}
+                      {row.location ? ` · ${row.location}` : ""}
+                      {row.department ? ` · ${row.department}` : ""}
                     </span>
+                    {row.run_of_show_notes ? <span>{row.run_of_show_notes}</span> : null}
                   </div>
                   <form action={deleteRunOfShowItemAction}>
                     <input name="projectId" type="hidden" value={typedProject.id} />
