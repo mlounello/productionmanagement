@@ -1,6 +1,6 @@
 # Production Management
 
-Siena production operations platform for projects, durable people profiles, production calendars, Gantt charts, run of show, auditions, role assignments, recognition, scheduling, inventory, road cases, quotes, invoices, and controlled integration with Playbill and Theatre Budget.
+Siena production operations platform for projects, durable people profiles, project roles, auditions, generated communications, recognition, and controlled integration with Playbill and Theatre Budget. Calendar, Gantt, and Run of Show planning views are supported, but the current MVP spine is people, roles, auditions, emails, and sync.
 
 ## Stack
 
@@ -45,15 +45,29 @@ set role = excluded.role,
     updated_at = now();
 ```
 
-## Integration freeze
+## Integration policy
 
-- Theatre Budget writes stay disabled until after June 1, 2026.
-- Playbill writes stay disabled until after June 7, 2026.
-- Until then, integrations should use read-only references and `external_links`.
+Production Management, Playbill, and Theatre Budget share the same Supabase project but use different schemas. Cross-app writes must be deliberate, feature-gated, and traceable through local integration records.
+
+- Playbill writes are gated by `ENABLE_PLAYBILL_WRITES`.
+- Theatre Budget writes are gated by `ENABLE_BUDGET_WRITES`.
+- Google Calendar writes are gated by `ENABLE_GOOGLE_CALENDAR_SYNC`.
+- Integrations should use explicit `external_links` records so linked external rows can be audited, retried, or disconnected without guessing.
 
 ## Product architecture direction
 
 The app should use managed reference data for reusable institutional options rather than repeated free text. Core institutional entities such as departments and locations should have dedicated tables; lighter controlled vocabularies such as project types, event types, role groups, and future category lists should use a shared `reference_values` pattern.
+
+The main MVP path is now:
+
+- create projects
+- define project roles
+- assign people to roles
+- mark assignment-specific guest artists
+- keep durable person files with internal and client-visible notes
+- create audition sessions, slots, paperwork, and submissions
+- generate cast, crew, role confirmation, and ACTF/recognition emails
+- sync selected people/role data to Playbill and guest artist data to Theatre Budget through guarded integration records
 
 Forms should use reusable searchable selectors with controlled "add new" flows where appropriate. Historical records should keep working when reference records are archived/inactive.
 

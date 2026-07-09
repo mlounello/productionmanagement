@@ -7,13 +7,13 @@ Production Management is the operational support structure for Siena production 
 ## Bounded Contexts
 
 - `core`: shared app registry, roles, and app memberships.
-- `app_production_management`: source of truth for operational planning, durable people profiles, project teams, calendars, Gantt data, auditions, scheduling, recognition, and integration links.
+- `app_production_management`: source of truth for projects, durable people profiles, project teams, role assignment intent, auditions, generated communications, recognition, supporting planning views, and integration links.
 - `app_playbill`: source of truth for public programs, bios, headshots, and Playbill submission workflow.
 - `app_theatre_budget`: source of truth for production budgets, guest artist contract/payment tracking, procurement, and financial rollups.
 
 ## Current Integration Policy
 
-Production Management must not write into Theatre Budget before June 1, 2026, or Playbill before June 7, 2026. Version 1 stores integration intent and links only.
+Production Management, Playbill, and Theatre Budget share the same Supabase project but use different schemas. Cross-app writes must be deliberate, feature-gated, and traceable through local integration records. Version 1 should store local intent and external links before enabling automated writes.
 
 Future writes must be gated behind feature flags:
 
@@ -29,17 +29,53 @@ Production Management owns:
 - Durable people profiles
 - Project team memberships
 - Production roles and assignments
+- Guest artist intent on project role assignments
+- Person files with internal notes, client-visible notes, accomplishments, and project history
 - `calendar_items` as the production-event planning source of truth for calendars, Gantt windows, tasks, milestones, and run-of-show projections
 - Audition slots and submissions
 - Email templates/messages/audit
 - Recognition and accomplishment history
 - Operational links to external apps
 
-It does not initially own Playbill bios or Theatre Budget contracts.
+It does not own Playbill bios, public program output, Theatre Budget contracts, or Theatre Budget payment tracking.
+
+Project roles and role assignments are now the main MVP spine. A person is assigned to a role on a project, and that assignment can drive Playbill role/bio prompts, Theatre Budget guest artist sync, announcement emails, and later calendar/team workflows. Guest artist status belongs on the assignment because a person may be a guest artist for one project and not for another.
+
+Cross-app sync should flow through explicit local records:
+
+- local entity type and id
+- external app/schema/table/id
+- sync direction
+- sync status
+- last synced metadata or error detail where needed
+
+This lets Production Management retry or disable sync without corrupting Playbill or Theatre Budget data.
 
 Calendar, Gantt, and Run of Show must stay synchronized views over `app_production_management.calendar_items`. The calendar view reads and edits calendar items directly. The Gantt view reads the same calendar items and groups them through project-scoped `project_timeline_groups`. The Run of Show view reads calendar items where `is_run_of_show_relevant = true`; run-of-show cue, order, duration, and note fields live on the same calendar item row.
 
 The existing `run_of_show_items` table is legacy/future extension detail only. It should not be used as the primary source for independent run-of-show events. If it remains long term, rows should extend a source calendar item through `calendar_item_id` rather than duplicating event title/date data. Full recurrence behavior is deferred and should be designed carefully before implementation, including single-occurrence edits, entire-series edits, and this-and-following series splits.
+
+Planning/calendar functionality is currently a supporting module, not the primary MVP path. Preserve the existing calendar/Gantt/Run of Show foundation, but prioritize people, project roles, auditions, communications, and Playbill/Theatre Budget sync prep before adding advanced planning features.
+
+## Sync Targets
+
+Playbill sync should be designed against these existing `app_playbill` tables:
+
+- `programs`
+- `shows`
+- `people`
+- `show_roles`
+- `submission_requests`
+- `submissions`
+
+Production Management should not assume that a durable local person is the same row as an `app_playbill.people` row. Playbill people are currently program-scoped, so sync should link local people and role assignments to Playbill program/show/people/role rows through `external_links`.
+
+Theatre Budget guest artist sync should be designed against:
+
+- `app_theatre_budget.guest_artists`
+- `app_theatre_budget.contracts.guest_artist_id`
+
+Production Management should initially create or link guest artist profiles only from role assignments marked as guest artist, with matching/deduplication by existing external link, email, and normalized display name before inserting anything.
 
 ## Managed Reference Data
 
@@ -97,6 +133,11 @@ Project membership roles are stored as text so they can expand without enum chur
 
 The schema is designed so these modules attach to projects, people, roles, and calendar items:
 
+- project role casting and staffing workflows
+- Playbill role/person/bio prompt sync
+- Theatre Budget guest artist profile sync
+- audition slot booking and paperwork
+- generated cast, crew, role confirmation, and ACTF/recognition emails
 - employee scheduling
 - time tracking, internal and payroll-adjacent
 - inventory and rental quoting
