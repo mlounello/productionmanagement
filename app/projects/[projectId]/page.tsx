@@ -4,13 +4,18 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   addProjectLocationAction,
+  addPersonNoteAction,
   archiveTimelineGroupAction,
+  createPersonAction,
   createProjectRoleAction,
+  createRoleAssignmentAction,
   createTimelineGroupAction,
   deleteCalendarItemAction,
   deleteProjectAction,
+  deleteRoleAssignmentAction,
   deleteRunOfShowItemAction,
-  removeProjectLocationAction
+  removeProjectLocationAction,
+  updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
@@ -72,6 +77,42 @@ type ProjectRole = {
   name: string;
   role_group: string;
   department: string;
+};
+
+type Person = {
+  id: string;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  preferred_name: string;
+  email: string;
+  phone: string;
+  pronouns: string;
+  affiliation: string;
+  person_type: string;
+  status: string;
+};
+
+type RoleAssignment = {
+  id: string;
+  role_id: string;
+  person_id: string;
+  status: string;
+  confirmation_status: string;
+  notes: string;
+  is_guest_artist: boolean;
+  playbill_sync_status: string;
+  guest_artist_sync_status: string;
+};
+
+type PersonNote = {
+  id: string;
+  person_id: string;
+  project_id: string | null;
+  visibility: string;
+  note: string;
+  is_pinned: boolean;
+  created_at: string;
 };
 
 type ProjectLocation = {
@@ -273,6 +314,8 @@ export default async function ProjectPage({
   const [
     { data: calendarItems },
     { data: projectRoles },
+    { data: people },
+    { data: roleAssignments },
     { data: projectLocations },
     { data: timelineGroups },
     departments,
@@ -294,6 +337,17 @@ export default async function ProjectPage({
       .order("role_group", { ascending: true })
       .order("name", { ascending: true }),
     supabase
+      .from("people")
+      .select("id, full_name, first_name, last_name, preferred_name, email, phone, pronouns, affiliation, person_type, status")
+      .order("full_name", { ascending: true }),
+    supabase
+      .from("role_assignments")
+      .select(
+        "id, role_id, person_id, status, confirmation_status, notes, is_guest_artist, playbill_sync_status, guest_artist_sync_status"
+      )
+      .eq("project_id", typedProject.id)
+      .order("created_at", { ascending: true }),
+    supabase
       .from("project_locations")
       .select("id, location_id, locations(id, name, building, room, is_active)")
       .eq("project_id", typedProject.id)
@@ -312,6 +366,20 @@ export default async function ProjectPage({
 
   const items = (calendarItems ?? []) as CalendarItem[];
   const roles = (projectRoles ?? []) as ProjectRole[];
+  const peopleRows = (people ?? []) as Person[];
+  const assignmentRows = (roleAssignments ?? []) as RoleAssignment[];
+  const projectPersonIds = Array.from(new Set(assignmentRows.map((assignment) => assignment.person_id)));
+  const { data: personNotes } = projectPersonIds.length
+    ? await supabase
+        .from("person_notes")
+        .select("id, person_id, project_id, visibility, note, is_pinned, created_at")
+        .in("person_id", projectPersonIds)
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+    : { data: [] };
+  const notes = (personNotes ?? []) as PersonNote[];
+  const rolesById = new Map(roles.map((role) => [role.id, role]));
+  const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
   const runRows = items.filter((item) => item.is_run_of_show_relevant).sort(compareRunOfShowItems);
   const projectLocationRows = (projectLocations ?? []) as unknown as ProjectLocation[];
   const groups = (timelineGroups ?? []) as TimelineGroup[];
@@ -375,6 +443,8 @@ export default async function ProjectPage({
         <a href="#gantt">Gantt</a>
         <a href="#timeline-groups">Timeline Groups</a>
         <a href="#roles">Roles</a>
+        <a href="#people">People</a>
+        <a href="#assignments">Assignments</a>
         <a href="#run-of-show">Run of Show</a>
       </nav>
 
@@ -384,16 +454,16 @@ export default async function ProjectPage({
           <p>Calendar Items</p>
         </div>
         <div>
-          <span>{roles.length}</span>
-          <p>Roles</p>
+          <span>{assignmentRows.length}</span>
+          <p>Assignments</p>
         </div>
         <div>
-          <span>{runRows.length}</span>
-          <p>Run Rows</p>
+          <span>{projectPersonIds.length}</span>
+          <p>Project People</p>
         </div>
         <div>
-          <span>{timeline.weeks.length}</span>
-          <p>Timeline Weeks</p>
+          <span>{assignmentRows.filter((assignment) => assignment.is_guest_artist).length}</span>
+          <p>Guest Artists</p>
         </div>
       </section>
 
@@ -585,6 +655,7 @@ export default async function ProjectPage({
             <div>
               <p className="eyebrow">People Structure</p>
               <h2>Roles</h2>
+              <p className="muted">Define the roles this project needs before assigning people into them.</p>
             </div>
           </div>
           <form action={createProjectRoleAction} className="inline-create">
@@ -611,11 +682,13 @@ export default async function ProjectPage({
             {roles.length ? (
               roles.map((role) => (
                 <div className="compact-row" key={role.id}>
-                  <strong>{role.name}</strong>
-                  <span>
-                    {titleCase(role.role_group)}
-                    {role.department ? ` · ${role.department}` : ""}
-                  </span>
+                  <div>
+                    <strong>{role.name}</strong>
+                    <span>
+                      {titleCase(role.role_group)}
+                      {role.department ? ` · ${role.department}` : ""}
+                    </span>
+                  </div>
                 </div>
               ))
             ) : (
@@ -624,6 +697,322 @@ export default async function ProjectPage({
           </div>
         </section>
 
+        <section className="panel" id="people">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">People Files</p>
+              <h2>Add Person</h2>
+              <p className="muted">Create durable profiles that can later connect to Playbill, auditions, and recognition.</p>
+            </div>
+          </div>
+          <form action={createPersonAction} className="stacked-form">
+            <input name="projectId" type="hidden" value={typedProject.id} />
+            <div className="form-row">
+              <label className="field">
+                <span>Full name</span>
+                <input name="fullName" required />
+              </label>
+              <label className="field">
+                <span>Email</span>
+                <input name="email" type="email" />
+              </label>
+            </div>
+            <div className="form-row">
+              <label className="field">
+                <span>First name</span>
+                <input name="firstName" />
+              </label>
+              <label className="field">
+                <span>Last name</span>
+                <input name="lastName" />
+              </label>
+            </div>
+            <div className="form-row">
+              <label className="field">
+                <span>Preferred name</span>
+                <input name="preferredName" />
+              </label>
+              <label className="field">
+                <span>Pronouns</span>
+                <input name="pronouns" />
+              </label>
+            </div>
+            <div className="form-row">
+              <label className="field">
+                <span>Phone</span>
+                <input name="phone" />
+              </label>
+              <label className="field">
+                <span>Person type</span>
+                <select name="personType" defaultValue="person">
+                  <option value="person">Person</option>
+                  <option value="student">Student</option>
+                  <option value="staff">Staff</option>
+                  <option value="faculty">Faculty</option>
+                  <option value="guest_artist">Guest artist</option>
+                  <option value="vendor_contact">Vendor contact</option>
+                  <option value="client">Client</option>
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Affiliation</span>
+              <input name="affiliation" placeholder="Siena student, guest designer, external client..." />
+            </label>
+            <button type="submit">Create person</button>
+          </form>
+        </section>
+      </div>
+
+      <section className="panel workspace-section" id="assignments">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Main MVP Spine</p>
+            <h2>Role Assignments</h2>
+            <p className="muted">
+              Assign people to project roles. Guest artist is tracked on the assignment for future Theatre Budget sync.
+            </p>
+          </div>
+        </div>
+        <form action={createRoleAssignmentAction} className="assignment-create-form">
+          <input name="projectId" type="hidden" value={typedProject.id} />
+          <label className="field">
+            <span>Role</span>
+            <select name="roleId" defaultValue="" required>
+              <option value="">Choose role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name} ({titleCase(role.role_group)})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Person</span>
+            <select name="personId" defaultValue="" required>
+              <option value="">Choose person</option>
+              {peopleRows.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.full_name}
+                  {person.email ? ` · ${person.email}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select name="status" defaultValue="draft">
+              <option value="draft">Draft</option>
+              <option value="offered">Offered</option>
+              <option value="accepted">Accepted</option>
+              <option value="declined">Declined</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Confirmation</span>
+            <select name="confirmationStatus" defaultValue="not_sent">
+              <option value="not_sent">Not sent</option>
+              <option value="sent">Sent</option>
+              <option value="accepted">Accepted</option>
+              <option value="declined">Declined</option>
+              <option value="bounced">Bounced</option>
+            </select>
+          </label>
+          <label className="checkbox-card">
+            <input name="isGuestArtist" type="checkbox" />
+            <span>
+              <strong>Is Guest Artist</strong>
+              <small>Prepare this assignment for Theatre Budget guest artist sync.</small>
+            </span>
+          </label>
+          <label className="field assignment-notes-field">
+            <span>Assignment notes</span>
+            <textarea name="notes" rows={2} />
+          </label>
+          <button type="submit">Assign person</button>
+        </form>
+
+        <div className="assignment-list">
+          {assignmentRows.length ? (
+            assignmentRows.map((assignment) => {
+              const role = rolesById.get(assignment.role_id);
+              const person = peopleById.get(assignment.person_id);
+
+              return (
+                <details className="assignment-card" key={assignment.id}>
+                  <summary>
+                    <div>
+                      <strong>{person?.full_name ?? "Unknown person"}</strong>
+                      <span>
+                        {role?.name ?? "Unknown role"} · {titleCase(assignment.status)} · Confirmation{" "}
+                        {titleCase(assignment.confirmation_status)}
+                      </span>
+                    </div>
+                    <div className="badge-row">
+                      {assignment.is_guest_artist ? <span className="status-badge gold">Guest Artist</span> : null}
+                      <span className="status-badge">Playbill {titleCase(assignment.playbill_sync_status)}</span>
+                      <span className="status-badge">Budget {titleCase(assignment.guest_artist_sync_status)}</span>
+                    </div>
+                  </summary>
+                  <form action={updateRoleAssignmentAction} className="assignment-edit-form">
+                    <input name="projectId" type="hidden" value={typedProject.id} />
+                    <input name="id" type="hidden" value={assignment.id} />
+                    <input name="roleId" type="hidden" value={assignment.role_id} />
+                    <input name="personId" type="hidden" value={assignment.person_id} />
+                    <label className="field">
+                      <span>Status</span>
+                      <select name="status" defaultValue={assignment.status}>
+                        <option value="draft">Draft</option>
+                        <option value="offered">Offered</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                        <option value="withdrawn">Withdrawn</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Confirmation</span>
+                      <select name="confirmationStatus" defaultValue={assignment.confirmation_status}>
+                        <option value="not_sent">Not sent</option>
+                        <option value="sent">Sent</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="declined">Declined</option>
+                        <option value="bounced">Bounced</option>
+                      </select>
+                    </label>
+                    <label className="checkbox-card">
+                      <input name="isGuestArtist" type="checkbox" defaultChecked={assignment.is_guest_artist} />
+                      <span>
+                        <strong>Is Guest Artist</strong>
+                        <small>Changing this prepares future Theatre Budget guest artist sync.</small>
+                      </span>
+                    </label>
+                    <label className="field assignment-notes-field">
+                      <span>Assignment notes</span>
+                      <textarea name="notes" rows={3} defaultValue={assignment.notes} />
+                    </label>
+                    <div className="form-actions">
+                      <button type="submit">Save assignment</button>
+                    </div>
+                  </form>
+                  <form action={deleteRoleAssignmentAction}>
+                    <input name="projectId" type="hidden" value={typedProject.id} />
+                    <input name="id" type="hidden" value={assignment.id} />
+                    <button className="button danger" type="submit">
+                      Remove assignment
+                    </button>
+                  </form>
+                </details>
+              );
+            })
+          ) : (
+            <p className="muted">No role assignments yet. Create people and roles, then assign them here.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="panel workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">People Files</p>
+            <h2>Project People Notes</h2>
+            <p className="muted">Keep internal and client-visible notes attached to durable person files.</p>
+          </div>
+        </div>
+        <form action={addPersonNoteAction} className="person-note-form">
+          <input name="projectId" type="hidden" value={typedProject.id} />
+          <label className="field">
+            <span>Person</span>
+            <select name="personId" defaultValue="" required>
+              <option value="">Choose project person</option>
+              {projectPersonIds.map((personId) => {
+                const person = peopleById.get(personId);
+                return person ? (
+                  <option key={person.id} value={person.id}>
+                    {person.full_name}
+                  </option>
+                ) : null;
+              })}
+            </select>
+          </label>
+          <label className="field">
+            <span>Visibility</span>
+            <select name="visibility" defaultValue="internal">
+              <option value="internal">Internal</option>
+              <option value="client_visible">Client visible</option>
+            </select>
+          </label>
+          <label className="checkbox-card compact">
+            <input name="isPinned" type="checkbox" />
+            <span>
+              <strong>Pin</strong>
+            </span>
+          </label>
+          <label className="field person-note-text">
+            <span>Note</span>
+            <textarea name="note" rows={3} required />
+          </label>
+          <button type="submit">Add note</button>
+        </form>
+
+        <div className="people-file-grid">
+          {projectPersonIds.length ? (
+            projectPersonIds.map((personId) => {
+              const person = peopleById.get(personId);
+              const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === personId);
+              const personNoteRows = notes.filter((note) => note.person_id === personId);
+
+              if (!person) {
+                return null;
+              }
+
+              return (
+                <article className="person-file-card" key={person.id}>
+                  <header>
+                    <div>
+                      <h3>{person.full_name}</h3>
+                      <p className="muted">
+                        {titleCase(person.person_type)}
+                        {person.affiliation ? ` · ${person.affiliation}` : ""}
+                        {person.email ? ` · ${person.email}` : ""}
+                      </p>
+                    </div>
+                  </header>
+                  <div className="mini-stack">
+                    <strong>Project roles</strong>
+                    {personAssignments.map((assignment) => {
+                      const role = rolesById.get(assignment.role_id);
+                      return (
+                        <span key={assignment.id}>
+                          {role?.name ?? "Unknown role"} · {titleCase(assignment.status)}
+                          {assignment.is_guest_artist ? " · Guest Artist" : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="mini-stack">
+                    <strong>Notes</strong>
+                    {personNoteRows.length ? (
+                      personNoteRows.map((note) => (
+                        <span key={note.id}>
+                          {note.is_pinned ? "Pinned · " : ""}
+                          {note.visibility === "client_visible" ? "Client visible" : "Internal"} · {note.note}
+                        </span>
+                      ))
+                    ) : (
+                      <span>No notes yet.</span>
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <p className="muted">No project people yet.</p>
+          )}
+        </div>
+      </section>
+
+      <div className="grid two workspace-lower">
         <section className="panel" id="run-of-show">
           <div className="section-heading">
             <div>

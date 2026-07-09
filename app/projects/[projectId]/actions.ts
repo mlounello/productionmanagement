@@ -43,6 +43,37 @@ const projectRoleSchema = z.object({
   departmentId: z.string().uuid().optional()
 });
 
+const personSchema = z.object({
+  projectId: projectIdSchema,
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
+  preferredName: z.string().trim().max(120).optional(),
+  fullName: z.string().trim().min(1, "Person name is required.").max(180),
+  email: z.string().trim().email("Enter a valid email.").optional(),
+  phone: z.string().trim().max(40).optional(),
+  pronouns: z.string().trim().max(80).optional(),
+  affiliation: z.string().trim().max(160).optional(),
+  personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"])
+});
+
+const roleAssignmentSchema = z.object({
+  projectId: projectIdSchema,
+  roleId: z.string().uuid(),
+  personId: z.string().uuid(),
+  status: z.enum(["draft", "offered", "accepted", "declined", "withdrawn"]),
+  confirmationStatus: z.enum(["not_sent", "sent", "accepted", "declined", "bounced"]),
+  isGuestArtist: z.boolean(),
+  notes: z.string().trim().max(2000).optional()
+});
+
+const personNoteSchema = z.object({
+  projectId: projectIdSchema,
+  personId: z.string().uuid(),
+  visibility: z.enum(["internal", "client_visible"]),
+  note: z.string().trim().min(1, "Note is required.").max(4000),
+  isPinned: z.boolean()
+});
+
 const runOfShowSchema = z.object({
   projectId: projectIdSchema,
   cueNumber: z.string().trim().max(40).optional(),
@@ -320,6 +351,177 @@ export async function createProjectRoleAction(formData: FormData) {
     name: input.name,
     role_group: input.roleGroup,
     department: departmentName
+  });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function createPersonAction(formData: FormData) {
+  await requireUser();
+  const parsed = personSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    firstName: optionalString(formData.get("firstName")),
+    lastName: optionalString(formData.get("lastName")),
+    preferredName: optionalString(formData.get("preferredName")),
+    fullName: requiredString(formData.get("fullName")),
+    email: optionalString(formData.get("email")),
+    phone: optionalString(formData.get("phone")),
+    pronouns: optionalString(formData.get("pronouns")),
+    affiliation: optionalString(formData.get("affiliation")),
+    personType: optionalString(formData.get("personType")) ?? "person"
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid person.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("people").insert({
+    first_name: input.firstName ?? "",
+    last_name: input.lastName ?? "",
+    preferred_name: input.preferredName ?? "",
+    full_name: input.fullName,
+    email: input.email ?? "",
+    phone: input.phone ?? "",
+    pronouns: input.pronouns ?? "",
+    affiliation: input.affiliation ?? "",
+    person_type: input.personType
+  });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function createRoleAssignmentAction(formData: FormData) {
+  await requireUser();
+  const parsed = roleAssignmentSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    roleId: requiredString(formData.get("roleId")),
+    personId: requiredString(formData.get("personId")),
+    status: optionalString(formData.get("status")) ?? "draft",
+    confirmationStatus: optionalString(formData.get("confirmationStatus")) ?? "not_sent",
+    isGuestArtist: formData.get("isGuestArtist") === "on",
+    notes: optionalString(formData.get("notes"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid role assignment.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("role_assignments").insert({
+    project_id: input.projectId,
+    role_id: input.roleId,
+    person_id: input.personId,
+    status: input.status,
+    confirmation_status: input.confirmationStatus,
+    is_guest_artist: input.isGuestArtist,
+    guest_artist_sync_status: input.isGuestArtist ? "not_ready" : "not_guest_artist",
+    playbill_sync_status: "not_ready",
+    notes: input.notes ?? ""
+  });
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function updateRoleAssignmentAction(formData: FormData) {
+  await requireUser();
+  const parsed = roleAssignmentSchema.extend({ id: z.string().uuid() }).safeParse({
+    id: requiredString(formData.get("id")),
+    projectId: requiredString(formData.get("projectId")),
+    roleId: requiredString(formData.get("roleId")),
+    personId: requiredString(formData.get("personId")),
+    status: optionalString(formData.get("status")) ?? "draft",
+    confirmationStatus: optionalString(formData.get("confirmationStatus")) ?? "not_sent",
+    isGuestArtist: formData.get("isGuestArtist") === "on",
+    notes: optionalString(formData.get("notes"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid role assignment.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("role_assignments")
+    .update({
+      status: input.status,
+      confirmation_status: input.confirmationStatus,
+      is_guest_artist: input.isGuestArtist,
+      guest_artist_sync_status: input.isGuestArtist ? "not_ready" : "not_guest_artist",
+      notes: input.notes ?? ""
+    })
+    .eq("project_id", input.projectId)
+    .eq("id", input.id)
+    .eq("role_id", input.roleId)
+    .eq("person_id", input.personId);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function deleteRoleAssignmentAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("id"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid role assignment.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("role_assignments").delete().eq("project_id", input.projectId).eq("id", input.id);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function addPersonNoteAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = personNoteSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    personId: requiredString(formData.get("personId")),
+    visibility: optionalString(formData.get("visibility")) ?? "internal",
+    note: requiredString(formData.get("note")),
+    isPinned: formData.get("isPinned") === "on"
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid person note.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("person_notes").insert({
+    person_id: input.personId,
+    project_id: input.projectId,
+    visibility: input.visibility,
+    note: input.note,
+    is_pinned: input.isPinned,
+    created_by: user.id
   });
 
   if (error) {
