@@ -669,6 +669,40 @@ button {
   font-size: 13px;
 }
 
+.editable-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.editable-row summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.editable-row summary::-webkit-details-marker {
+  display: none;
+}
+
+.editable-row summary strong,
+.editable-row summary span {
+  display: block;
+}
+
+.editable-row summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.role-edit-form {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr) minmax(180px, 0.7fr) auto;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
 .assignment-card form + form {
   margin-top: 10px;
 }
@@ -993,6 +1027,7 @@ button {
   .people-file-grid,
   .linked-record,
   .guest-artist-link-form,
+  .role-edit-form,
   .form-row,
   .inline-create,
   .inline-create.run-create {

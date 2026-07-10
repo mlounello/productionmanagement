@@ -17,6 +17,7 @@ import {
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
   unlinkTheatreBudgetGuestArtistAction,
+  updateProjectRoleAction,
   updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
@@ -730,17 +731,57 @@ export default async function ProjectPage({
           </form>
           <div className="compact-list">
             {roles.length ? (
-              roles.map((role) => (
-                <div className="compact-row" key={role.id}>
-                  <div>
-                    <strong>{role.name}</strong>
-                    <span>
-                      {titleCase(role.role_group)}
-                      {role.department ? ` · ${role.department}` : ""}
-                    </span>
-                  </div>
-                </div>
-              ))
+              roles.map((role) => {
+                const roleGroupStillActive = roleGroups.some((roleGroup) => roleGroup.slug === role.role_group);
+
+                return (
+                  <details className="editable-row" key={role.id}>
+                    <summary>
+                      <div>
+                        <strong>{role.name}</strong>
+                        <span>
+                          {titleCase(role.role_group)}
+                          {role.department ? ` · ${role.department}` : ""}
+                        </span>
+                      </div>
+                    </summary>
+                    <form action={updateProjectRoleAction} className="role-edit-form">
+                      <input name="projectId" type="hidden" value={typedProject.id} />
+                      <input name="id" type="hidden" value={role.id} />
+                      <input name="existingDepartment" type="hidden" value={role.department} />
+                      <label className="field">
+                        <span>Role name</span>
+                        <input name="name" defaultValue={role.name} required />
+                      </label>
+                      <label className="field">
+                        <span>Role group</span>
+                        <select name="roleGroup" defaultValue={role.role_group}>
+                          {!roleGroupStillActive ? (
+                            <option value={role.role_group}>{titleCase(role.role_group)} (inactive)</option>
+                          ) : null}
+                          {roleGroups.map((roleGroup) => (
+                            <option key={roleGroup.id} value={roleGroup.slug}>
+                              {roleGroup.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Change department</span>
+                        <select name="departmentId" defaultValue="">
+                          <option value="">Keep {role.department || "none"}</option>
+                          {departments.map((department) => (
+                            <option key={department.id} value={department.id}>
+                              {department.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="submit">Save role</button>
+                    </form>
+                  </details>
+                );
+              })
             ) : (
               <p className="muted">No roles yet.</p>
             )}

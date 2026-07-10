@@ -39,6 +39,24 @@ Production Management owns:
 
 It does not own Playbill bios, public program output, Theatre Budget contracts, or Theatre Budget payment tracking.
 
+## People Profiles
+
+Each `people` row should evolve into a durable profile for the person, not merely a name in a project. The profile should act like a production resume/log across Siena work:
+
+- identity and contact basics
+- headshot and optional public-facing profile assets
+- project history
+- role assignment history
+- audition history where applicable
+- director, stage manager, casting, producer, and internal production notes
+- client-visible notes where appropriate
+- accomplishments, recognitions, and ACTF-related history
+- external links to Playbill, Theatre Budget, and future systems
+
+Headshots should live on the durable Production Management person profile and later be reusable by Playbill sync so the Playbill builder can request, display, or reuse the correct image without maintaining a separate disconnected asset record.
+
+Future authenticated person access should allow people to log in and edit a controlled subset of their own information, such as preferred name, pronouns, contact details, bio/headshot submission inputs, and possibly selected resume/profile fields. Internal notes, casting notes, producer notes, and protected sync data remain staff-controlled.
+
 Project roles and role assignments are now the main MVP spine. A person is assigned to a role on a project, and that assignment can drive Playbill role/bio prompts, Theatre Budget guest artist sync, announcement emails, and later calendar/team workflows. Guest artist status belongs on the assignment because a person may be a guest artist for one project and not for another.
 
 Project role groups classify the type of role for organization, announcements, reporting, and future Playbill mapping. The active role group set is Creative Team, Production Team, Cast, Directorial Team, Administrative, Front of House, and Music / Band. Guest Artist is not a role group; it is an assignment-level flag used for Theatre Budget guest artist linking.

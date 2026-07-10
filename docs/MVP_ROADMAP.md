@@ -15,7 +15,9 @@ This is now the main MVP spine. Production Management should first help Siena cr
 - Role assignment status tracking: draft, offered, accepted, declined, withdrawn.
 - Confirmation status tracking: not sent, sent, accepted, declined, bounced.
 - Guest artist flag on the project role assignment, because guest artist status is project/role-specific rather than a permanent global person trait.
-- Person files with profile fields, project history, role history, internal notes, client-visible notes, accomplishments, and external integration links.
+- Person files with profile fields, project history, role history, internal notes, client-visible notes, accomplishments, headshots, and external integration links.
+- Long-term person profiles should function as a resume/log of Siena productions and events, including notes from directors, stage managers, casting, producers, and other authorized collaborators.
+- Future person self-service access should allow controlled profile edits without exposing internal notes or protected production data.
 - Local-first data integrity before cross-app writes.
 
 Source-of-truth rule: Production Management owns project role assignment intent. Playbill owns public program/bio output. Theatre Budget owns guest artist financial and contract tracking. Sync should use explicit integration links/statuses so writes are traceable, reversible, and not duplicated.

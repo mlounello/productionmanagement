@@ -65,7 +65,7 @@ The main MVP path is now:
 - define project roles
 - assign people to roles
 - mark assignment-specific guest artists
-- keep durable person files with internal and client-visible notes
+- keep durable person files with internal/client-visible notes, project history, role history, accomplishments, and eventual headshots
 - create audition sessions, slots, paperwork, and submissions
 - generate cast, crew, role confirmation, and ACTF/recognition emails
 - sync selected people/role data to Playbill and link guest artist assignments to Theatre Budget through guarded integration records

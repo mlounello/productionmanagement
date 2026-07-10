@@ -52,6 +52,28 @@ const projectRoleSchema = z.object({
   departmentId: z.string().uuid().optional()
 });
 
+const projectRoleUpdateSchema = z.object({
+  id: z.string().uuid(),
+  projectId: projectIdSchema,
+  name: z.string().trim().min(1, "Role name is required.").max(120),
+  roleGroup: z.enum([
+    "creative_team",
+    "production_team",
+    "cast",
+    "directorial_team",
+    "administrative",
+    "front_of_house",
+    "music_band",
+    "crew",
+    "designer",
+    "department_head",
+    "staff",
+    "guest_artist"
+  ]),
+  departmentId: z.string().uuid().optional(),
+  existingDepartment: z.string().trim().max(120).optional()
+});
+
 const personSchema = z.object({
   projectId: projectIdSchema,
   firstName: z.string().trim().max(80).optional(),
@@ -360,7 +382,9 @@ export async function createProjectRoleAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   let departmentName = "";
   try {
-    departmentName = await getDepartmentName(supabase, input.departmentId);
+    if (input.departmentId) {
+      departmentName = await getDepartmentName(supabase, input.departmentId);
+    }
   } catch (error) {
     redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve department."));
   }
@@ -377,6 +401,50 @@ export async function createProjectRoleAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function updateProjectRoleAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectRoleUpdateSchema.safeParse({
+    id: requiredString(formData.get("id")),
+    projectId: requiredString(formData.get("projectId")),
+    name: requiredString(formData.get("name")),
+    roleGroup: requiredString(formData.get("roleGroup")),
+    departmentId: optionalString(formData.get("departmentId")),
+    existingDepartment: optionalString(formData.get("existingDepartment"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid project role.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  let departmentName = input.existingDepartment ?? "";
+  try {
+    if (input.departmentId) {
+      departmentName = await getDepartmentName(supabase, input.departmentId);
+    }
+  } catch (error) {
+    redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not resolve department."));
+  }
+
+  const { error } = await supabase
+    .from("project_roles")
+    .update({
+      name: input.name,
+      role_group: input.roleGroup,
+      department: departmentName
+    })
+    .eq("project_id", input.projectId)
+    .eq("id", input.id);
+
+  if (error) {
+    redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Role saved."));
 }
 
 export async function createPersonAction(formData: FormData) {
