@@ -5,6 +5,7 @@ export const APP_SCHEMA =
   "app_production_management";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+export const ENABLE_PLAYBILL_WRITES = process.env.ENABLE_PLAYBILL_WRITES?.trim().toLowerCase() === "true";
 
 export function getSupabaseProjectRef(url: string) {
   try {

@@ -17,6 +17,7 @@ import {
   linkPlaybillShowAction,
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
+  syncRoleAssignmentToPlaybillAction,
   unlinkPlaybillShowAction,
   unlinkTheatreBudgetGuestArtistAction,
   updateProjectRoleAction,
@@ -427,6 +428,18 @@ export default async function ProjectPage({
           assignmentRows.map((assignment) => assignment.id)
         )
     : { data: [] };
+  const { data: assignmentPlaybillLinks } = assignmentRows.length
+    ? await supabase
+        .from("external_links")
+        .select("id, local_entity_id, external_id, external_table, sync_status, metadata")
+        .eq("local_entity_type", "role_assignment")
+        .eq("external_app", "playbill")
+        .eq("external_schema", "app_playbill")
+        .in(
+          "local_entity_id",
+          assignmentRows.map((assignment) => assignment.id)
+        )
+    : { data: [] };
   const [{ data: playbillLinks }, theatreBudgetGuestArtists, playbillShows] = await Promise.all([
     supabase
       .from("external_links")
@@ -446,7 +459,18 @@ export default async function ProjectPage({
     : null;
   const linkedPlaybillMetadata = playbillLink?.metadata ?? {};
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
+  const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
+  const playbillShowRoleLinksByAssignmentId = new Map(
+    playbillAssignmentLinks
+      .filter((link) => link.external_table === "show_roles")
+      .map((link) => [link.local_entity_id, link])
+  );
+  const playbillRequestLinksByAssignmentId = new Map(
+    playbillAssignmentLinks
+      .filter((link) => link.external_table === "submission_requests")
+      .map((link) => [link.local_entity_id, link])
+  );
   const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
@@ -1012,6 +1036,8 @@ export default async function ProjectPage({
               const budgetLink = budgetLinksByAssignmentId.get(assignment.id);
               const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
+              const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
+              const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
 
               return (
                 <details className="assignment-card" key={assignment.id}>
@@ -1025,12 +1051,44 @@ export default async function ProjectPage({
                     </div>
                     <div className="badge-row">
                       {assignment.is_guest_artist ? <span className="status-badge gold">Guest Artist</span> : null}
-                      <span className="status-badge">Playbill {titleCase(assignment.playbill_sync_status)}</span>
+                      <span className="status-badge">
+                        Playbill {playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}
+                      </span>
                       <span className="status-badge">
                         Budget {budgetLink ? "Linked" : titleCase(assignment.guest_artist_sync_status)}
                       </span>
                     </div>
                   </summary>
+                  <div className="integration-panel">
+                    <div>
+                      <strong>Playbill Draft Sync</strong>
+                      <p className="muted">
+                        Manual sync to the linked draft Playbill show. Creates or updates the Playbill person, show role,
+                        and draft bio request for this assignment.
+                      </p>
+                    </div>
+                    {playbillLink ? (
+                      <div className="linked-record">
+                        <div>
+                          <strong>
+                            {playbillShowRoleLink ? "Linked to Playbill role" : "Ready to sync to Playbill"}
+                          </strong>
+                          <span>
+                            {linkedPlaybillShow?.title ?? String(linkedPlaybillMetadata.title ?? "Linked Playbill show")}
+                            {playbillShowRoleLink ? ` · ${String(playbillShowRoleLink.metadata.role_name ?? role?.name ?? "Role")}` : ""}
+                            {playbillRequestLink ? " · Bio request ready" : ""}
+                          </span>
+                        </div>
+                        <form action={syncRoleAssignmentToPlaybillAction}>
+                          <input name="projectId" type="hidden" value={typedProject.id} />
+                          <input name="assignmentId" type="hidden" value={assignment.id} />
+                          <button type="submit">{playbillShowRoleLink ? "Resync Playbill" : "Sync to Playbill"}</button>
+                        </form>
+                      </div>
+                    ) : (
+                      <p className="setup-warning">Link this project to a Playbill show before syncing assignments.</p>
+                    )}
+                  </div>
                   {assignment.is_guest_artist ? (
                     <div className="integration-panel">
                       <div>

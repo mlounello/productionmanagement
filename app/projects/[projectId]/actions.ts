@@ -4,7 +4,21 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { fetchPlaybillShowById } from "@/lib/playbill";
+import { ENABLE_PLAYBILL_WRITES } from "@/lib/config";
+import {
+  createPlaybillPerson,
+  createPlaybillShowRole,
+  ensureBioSubmissionRequest,
+  fetchPlaybillPersonById,
+  fetchPlaybillShowById,
+  fetchPlaybillShowRoleById,
+  findPlaybillPerson,
+  findPlaybillShowRole,
+  updatePlaybillPersonIdentity,
+  updatePlaybillShowRole,
+  type PlaybillPerson,
+  type PlaybillShowRole
+} from "@/lib/playbill";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { fetchTheatreBudgetGuestArtistById } from "@/lib/theatre-budget";
 
@@ -118,6 +132,11 @@ const playbillShowLinkSchema = z.object({
   showId: z.string().uuid()
 });
 
+const playbillAssignmentSyncSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid()
+});
+
 const runOfShowSchema = z.object({
   projectId: projectIdSchema,
   cueNumber: z.string().trim().max(40).optional(),
@@ -189,6 +208,22 @@ function projectErrorPath(projectId: string, message: string) {
 
 function projectSuccessPath(projectId: string, message: string) {
   return `/projects/${projectId}?success=${encodeURIComponent(message)}`;
+}
+
+function playbillCategoryForRoleGroup(roleGroup: string): "cast" | "creative" | "production" {
+  if (roleGroup === "cast") {
+    return "cast";
+  }
+
+  if (["creative_team", "directorial_team", "music_band"].includes(roleGroup)) {
+    return "creative";
+  }
+
+  return "production";
+}
+
+function playbillTeamTypeForRoleGroup(roleGroup: string): "cast" | "production" {
+  return roleGroup === "cast" ? "cast" : "production";
 }
 
 function slugify(value: string) {
@@ -869,6 +904,291 @@ export async function unlinkPlaybillShowAction(formData: FormData) {
 
   revalidatePath(`/projects/${projectId}`);
   redirect(projectSuccessPath(projectId, "Playbill show unlinked."));
+}
+
+export async function syncRoleAssignmentToPlaybillAction(formData: FormData) {
+  await requireUser();
+  const parsed = playbillAssignmentSyncSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid Playbill sync.")}`);
+  }
+
+  const input = parsed.data;
+  if (!ENABLE_PLAYBILL_WRITES) {
+    redirect(projectErrorPath(input.projectId, "Playbill writes are disabled. Set ENABLE_PLAYBILL_WRITES=true to sync draft Playbill shows."));
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: projectLink, error: projectLinkError } = await supabase
+    .from("external_links")
+    .select("external_id, metadata")
+    .eq("local_entity_type", "project")
+    .eq("local_entity_id", input.projectId)
+    .eq("external_app", "playbill")
+    .eq("external_schema", "app_playbill")
+    .eq("external_table", "shows")
+    .maybeSingle();
+
+  if (projectLinkError) {
+    redirect(projectErrorPath(input.projectId, projectLinkError.message));
+  }
+
+  if (!projectLink?.external_id) {
+    redirect(projectErrorPath(input.projectId, "Link this project to a draft Playbill show before syncing assignments."));
+  }
+
+  const show = await fetchPlaybillShowById(String(projectLink.external_id));
+  if (!show) {
+    redirect(projectErrorPath(input.projectId, "The linked Playbill show was not found."));
+  }
+
+  if (show.is_published || show.status !== "draft") {
+    redirect(projectErrorPath(input.projectId, "Only draft, unpublished Playbill shows can be synced from Production Management."));
+  }
+
+  if (!show.program_id) {
+    redirect(projectErrorPath(input.projectId, "The linked Playbill show does not have a program_id yet."));
+  }
+
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("role_assignments")
+    .select("id, role_id, person_id")
+    .eq("project_id", input.projectId)
+    .eq("id", input.assignmentId)
+    .maybeSingle();
+
+  if (assignmentError) {
+    redirect(projectErrorPath(input.projectId, assignmentError.message));
+  }
+
+  if (!assignment) {
+    redirect(projectErrorPath(input.projectId, "Role assignment not found."));
+  }
+
+  const [{ data: role, error: roleError }, { data: person, error: personError }] = await Promise.all([
+    supabase
+      .from("project_roles")
+      .select("id, name, role_group")
+      .eq("project_id", input.projectId)
+      .eq("id", String(assignment.role_id))
+      .maybeSingle(),
+    supabase
+      .from("people")
+      .select("id, full_name, first_name, last_name, preferred_name, pronouns, email")
+      .eq("id", String(assignment.person_id))
+      .maybeSingle()
+  ]);
+
+  if (roleError) {
+    redirect(projectErrorPath(input.projectId, roleError.message));
+  }
+
+  if (personError) {
+    redirect(projectErrorPath(input.projectId, personError.message));
+  }
+
+  if (!role || !person) {
+    redirect(projectErrorPath(input.projectId, "Role or person not found for this assignment."));
+  }
+
+  const personInput = {
+    programId: show.program_id,
+    fullName: String(person.full_name),
+    firstName: String(person.first_name ?? ""),
+    lastName: String(person.last_name ?? ""),
+    preferredName: String(person.preferred_name ?? ""),
+    pronouns: String(person.pronouns ?? ""),
+    email: String(person.email ?? ""),
+    roleTitle: String(role.name),
+    teamType: playbillTeamTypeForRoleGroup(String(role.role_group))
+  };
+  const roleInput = {
+    showId: show.id,
+    personId: "",
+    roleName: String(role.name),
+    category: playbillCategoryForRoleGroup(String(role.role_group))
+  };
+
+  const { data: existingPersonLinks, error: existingPersonLinksError } = await supabase
+    .from("external_links")
+    .select("external_id, metadata")
+    .eq("local_entity_type", "person")
+    .eq("local_entity_id", String(person.id))
+    .eq("external_app", "playbill")
+    .eq("external_schema", "app_playbill")
+    .eq("external_table", "people");
+
+  if (existingPersonLinksError) {
+    redirect(projectErrorPath(input.projectId, existingPersonLinksError.message));
+  }
+
+  let playbillPerson: PlaybillPerson | null = null;
+  for (const link of existingPersonLinks ?? []) {
+    if ((link.metadata as Record<string, unknown> | null)?.program_id === show.program_id) {
+      playbillPerson = await fetchPlaybillPersonById(String(link.external_id));
+      break;
+    }
+  }
+
+  if (playbillPerson) {
+    playbillPerson = await updatePlaybillPersonIdentity(playbillPerson.id, personInput);
+  } else {
+    playbillPerson = await findPlaybillPerson(personInput);
+    if (playbillPerson) {
+      playbillPerson = await updatePlaybillPersonIdentity(playbillPerson.id, personInput);
+    } else {
+      playbillPerson = await createPlaybillPerson(personInput);
+    }
+  }
+
+  const personLink = {
+    local_entity_type: "person",
+    local_entity_id: String(person.id),
+    external_app: "playbill",
+    external_schema: "app_playbill",
+    external_table: "people",
+    external_id: playbillPerson.id,
+    sync_direction: "bidirectional",
+    sync_status: "synced",
+    metadata: {
+      program_id: show.program_id,
+      show_id: show.id,
+      source: "production_management_role_assignment_sync"
+    }
+  };
+
+  const { error: personLinkError } = await supabase
+    .from("external_links")
+    .upsert(personLink, {
+      onConflict: "local_entity_type,local_entity_id,external_app,external_schema,external_table,external_id"
+    });
+
+  if (personLinkError) {
+    redirect(projectErrorPath(input.projectId, personLinkError.message));
+  }
+
+  roleInput.personId = playbillPerson.id;
+
+  const { data: existingRoleLink, error: existingRoleLinkError } = await supabase
+    .from("external_links")
+    .select("external_id")
+    .eq("local_entity_type", "role_assignment")
+    .eq("local_entity_id", input.assignmentId)
+    .eq("external_app", "playbill")
+    .eq("external_schema", "app_playbill")
+    .eq("external_table", "show_roles")
+    .maybeSingle();
+
+  if (existingRoleLinkError) {
+    redirect(projectErrorPath(input.projectId, existingRoleLinkError.message));
+  }
+
+  let showRole: PlaybillShowRole | null = existingRoleLink?.external_id
+    ? await fetchPlaybillShowRoleById(String(existingRoleLink.external_id))
+    : null;
+
+  if (showRole) {
+    showRole = await updatePlaybillShowRole(showRole.id, roleInput);
+  } else {
+    showRole = await findPlaybillShowRole(roleInput);
+    if (showRole) {
+      showRole = await updatePlaybillShowRole(showRole.id, roleInput);
+    } else {
+      showRole = await createPlaybillShowRole(roleInput);
+    }
+  }
+
+  const { error: deleteOldRoleLinksError } = await supabase
+    .from("external_links")
+    .delete()
+    .match({
+      local_entity_type: "role_assignment",
+      local_entity_id: input.assignmentId,
+      external_app: "playbill",
+      external_schema: "app_playbill",
+      external_table: "show_roles"
+    });
+
+  if (deleteOldRoleLinksError) {
+    redirect(projectErrorPath(input.projectId, deleteOldRoleLinksError.message));
+  }
+
+  const { error: showRoleLinkError } = await supabase.from("external_links").insert({
+    local_entity_type: "role_assignment",
+    local_entity_id: input.assignmentId,
+    external_app: "playbill",
+    external_schema: "app_playbill",
+    external_table: "show_roles",
+    external_id: showRole.id,
+    sync_direction: "bidirectional",
+    sync_status: "synced",
+    metadata: {
+      show_id: show.id,
+      program_id: show.program_id,
+      person_id: playbillPerson.id,
+      role_name: showRole.role_name,
+      category: showRole.category
+    }
+  });
+
+  if (showRoleLinkError) {
+    redirect(projectErrorPath(input.projectId, showRoleLinkError.message));
+  }
+
+  const request = await ensureBioSubmissionRequest(showRole.id);
+  const { error: deleteOldRequestLinksError } = await supabase
+    .from("external_links")
+    .delete()
+    .match({
+      local_entity_type: "role_assignment",
+      local_entity_id: input.assignmentId,
+      external_app: "playbill",
+      external_schema: "app_playbill",
+      external_table: "submission_requests"
+    });
+
+  if (deleteOldRequestLinksError) {
+    redirect(projectErrorPath(input.projectId, deleteOldRequestLinksError.message));
+  }
+
+  const { error: requestLinkError } = await supabase.from("external_links").insert({
+    local_entity_type: "role_assignment",
+    local_entity_id: input.assignmentId,
+    external_app: "playbill",
+    external_schema: "app_playbill",
+    external_table: "submission_requests",
+    external_id: request.id,
+    sync_direction: "bidirectional",
+    sync_status: "synced",
+    metadata: {
+      show_id: show.id,
+      program_id: show.program_id,
+      show_role_id: showRole.id,
+      request_type: request.request_type,
+      status: request.status
+    }
+  });
+
+  if (requestLinkError) {
+    redirect(projectErrorPath(input.projectId, requestLinkError.message));
+  }
+
+  const { error: assignmentUpdateError } = await supabase
+    .from("role_assignments")
+    .update({ playbill_sync_status: "synced" })
+    .eq("project_id", input.projectId)
+    .eq("id", input.assignmentId);
+
+  if (assignmentUpdateError) {
+    redirect(projectErrorPath(input.projectId, assignmentUpdateError.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Assignment synced to draft Playbill show."));
 }
 
 export async function createRunOfShowItemAction(formData: FormData) {
