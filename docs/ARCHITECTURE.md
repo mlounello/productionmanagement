@@ -136,6 +136,8 @@ If future updates are allowed, they must be reviewed, field-scoped, feature-gate
 
 The confirmed creation flow writes only a new guest artist identity/contact shell (`display_name`, email, phone, vendor number, active status) after duplicate checks. It never writes tax, address, FOAPAL, contract, check-handling, or payment data. Existing Budget guest-artist rows remain read-only from Production Management.
 
+The direct Budget assignment picker reads existing guest artists and resolves a durable local person by an existing external link, vendor number, email, or display name in that order. If none exists, it creates a minimal Production Management person file, links both the person and role assignment to the existing Budget row, and triggers the standard draft Playbill sync. It never modifies the selected Budget row.
+
 ## Managed Reference Data
 
 Production Management should use managed reference data for reusable institutional/selectable options that are not specific to one user or one project. Users should not repeatedly type reusable institutional values by hand when those values should be shared, searched, reported on, archived, and reused.
