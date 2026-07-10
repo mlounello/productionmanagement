@@ -44,6 +44,7 @@ It does not own Playbill bios, public program output, Theatre Budget contracts, 
 Each `people` row should evolve into a durable profile for the person, not merely a name in a project. The profile should act like a production resume/log across Siena work:
 
 - identity and contact basics
+- optional Vendor / 90# identifier while preserving the UUID as the internal primary key
 - headshot and optional public-facing profile assets
 - project history
 - role assignment history
@@ -54,6 +55,8 @@ Each `people` row should evolve into a durable profile for the person, not merel
 - external links to Playbill, Theatre Budget, and future systems
 
 Headshots should live on the durable Production Management person profile and later be reusable by Playbill sync so the Playbill builder can request, display, or reuse the correct image without maintaining a separate disconnected asset record.
+
+The public route and relational identity should continue to use the internal UUID. Vendor / 90# is a searchable optional identifier, unique when present, because many people will not have one until after payment setup and some may never receive one.
 
 Future authenticated person access should allow people to log in and edit a controlled subset of their own information, such as preferred name, pronouns, contact details, bio/headshot submission inputs, and possibly selected resume/profile fields. Internal notes, casting notes, producer notes, and protected sync data remain staff-controlled.
 

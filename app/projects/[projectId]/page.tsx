@@ -90,6 +90,7 @@ type Person = {
   last_name: string;
   preferred_name: string;
   email: string;
+  vendor_number: string;
   phone: string;
   pronouns: string;
   affiliation: string;
@@ -371,7 +372,7 @@ export default async function ProjectPage({
       .order("name", { ascending: true }),
     supabase
       .from("people")
-      .select("id, full_name, first_name, last_name, preferred_name, email, phone, pronouns, affiliation, person_type, status")
+      .select("id, full_name, first_name, last_name, preferred_name, email, vendor_number, phone, pronouns, affiliation, person_type, status")
       .order("full_name", { ascending: true }),
     supabase
       .from("role_assignments")
@@ -808,6 +809,10 @@ export default async function ProjectPage({
                 <input name="email" type="email" />
               </label>
             </div>
+            <label className="field">
+              <span>Vendor / 90#</span>
+              <input name="vendorNumber" placeholder="902243554" />
+            </label>
             <div className="form-row">
               <label className="field">
                 <span>First name</span>
@@ -1133,6 +1138,7 @@ export default async function ProjectPage({
                       <p className="muted">
                         {titleCase(person.person_type)}
                         {person.affiliation ? ` · ${person.affiliation}` : ""}
+                        {person.vendor_number ? ` · 90# ${person.vendor_number}` : ""}
                         {person.email ? ` · ${person.email}` : ""}
                       </p>
                     </div>

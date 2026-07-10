@@ -241,6 +241,13 @@ h2 {
   gap: 12px;
 }
 
+.people-search-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .project-row {
   align-items: center;
   border: 1px solid var(--line);
@@ -741,6 +748,20 @@ button {
   padding-bottom: 12px;
 }
 
+.headshot-placeholder {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #edf7f1;
+  border: 1px dashed #9dc7b0;
+  border-radius: 8px;
+  color: var(--siena-green);
+  display: flex;
+  font-size: 64px;
+  font-weight: 850;
+  justify-content: center;
+  max-width: 280px;
+}
+
 .mini-stack {
   display: grid;
   gap: 5px;
@@ -1025,6 +1046,7 @@ button {
   .assignment-edit-form,
   .person-note-form,
   .people-file-grid,
+  .people-search-form,
   .linked-record,
   .guest-artist-link-form,
   .role-edit-form,
