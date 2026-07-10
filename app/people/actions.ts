@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { syncPersonAssignmentsToPlaybill } from "@/lib/playbill-sync";
 
 const personIdSchema = z.string().uuid();
 
@@ -89,6 +90,12 @@ export async function updatePersonProfileAction(formData: FormData) {
 
   if (error) {
     redirect(peopleErrorPath(input.id, error.message));
+  }
+
+  try {
+    await syncPersonAssignmentsToPlaybill(input.id);
+  } catch (syncError) {
+    redirect(peopleErrorPath(input.id, `Profile saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
 
   revalidatePath("/people");

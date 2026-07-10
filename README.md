@@ -50,6 +50,7 @@ set role = excluded.role,
 Production Management, Playbill, and Theatre Budget share the same Supabase project but use different schemas. Cross-app writes must be deliberate, feature-gated, and traceable through local integration records.
 
 - Playbill writes are gated by `ENABLE_PLAYBILL_WRITES`.
+- Linked draft Playbill shows receive stable role slots before casting; assigning or removing a person fills or vacates the same role id so songs and program planning remain intact.
 - Theatre Budget writes are gated by `ENABLE_BUDGET_WRITES`.
 - Google Calendar writes are gated by `ENABLE_GOOGLE_CALENDAR_SYNC`.
 - Integrations should use explicit `external_links` records so linked external rows can be audited, retried, or disconnected without guessing.

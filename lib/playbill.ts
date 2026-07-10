@@ -37,7 +37,7 @@ export type PlaybillPersonInput = {
 
 export type PlaybillRoleInput = {
   showId: string;
-  personId: string;
+  personId: string | null;
   roleName: string;
   category: "cast" | "creative" | "production";
 };
@@ -58,7 +58,7 @@ export type PlaybillPerson = {
 export type PlaybillShowRole = {
   id: string;
   show_id: string;
-  person_id: string;
+  person_id: string | null;
   role_name: string;
   category: string;
 };
@@ -218,16 +218,17 @@ export async function fetchPlaybillShowRoleById(id: string) {
 
 export async function findPlaybillShowRole(input: PlaybillRoleInput) {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .schema("app_playbill")
     .from("show_roles")
     .select("id, show_id, person_id, role_name, category")
     .eq("show_id", input.showId)
-    .eq("person_id", input.personId)
     .eq("role_name", input.roleName)
     .eq("category", input.category)
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  query = input.personId ? query.eq("person_id", input.personId) : query.is("person_id", null);
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     throw new Error(error.message);
@@ -315,4 +316,14 @@ export async function ensureBioSubmissionRequest(showRoleId: string) {
   }
 
   return data as PlaybillSubmissionRequest;
+}
+
+export async function deletePlaybillSubmissionRequestsForRole(showRoleId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .schema("app_playbill")
+    .from("submission_requests")
+    .delete()
+    .eq("show_role_id", showRoleId);
+  if (error) throw new Error(error.message);
 }

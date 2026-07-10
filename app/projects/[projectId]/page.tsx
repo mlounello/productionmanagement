@@ -17,6 +17,7 @@ import {
   linkPlaybillShowAction,
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
+  syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
   unlinkPlaybillShowAction,
   unlinkTheatreBudgetGuestArtistAction,
@@ -440,6 +441,16 @@ export default async function ProjectPage({
           assignmentRows.map((assignment) => assignment.id)
         )
     : { data: [] };
+  const { data: projectRolePlaybillLinks } = roles.length
+    ? await supabase
+        .from("external_links")
+        .select("id, local_entity_id, external_id, sync_status, metadata")
+        .eq("local_entity_type", "project_role")
+        .eq("external_app", "playbill")
+        .eq("external_schema", "app_playbill")
+        .eq("external_table", "show_roles")
+        .in("local_entity_id", roles.map((role) => role.id))
+    : { data: [] };
   const [{ data: playbillLinks }, theatreBudgetGuestArtists, playbillShows] = await Promise.all([
     supabase
       .from("external_links")
@@ -460,6 +471,9 @@ export default async function ProjectPage({
   const linkedPlaybillMetadata = playbillLink?.metadata ?? {};
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
+  const playbillRoleLinksByRoleId = new Map(
+    ((projectRolePlaybillLinks ?? []) as ExternalLink[]).map((link) => [link.local_entity_id, link])
+  );
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
   const playbillShowRoleLinksByAssignmentId = new Map(
     playbillAssignmentLinks
@@ -833,6 +847,7 @@ export default async function ProjectPage({
             {roles.length ? (
               roles.map((role) => {
                 const roleGroupStillActive = roleGroups.some((roleGroup) => roleGroup.slug === role.role_group);
+                const playbillRoleLink = playbillRoleLinksByRoleId.get(role.id);
 
                 return (
                   <details className="editable-row" key={role.id}>
@@ -842,6 +857,7 @@ export default async function ProjectPage({
                         <span>
                           {titleCase(role.role_group)}
                           {role.department ? ` · ${role.department}` : ""}
+                          {playbillRoleLink ? ` · Playbill ${playbillRoleLink.metadata.vacant ? "vacant" : "filled"}` : ""}
                         </span>
                       </div>
                     </summary>
@@ -879,6 +895,13 @@ export default async function ProjectPage({
                       </label>
                       <button type="submit">Save role</button>
                     </form>
+                    {playbillLink ? (
+                      <form action={syncProjectRoleToPlaybillAction} className="role-edit-form">
+                        <input name="projectId" type="hidden" value={typedProject.id} />
+                        <input name="roleId" type="hidden" value={role.id} />
+                        <button type="submit">{playbillRoleLink ? "Resync Playbill role" : "Push vacant role to Playbill"}</button>
+                      </form>
+                    ) : null}
                   </details>
                 );
               })

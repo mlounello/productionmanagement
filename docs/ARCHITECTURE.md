@@ -109,6 +109,8 @@ The first Playbill integration step is manual linking from a Production Manageme
 
 Because current Playbill work may happen on draft/non-live shows, Production Management may write to Playbill draft shows through explicit manual sync actions when `ENABLE_PLAYBILL_WRITES=true`. The first writable sync path is per-assignment: a Production Management role assignment can create or update a program-scoped `app_playbill.people` row, create or update an `app_playbill.show_roles` row, and ensure a draft `app_playbill.submission_requests` bio request. Those writes must be recorded through `external_links`.
 
+Project roles sync independently of people. A local `project_roles` row links directly to a nullable-person Playbill `show_roles` row, allowing songs and program structure to reference the stable role before casting. When a `role_assignments` row is created, the linked Playbill role is filled in place, the program-scoped person is created or updated, and the bio request is created. Removing the assignment clears `person_id` rather than deleting the Playbill role. Person identity edits automatically resync across linked draft assignments; public bio/headshot content remains Playbill-owned.
+
 Production Management must not write to published Playbill shows. Once a Playbill show is published or no longer draft, Production Management should treat linked Playbill public output as external-owned/read-only unless a future review-and-confirm override is explicitly designed.
 
 Theatre Budget guest artist sync should be designed against:

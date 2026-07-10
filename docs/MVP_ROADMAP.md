@@ -28,6 +28,7 @@ Source-of-truth rule: Production Management owns project role assignment intent.
 - Compare Production Management role/person data to `app_playbill.programs`, `app_playbill.shows`, `app_playbill.people`, `app_playbill.show_roles`, and submission request tables.
 - Start with read-only manual linking from a Production Management project to an existing Playbill show/program.
 - For draft, unpublished Playbill shows, allow a manual per-assignment sync behind `ENABLE_PLAYBILL_WRITES=true` that creates/updates Playbill people, show roles, and draft bio requests while recording every touched external row in `external_links`.
+- Push project roles to linked draft Playbill shows before casting them. Vacant Playbill roles keep stable ids for song planning; assigning a person fills the existing role and only then creates the bio request.
 - Compare guest artist role assignments to `app_theatre_budget.guest_artists` and contract guest artist links.
 - Store sync intent and external ids in `external_links`.
 - Add sync statuses on local rows where needed, especially role assignments.
