@@ -111,6 +111,10 @@ Because current Playbill work may happen on draft/non-live shows, Production Man
 
 Project roles sync independently of people. A local `project_roles` row links directly to a nullable-person Playbill `show_roles` row, allowing songs and program structure to reference the stable role before casting. When a `role_assignments` row is created, the linked Playbill role is filled in place, the program-scoped person is created or updated, and the bio request is created. Removing the assignment clears `person_id` rather than deleting the Playbill role. Person identity edits automatically resync across linked draft assignments; public bio/headshot content remains Playbill-owned.
 
+Role operations support primary, shared, understudy, and alternate assignments. Primary/shared assignments may fill the durable base Playbill role; additional shared assignments and understudy/alternate assignments receive their own Playbill role rows. Replacing a person preserves that assignment's Playbill role id and clears the former person's submission request before creating the replacement request.
+
+The project integration dashboard reconciles local roles and assignments with explicit external links. Playbill-only rows and name mismatches are review items, never automatic deletions. Bulk role paste and cross-project role reuse perform local duplicate checks before inserting and then use the same guarded role sync path as individual creation.
+
 Production Management must not write to published Playbill shows. Once a Playbill show is published or no longer draft, Production Management should treat linked Playbill public output as external-owned/read-only unless a future review-and-confirm override is explicitly designed.
 
 Theatre Budget guest artist sync should be designed against:
@@ -129,6 +133,8 @@ The safe Theatre Budget sync progression is:
 - no contract/payment/vendor/tax-field writes from Production Management
 
 If future updates are allowed, they must be reviewed, field-scoped, feature-gated, and auditable. Theatre Budget remains the authority for guest artist financial, contract, vendor, tax, and payment details.
+
+The confirmed creation flow writes only a new guest artist identity/contact shell (`display_name`, email, phone, vendor number, active status) after duplicate checks. It never writes tax, address, FOAPAL, contract, check-handling, or payment data. Existing Budget guest-artist rows remain read-only from Production Management.
 
 ## Managed Reference Data
 

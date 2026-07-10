@@ -25,6 +25,8 @@ Source-of-truth rule: Production Management owns project role assignment intent.
 
 ## Phase 3 Playbill And Theatre Budget Sync Preparation
 
+Role Operations and Integration combines the production-facing work into one workspace: bulk role loading and project-role reuse, vacant/filled Playbill role synchronization, reconciliation and retry status, primary/shared/understudy/alternate assignments, safe person replacement, existing Theatre Budget guest-artist matching, and deliberately confirmed creation of new Budget identity/contact shells.
+
 - Compare Production Management role/person data to `app_playbill.programs`, `app_playbill.shows`, `app_playbill.people`, `app_playbill.show_roles`, and submission request tables.
 - Start with read-only manual linking from a Production Management project to an existing Playbill show/program.
 - For draft, unpublished Playbill shows, allow a manual per-assignment sync behind `ENABLE_PLAYBILL_WRITES=true` that creates/updates Playbill people, show roles, and draft bio requests while recording every touched external row in `external_links`.

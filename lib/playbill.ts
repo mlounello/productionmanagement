@@ -216,6 +216,19 @@ export async function fetchPlaybillShowRoleById(id: string) {
   return data as PlaybillShowRole | null;
 }
 
+export async function fetchPlaybillShowRoles(showId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .schema("app_playbill")
+    .from("show_roles")
+    .select("id, show_id, person_id, role_name, category")
+    .eq("show_id", showId)
+    .order("category", { ascending: true })
+    .order("role_name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PlaybillShowRole[];
+}
+
 export async function findPlaybillShowRole(input: PlaybillRoleInput) {
   const supabase = await createSupabaseServerClient();
   let query = supabase

@@ -4,18 +4,27 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { ENABLE_PLAYBILL_WRITES } from "@/lib/config";
+import { ENABLE_BUDGET_WRITES, ENABLE_PLAYBILL_WRITES } from "@/lib/config";
 import { fetchPlaybillShowById } from "@/lib/playbill";
 import {
   markAssignmentPlaybillSyncFailed,
+  markProjectRolePlaybillSyncFailed,
   syncAssignmentToPlaybill,
   syncProjectRoleToPlaybill,
   vacateAssignmentInPlaybill
 } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { fetchTheatreBudgetGuestArtistById } from "@/lib/theatre-budget";
+import {
+  createTheatreBudgetGuestArtist,
+  fetchTheatreBudgetGuestArtistById,
+  findTheatreBudgetGuestArtist
+} from "@/lib/theatre-budget";
 
 const projectIdSchema = z.string().uuid();
+const supportedRoleGroups = new Set([
+  "creative_team", "production_team", "cast", "directorial_team", "administrative",
+  "front_of_house", "music_band", "crew", "designer", "department_head", "staff", "guest_artist"
+]);
 
 const calendarItemSchema = z.object({
   projectId: projectIdSchema,
@@ -102,6 +111,7 @@ const roleAssignmentSchema = z.object({
   personId: z.string().uuid(),
   status: z.enum(["draft", "offered", "accepted", "declined", "withdrawn"]),
   confirmationStatus: z.enum(["not_sent", "sent", "accepted", "declined", "bounced"]),
+  assignmentKind: z.enum(["primary", "shared", "understudy", "alternate"]),
   isGuestArtist: z.boolean(),
   notes: z.string().trim().max(2000).optional()
 });
@@ -133,6 +143,24 @@ const playbillAssignmentSyncSchema = z.object({
 const playbillProjectRoleSyncSchema = z.object({
   projectId: projectIdSchema,
   roleId: z.string().uuid()
+});
+
+const bulkRoleSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  roleGroup: z.string().trim().min(1).max(80),
+  department: z.string().trim().max(120).optional()
+});
+
+const replaceAssignmentSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid(),
+  newPersonId: z.string().uuid()
+});
+
+const createBudgetGuestArtistSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid(),
+  confirmCreate: z.literal("on")
 });
 
 const runOfShowSchema = z.object({
@@ -427,10 +455,90 @@ export async function createProjectRoleAction(formData: FormData) {
   try {
     await syncProjectRoleToPlaybill(input.projectId, String(createdRole.id));
   } catch (syncError) {
+    await markProjectRolePlaybillSyncFailed(input.projectId, String(createdRole.id), syncError);
     redirect(projectErrorPath(input.projectId, `Role created, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
   revalidatePath(`/projects/${input.projectId}`);
   redirect(projectSuccessPath(input.projectId, "Role created and synced to the linked draft Playbill show when available."));
+}
+
+export async function bulkCreateProjectRolesAction(formData: FormData) {
+  await requireUser();
+  const projectId = projectIdSchema.safeParse(requiredString(formData.get("projectId")));
+  if (!projectId.success) redirect(`/projects?error=${encodeURIComponent("Invalid project.")}`);
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(requiredString(formData.get("rolesJson")) || "[]");
+  } catch {
+    redirect(projectErrorPath(projectId.data, "Could not read the pasted role list."));
+  }
+  const parsed = z.array(bulkRoleSchema).max(500).safeParse(decoded);
+  if (!parsed.success) redirect(projectErrorPath(projectId.data, "One or more bulk roles are invalid."));
+  const requested = parsed.data.filter((role) => supportedRoleGroups.has(role.roleGroup));
+  if (!requested.length) redirect(projectErrorPath(projectId.data, "No valid new roles were provided."));
+
+  const supabase = await createSupabaseServerClient();
+  const { data: existing, error: existingError } = await supabase
+    .from("project_roles")
+    .select("name, role_group")
+    .eq("project_id", projectId.data);
+  if (existingError) redirect(projectErrorPath(projectId.data, existingError.message));
+  const keys = new Set((existing ?? []).map((role) => `${String(role.name).trim().toLowerCase()}|${role.role_group}`));
+  const rows: Array<{ project_id: string; name: string; role_group: string; department: string }> = [];
+  for (const role of requested) {
+    const key = `${role.name.toLowerCase()}|${role.roleGroup}`;
+    if (keys.has(key)) continue;
+    keys.add(key);
+    rows.push({ project_id: projectId.data, name: role.name, role_group: role.roleGroup, department: role.department ?? "" });
+  }
+  if (!rows.length) redirect(projectSuccessPath(projectId.data, "Every pasted role already exists."));
+  const { data: created, error } = await supabase.from("project_roles").insert(rows).select("id");
+  if (error) redirect(projectErrorPath(projectId.data, error.message));
+
+  let failed = 0;
+  for (const role of created ?? []) {
+    try {
+      await syncProjectRoleToPlaybill(projectId.data, String(role.id));
+    } catch (syncError) {
+      failed += 1;
+      await markProjectRolePlaybillSyncFailed(projectId.data, String(role.id), syncError);
+    }
+  }
+  revalidatePath(`/projects/${projectId.data}`);
+  redirect(projectSuccessPath(projectId.data, `${created?.length ?? 0} roles created${failed ? `; ${failed} need Playbill retry` : " and synced when linked"}.`));
+}
+
+export async function copyProjectRolesAction(formData: FormData) {
+  await requireUser();
+  const parsed = z.object({ projectId: projectIdSchema, sourceProjectId: projectIdSchema }).safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    sourceProjectId: requiredString(formData.get("sourceProjectId"))
+  });
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Choose a source project.")}`);
+  if (parsed.data.projectId === parsed.data.sourceProjectId) redirect(projectErrorPath(parsed.data.projectId, "Choose a different project."));
+  const supabase = await createSupabaseServerClient();
+  const [{ data: source, error: sourceError }, { data: existing, error: existingError }] = await Promise.all([
+    supabase.from("project_roles").select("name, role_group, department, description, sort_order").eq("project_id", parsed.data.sourceProjectId),
+    supabase.from("project_roles").select("name, role_group").eq("project_id", parsed.data.projectId)
+  ]);
+  if (sourceError) redirect(projectErrorPath(parsed.data.projectId, sourceError.message));
+  if (existingError) redirect(projectErrorPath(parsed.data.projectId, existingError.message));
+  const keys = new Set((existing ?? []).map((role) => `${String(role.name).trim().toLowerCase()}|${role.role_group}`));
+  const rows = (source ?? [])
+    .filter((role) => !keys.has(`${String(role.name).trim().toLowerCase()}|${role.role_group}`))
+    .map((role) => ({ ...role, project_id: parsed.data.projectId }));
+  if (!rows.length) redirect(projectSuccessPath(parsed.data.projectId, "No new roles to copy."));
+  const { data: created, error } = await supabase.from("project_roles").insert(rows).select("id");
+  if (error) redirect(projectErrorPath(parsed.data.projectId, error.message));
+  for (const role of created ?? []) {
+    try {
+      await syncProjectRoleToPlaybill(parsed.data.projectId, String(role.id));
+    } catch (syncError) {
+      await markProjectRolePlaybillSyncFailed(parsed.data.projectId, String(role.id), syncError);
+    }
+  }
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  redirect(projectSuccessPath(parsed.data.projectId, `${created?.length ?? 0} roles copied and queued for integration.`));
 }
 
 export async function updateProjectRoleAction(formData: FormData) {
@@ -476,6 +584,7 @@ export async function updateProjectRoleAction(formData: FormData) {
   try {
     await syncProjectRoleToPlaybill(input.projectId, input.id);
   } catch (syncError) {
+    await markProjectRolePlaybillSyncFailed(input.projectId, input.id, syncError);
     redirect(projectErrorPath(input.projectId, `Role saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
 
@@ -533,6 +642,7 @@ export async function createRoleAssignmentAction(formData: FormData) {
     personId: requiredString(formData.get("personId")),
     status: optionalString(formData.get("status")) ?? "draft",
     confirmationStatus: optionalString(formData.get("confirmationStatus")) ?? "not_sent",
+    assignmentKind: optionalString(formData.get("assignmentKind")) ?? "primary",
     isGuestArtist: formData.get("isGuestArtist") === "on",
     notes: optionalString(formData.get("notes"))
   });
@@ -549,6 +659,7 @@ export async function createRoleAssignmentAction(formData: FormData) {
     person_id: input.personId,
     status: input.status,
     confirmation_status: input.confirmationStatus,
+    assignment_kind: input.assignmentKind,
     is_guest_artist: input.isGuestArtist,
     guest_artist_sync_status: input.isGuestArtist ? "not_ready" : "not_guest_artist",
     playbill_sync_status: "not_ready",
@@ -578,6 +689,7 @@ export async function updateRoleAssignmentAction(formData: FormData) {
     personId: requiredString(formData.get("personId")),
     status: optionalString(formData.get("status")) ?? "draft",
     confirmationStatus: optionalString(formData.get("confirmationStatus")) ?? "not_sent",
+    assignmentKind: optionalString(formData.get("assignmentKind")) ?? "primary",
     isGuestArtist: formData.get("isGuestArtist") === "on",
     notes: optionalString(formData.get("notes"))
   });
@@ -610,6 +722,7 @@ export async function updateRoleAssignmentAction(formData: FormData) {
     .update({
       status: input.status,
       confirmation_status: input.confirmationStatus,
+      assignment_kind: input.assignmentKind,
       is_guest_artist: input.isGuestArtist,
       guest_artist_sync_status: input.isGuestArtist ? "not_ready" : "not_guest_artist",
       notes: input.notes ?? ""
@@ -829,6 +942,139 @@ export async function unlinkTheatreBudgetGuestArtistAction(formData: FormData) {
   revalidatePath(`/projects/${input.projectId}`);
 }
 
+export async function createAndLinkTheatreBudgetGuestArtistAction(formData: FormData) {
+  await requireUser();
+  const parsed = createBudgetGuestArtistSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    confirmCreate: formData.get("confirmCreate")
+  });
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Confirm the deliberate Theatre Budget guest-artist creation.")}`);
+  if (!ENABLE_BUDGET_WRITES) redirect(projectErrorPath(parsed.data.projectId, "Theatre Budget writes are disabled."));
+  const supabase = await createSupabaseServerClient();
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("role_assignments")
+    .select("id, person_id, is_guest_artist")
+    .eq("project_id", parsed.data.projectId)
+    .eq("id", parsed.data.assignmentId)
+    .maybeSingle();
+  if (assignmentError) redirect(projectErrorPath(parsed.data.projectId, assignmentError.message));
+  if (!assignment?.is_guest_artist) redirect(projectErrorPath(parsed.data.projectId, "Only guest-artist assignments can create Budget profiles."));
+  const { data: person, error: personError } = await supabase
+    .from("people")
+    .select("full_name, email, phone, vendor_number")
+    .eq("id", String(assignment.person_id))
+    .maybeSingle();
+  if (personError) redirect(projectErrorPath(parsed.data.projectId, personError.message));
+  if (!person) redirect(projectErrorPath(parsed.data.projectId, "Assigned person not found."));
+
+  let duplicate;
+  try {
+    duplicate = await findTheatreBudgetGuestArtist({
+      displayName: String(person.full_name),
+      email: String(person.email ?? ""),
+      vendorNumber: String(person.vendor_number ?? "")
+    });
+  } catch (error) {
+    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not search Theatre Budget."));
+  }
+  if (duplicate) redirect(projectErrorPath(parsed.data.projectId, `A Theatre Budget guest artist already matches ${duplicate.display_name}. Link the existing record instead.`));
+  let created;
+  try {
+    created = await createTheatreBudgetGuestArtist({
+      displayName: String(person.full_name),
+      email: String(person.email ?? ""),
+      phone: String(person.phone ?? ""),
+      vendorNumber: String(person.vendor_number ?? "")
+    });
+  } catch (error) {
+    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not create the Theatre Budget guest artist."));
+  }
+  const match = {
+    local_entity_type: "role_assignment",
+    local_entity_id: parsed.data.assignmentId,
+    external_app: "theatre_budget",
+    external_schema: "app_theatre_budget",
+    external_table: "guest_artists"
+  };
+  const { error: deleteError } = await supabase.from("external_links").delete().match(match);
+  if (deleteError) redirect(projectErrorPath(parsed.data.projectId, deleteError.message));
+  const { error: linkError } = await supabase.from("external_links").insert({
+    ...match,
+    external_id: created.id,
+    sync_direction: "push",
+    sync_status: "synced",
+    metadata: { display_name: created.display_name, email: created.email, active: true, created_from: "production_management_confirmed_flow" }
+  });
+  if (linkError) redirect(projectErrorPath(parsed.data.projectId, linkError.message));
+  const { error: statusError } = await supabase
+    .from("role_assignments")
+    .update({ guest_artist_sync_status: "synced" })
+    .eq("id", parsed.data.assignmentId);
+  if (statusError) redirect(projectErrorPath(parsed.data.projectId, statusError.message));
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  redirect(projectSuccessPath(parsed.data.projectId, "Theatre Budget guest artist created and linked. Complete financial details in Theatre Budget."));
+}
+
+export async function replaceRoleAssignmentPersonAction(formData: FormData) {
+  await requireUser();
+  const parsed = replaceAssignmentSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    newPersonId: requiredString(formData.get("newPersonId"))
+  });
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Choose a valid replacement person.")}`);
+  const supabase = await createSupabaseServerClient();
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("role_assignments")
+    .select("id, role_id, person_id, is_guest_artist")
+    .eq("project_id", parsed.data.projectId)
+    .eq("id", parsed.data.assignmentId)
+    .maybeSingle();
+  if (assignmentError) redirect(projectErrorPath(parsed.data.projectId, assignmentError.message));
+  if (!assignment) redirect(projectErrorPath(parsed.data.projectId, "Assignment not found."));
+  if (String(assignment.person_id) === parsed.data.newPersonId) redirect(projectSuccessPath(parsed.data.projectId, "That person already fills this assignment."));
+  const { data: duplicateAssignment, error: duplicateError } = await supabase
+    .from("role_assignments")
+    .select("id")
+    .eq("role_id", String(assignment.role_id))
+    .eq("person_id", parsed.data.newPersonId)
+    .neq("id", parsed.data.assignmentId)
+    .maybeSingle();
+  if (duplicateError) redirect(projectErrorPath(parsed.data.projectId, duplicateError.message));
+  if (duplicateAssignment) redirect(projectErrorPath(parsed.data.projectId, "That person already has an assignment for this role."));
+  try {
+    await vacateAssignmentInPlaybill(parsed.data.projectId, parsed.data.assignmentId, true);
+  } catch (error) {
+    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not vacate the Playbill role."));
+  }
+  const { error: unlinkBudgetError } = await supabase
+    .from("external_links")
+    .delete()
+    .eq("local_entity_type", "role_assignment")
+    .eq("local_entity_id", parsed.data.assignmentId)
+    .eq("external_app", "theatre_budget");
+  if (unlinkBudgetError) redirect(projectErrorPath(parsed.data.projectId, unlinkBudgetError.message));
+  const { error: updateError } = await supabase
+    .from("role_assignments")
+    .update({
+      person_id: parsed.data.newPersonId,
+      playbill_sync_status: "pending",
+      guest_artist_sync_status: assignment.is_guest_artist ? "not_ready" : "not_guest_artist"
+    })
+    .eq("project_id", parsed.data.projectId)
+    .eq("id", parsed.data.assignmentId);
+  if (updateError) redirect(projectErrorPath(parsed.data.projectId, updateError.message));
+  try {
+    await syncAssignmentToPlaybill(parsed.data.projectId, parsed.data.assignmentId);
+  } catch (error) {
+    await markAssignmentPlaybillSyncFailed(parsed.data.projectId, parsed.data.assignmentId, error);
+    redirect(projectErrorPath(parsed.data.projectId, `Replacement saved, but Playbill sync failed: ${error instanceof Error ? error.message : "Unknown error"}`));
+  }
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  redirect(projectSuccessPath(parsed.data.projectId, "Replacement assigned to the existing Playbill role. Review the Budget link if this is a guest artist."));
+}
+
 export async function linkPlaybillShowAction(formData: FormData) {
   await requireUser();
   const parsed = playbillShowLinkSchema.safeParse({
@@ -940,6 +1186,33 @@ export async function unlinkPlaybillShowAction(formData: FormData) {
     redirect(projectErrorPath(projectId, error.message));
   }
 
+  const [{ data: roles }, { data: assignments }] = await Promise.all([
+    supabase.from("project_roles").select("id").eq("project_id", projectId),
+    supabase.from("role_assignments").select("id").eq("project_id", projectId)
+  ]);
+  const roleIds = (roles ?? []).map((row) => String(row.id));
+  const assignmentIds = (assignments ?? []).map((row) => String(row.id));
+  if (roleIds.length) {
+    const { error: roleLinkError } = await supabase
+      .from("external_links")
+      .delete()
+      .eq("local_entity_type", "project_role")
+      .eq("external_app", "playbill")
+      .in("local_entity_id", roleIds);
+    if (roleLinkError) redirect(projectErrorPath(projectId, roleLinkError.message));
+    await supabase.from("project_roles").update({ playbill_sync_status: "not_ready", sync_notes: "" }).in("id", roleIds);
+  }
+  if (assignmentIds.length) {
+    const { error: assignmentLinkError } = await supabase
+      .from("external_links")
+      .delete()
+      .eq("local_entity_type", "role_assignment")
+      .eq("external_app", "playbill")
+      .in("local_entity_id", assignmentIds);
+    if (assignmentLinkError) redirect(projectErrorPath(projectId, assignmentLinkError.message));
+    await supabase.from("role_assignments").update({ playbill_sync_status: "not_ready", sync_notes: "" }).in("id", assignmentIds);
+  }
+
   revalidatePath(`/projects/${projectId}`);
   redirect(projectSuccessPath(projectId, "Playbill show unlinked."));
 }
@@ -960,10 +1233,47 @@ export async function syncProjectRoleToPlaybillAction(formData: FormData) {
     const result = await syncProjectRoleToPlaybill(parsed.data.projectId, parsed.data.roleId);
     if (!result) redirect(projectErrorPath(parsed.data.projectId, "Link this project to a draft Playbill show first."));
   } catch (error) {
+    await markProjectRolePlaybillSyncFailed(parsed.data.projectId, parsed.data.roleId, error);
     redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not sync the Playbill role."));
   }
   revalidatePath(`/projects/${parsed.data.projectId}`);
   redirect(projectSuccessPath(parsed.data.projectId, "Vacant role synced to Playbill."));
+}
+
+export async function syncAllProjectIntegrationsAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectIdSchema.safeParse(requiredString(formData.get("projectId")));
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Invalid project integration sync.")}`);
+  const supabase = await createSupabaseServerClient();
+  const [{ data: roles, error: rolesError }, { data: assignments, error: assignmentsError }] = await Promise.all([
+    supabase.from("project_roles").select("id").eq("project_id", parsed.data),
+    supabase.from("role_assignments").select("id, is_guest_artist").eq("project_id", parsed.data)
+  ]);
+  if (rolesError) redirect(projectErrorPath(parsed.data, rolesError.message));
+  if (assignmentsError) redirect(projectErrorPath(parsed.data, assignmentsError.message));
+  let roleFailures = 0;
+  let assignmentFailures = 0;
+  for (const role of roles ?? []) {
+    try {
+      await syncProjectRoleToPlaybill(parsed.data, String(role.id));
+    } catch (error) {
+      roleFailures += 1;
+      await markProjectRolePlaybillSyncFailed(parsed.data, String(role.id), error);
+    }
+  }
+  for (const assignment of assignments ?? []) {
+    try {
+      await syncAssignmentToPlaybill(parsed.data, String(assignment.id));
+    } catch (error) {
+      assignmentFailures += 1;
+      await markAssignmentPlaybillSyncFailed(parsed.data, String(assignment.id), error);
+    }
+  }
+  revalidatePath(`/projects/${parsed.data}`);
+  const failures = roleFailures + assignmentFailures;
+  redirect(projectSuccessPath(parsed.data, failures
+    ? `Integration reconciliation finished with ${failures} item${failures === 1 ? "" : "s"} needing retry.`
+    : `Reconciled ${roles?.length ?? 0} roles and ${assignments?.length ?? 0} assignments.`));
 }
 
 export async function syncRoleAssignmentToPlaybillAction(formData: FormData) {

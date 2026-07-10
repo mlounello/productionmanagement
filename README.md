@@ -71,6 +71,7 @@ The main MVP path is now:
 - create audition sessions, slots, paperwork, and submissions
 - generate cast, crew, role confirmation, and ACTF/recognition emails
 - sync selected people/role data to Playbill and link guest artist assignments to Theatre Budget through guarded integration records
+- bulk-load or reuse project roles, reconcile integration status, model primary/shared/understudy/alternate assignments, replace people without breaking Playbill role references, and deliberately create a new Theatre Budget identity shell only when no existing match is available
 
 Forms should use reusable searchable selectors with controlled "add new" flows where appropriate. Historical records should keep working when reference records are archived/inactive.
 

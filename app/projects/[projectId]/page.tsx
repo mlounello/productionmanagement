@@ -6,6 +6,9 @@ import {
   addProjectLocationAction,
   addPersonNoteAction,
   archiveTimelineGroupAction,
+  bulkCreateProjectRolesAction,
+  copyProjectRolesAction,
+  createAndLinkTheatreBudgetGuestArtistAction,
   createPersonAction,
   createProjectRoleAction,
   createRoleAssignmentAction,
@@ -17,6 +20,8 @@ import {
   linkPlaybillShowAction,
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
+  replaceRoleAssignmentPersonAction,
+  syncAllProjectIntegrationsAction,
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
   unlinkPlaybillShowAction,
@@ -25,8 +30,9 @@ import {
   updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
+import { BulkRoleImport } from "@/components/bulk-role-import";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
-import { fetchPlaybillShows } from "@/lib/playbill";
+import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 
@@ -86,6 +92,8 @@ type ProjectRole = {
   name: string;
   role_group: string;
   department: string;
+  playbill_sync_status: string;
+  sync_notes: string;
 };
 
 type Person = {
@@ -113,6 +121,7 @@ type RoleAssignment = {
   is_guest_artist: boolean;
   playbill_sync_status: string;
   guest_artist_sync_status: string;
+  assignment_kind: string;
 };
 
 type PersonNote = {
@@ -371,7 +380,7 @@ export default async function ProjectPage({
       .order("starts_at", { ascending: true }),
     supabase
       .from("project_roles")
-      .select("id, name, role_group, department")
+      .select("id, name, role_group, department, playbill_sync_status, sync_notes")
       .eq("project_id", typedProject.id)
       .order("role_group", { ascending: true })
       .order("name", { ascending: true }),
@@ -382,7 +391,7 @@ export default async function ProjectPage({
     supabase
       .from("role_assignments")
       .select(
-        "id, role_id, person_id, status, confirmation_status, notes, is_guest_artist, playbill_sync_status, guest_artist_sync_status"
+        "id, role_id, person_id, status, confirmation_status, notes, is_guest_artist, playbill_sync_status, guest_artist_sync_status, assignment_kind"
       )
       .eq("project_id", typedProject.id)
       .order("created_at", { ascending: true }),
@@ -407,6 +416,11 @@ export default async function ProjectPage({
   const roles = (projectRoles ?? []) as ProjectRole[];
   const peopleRows = (people ?? []) as Person[];
   const assignmentRows = (roleAssignments ?? []) as RoleAssignment[];
+  const { data: reusableRoleProjects } = await supabase
+    .from("projects")
+    .select("id, title")
+    .neq("id", typedProject.id)
+    .order("title", { ascending: true });
   const projectPersonIds = Array.from(new Set(assignmentRows.map((assignment) => assignment.person_id)));
   const { data: personNotes } = projectPersonIds.length
     ? await supabase
@@ -469,12 +483,27 @@ export default async function ProjectPage({
     ? playbillShows.data.find((show) => show.id === playbillLink.external_id) ?? null
     : null;
   const linkedPlaybillMetadata = playbillLink?.metadata ?? {};
+  const linkedPlaybillRoles = linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
   const playbillRoleLinksByRoleId = new Map(
     ((projectRolePlaybillLinks ?? []) as ExternalLink[]).map((link) => [link.local_entity_id, link])
   );
+  const linkedPlaybillRoleIds = new Set([
+    ...((projectRolePlaybillLinks ?? []) as ExternalLink[]).map((link) => link.external_id),
+    ...playbillAssignmentLinks.filter((link) => link.external_table === "show_roles").map((link) => link.external_id)
+  ]);
+  const playbillOnlyRoles = linkedPlaybillRoles.filter((role) => !linkedPlaybillRoleIds.has(role.id));
+  const roleSyncFailures = roles.filter((role) => role.playbill_sync_status === "failed");
+  const roleMismatches = roles.filter((role) => {
+    const link = playbillRoleLinksByRoleId.get(role.id);
+    return link && String(link.metadata.role_name ?? "").trim() !== role.name.trim();
+  });
+  const assignmentSyncFailures = assignmentRows.filter((assignment) => assignment.playbill_sync_status === "failed");
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
+  const unlinkedGuestAssignments = assignmentRows.filter(
+    (assignment) => assignment.is_guest_artist && !budgetLinksByAssignmentId.has(assignment.id)
+  );
   const playbillShowRoleLinksByAssignmentId = new Map(
     playbillAssignmentLinks
       .filter((link) => link.external_table === "show_roles")
@@ -583,7 +612,7 @@ export default async function ProjectPage({
             <p className="eyebrow">Integrations</p>
             <h2>Playbill Link</h2>
             <p className="muted">
-              Read-only lookup. Linking stores a Production Management external link and does not edit Playbill.
+              Link a draft show, push vacant roles, fill assignments, and reconcile Playbill and Theatre Budget status here.
             </p>
           </div>
         </div>
@@ -630,6 +659,59 @@ export default async function ProjectPage({
             <button type="submit">Link Playbill show</button>
           </form>
         )}
+        <div className="integration-panel">
+          <div>
+            <strong>Role Operations and Integration</strong>
+            <p className="muted">One reconciliation view for role slots, assignments, Playbill, and guest-artist Budget links.</p>
+          </div>
+          <div className="workspace-summary" aria-label="Integration summary">
+            <div><span>{playbillRoleLinksByRoleId.size}</span><p>Linked Roles</p></div>
+            <div><span>{roles.filter((role) => !playbillRoleLinksByRoleId.has(role.id)).length}</span><p>Unlinked Roles</p></div>
+            <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Failures</p></div>
+            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Needed</p></div>
+          </div>
+          <form action={syncAllProjectIntegrationsAction}>
+            <input name="projectId" type="hidden" value={typedProject.id} />
+            <button type="submit">Sync and reconcile all</button>
+          </form>
+          {roleMismatches.length || playbillOnlyRoles.length ? (
+            <div className="setup-warning">
+              {roleMismatches.length ? `${roleMismatches.length} linked role name mismatch${roleMismatches.length === 1 ? "" : "es"}. ` : ""}
+              {playbillOnlyRoles.length ? `${playbillOnlyRoles.length} Playbill-only role${playbillOnlyRoles.length === 1 ? "" : "s"} will not be overwritten automatically.` : ""}
+            </div>
+          ) : null}
+          <div className="compact-list">
+            {roles.map((role) => {
+              const link = playbillRoleLinksByRoleId.get(role.id);
+              const roleAssignmentsForRole = assignmentRows.filter((assignment) => assignment.role_id === role.id);
+              return (
+                <div className="table-row" key={`integration-${role.id}`}>
+                  <div>
+                    <strong>{role.name}</strong>
+                    <span>{titleCase(role.role_group)} · {roleAssignmentsForRole.length ? `${roleAssignmentsForRole.length} assigned` : "Vacant"}</span>
+                  </div>
+                  <div className="badge-row">
+                    <span className="status-badge">Playbill {link ? (link.metadata.vacant ? "Vacant" : "Linked") : titleCase(role.playbill_sync_status)}</span>
+                    {role.sync_notes ? <span className="status-badge gold">Needs review</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {playbillOnlyRoles.length ? (
+            <details>
+              <summary>Review Playbill-only roles</summary>
+              <div className="compact-list">
+                {playbillOnlyRoles.map((role) => (
+                  <div className="table-row" key={`external-${role.id}`}>
+                    <div><strong>{role.role_name}</strong><span>{titleCase(role.category)} · {role.person_id ? "Filled" : "Vacant"}</span></div>
+                    <span className="status-badge gold">Playbill only</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
       </section>
 
       <ProjectCalendar
@@ -843,6 +925,24 @@ export default async function ProjectPage({
             </select>
             <button type="submit">Add role</button>
           </form>
+          <BulkRoleImport
+            projectId={typedProject.id}
+            roleGroups={roleGroups.map((roleGroup) => ({ slug: roleGroup.slug, label: roleGroup.label }))}
+            existingRoles={roles.map((role) => ({ name: role.name, role_group: role.role_group }))}
+            action={bulkCreateProjectRolesAction}
+          />
+          {reusableRoleProjects?.length ? (
+            <form action={copyProjectRolesAction} className="inline-create">
+              <input name="projectId" type="hidden" value={typedProject.id} />
+              <select name="sourceProjectId" defaultValue="" required>
+                <option value="">Reuse all roles from a project</option>
+                {reusableRoleProjects.map((sourceProject) => (
+                  <option key={sourceProject.id} value={sourceProject.id}>{sourceProject.title}</option>
+                ))}
+              </select>
+              <button type="submit">Copy missing roles</button>
+            </form>
+          ) : null}
           <div className="compact-list">
             {roles.length ? (
               roles.map((role) => {
@@ -1028,6 +1128,15 @@ export default async function ProjectPage({
             </select>
           </label>
           <label className="field">
+            <span>Assignment type</span>
+            <select name="assignmentKind" defaultValue="primary">
+              <option value="primary">Primary</option>
+              <option value="shared">Shared role</option>
+              <option value="understudy">Understudy</option>
+              <option value="alternate">Alternate</option>
+            </select>
+          </label>
+          <label className="field">
             <span>Confirmation</span>
             <select name="confirmationStatus" defaultValue="not_sent">
               <option value="not_sent">Not sent</option>
@@ -1068,7 +1177,7 @@ export default async function ProjectPage({
                     <div>
                       <strong>{person?.full_name ?? "Unknown person"}</strong>
                       <span>
-                        {role?.name ?? "Unknown role"} · {titleCase(assignment.status)} · Confirmation{" "}
+                        {role?.name ?? "Unknown role"} · {titleCase(assignment.assignment_kind)} · {titleCase(assignment.status)} · Confirmation{" "}
                         {titleCase(assignment.confirmation_status)}
                       </span>
                     </div>
@@ -1173,8 +1282,39 @@ export default async function ProjectPage({
                           <button type="submit">Link existing artist</button>
                         </form>
                       )}
+                      {!linkedGuestArtist ? (
+                        <details>
+                          <summary>Create a new Theatre Budget guest artist</summary>
+                          <form action={createAndLinkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <label className="checkbox-card">
+                              <input name="confirmCreate" type="checkbox" required />
+                              <span>
+                                <strong>Confirm deliberate creation</strong>
+                                <small>I checked the existing matches. Create only the identity/contact shell; financial and contract fields stay in Theatre Budget.</small>
+                              </span>
+                            </label>
+                            <button type="submit">Create and link Budget artist</button>
+                          </form>
+                        </details>
+                      ) : null}
                     </div>
                   ) : null}
+                  <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">
+                    <input name="projectId" type="hidden" value={typedProject.id} />
+                    <input name="assignmentId" type="hidden" value={assignment.id} />
+                    <label className="field">
+                      <span>Replace assigned person</span>
+                      <select name="newPersonId" defaultValue="" required>
+                        <option value="">Choose replacement</option>
+                        {peopleRows.filter((candidate) => candidate.id !== assignment.person_id).map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>{candidate.full_name}{candidate.email ? ` · ${candidate.email}` : ""}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="button secondary" type="submit">Replace person in this role</button>
+                  </form>
                   <form action={updateRoleAssignmentAction} className="assignment-edit-form">
                     <input name="projectId" type="hidden" value={typedProject.id} />
                     <input name="id" type="hidden" value={assignment.id} />
@@ -1198,6 +1338,15 @@ export default async function ProjectPage({
                         <option value="accepted">Accepted</option>
                         <option value="declined">Declined</option>
                         <option value="bounced">Bounced</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Assignment type</span>
+                      <select name="assignmentKind" defaultValue={assignment.assignment_kind}>
+                        <option value="primary">Primary</option>
+                        <option value="shared">Shared role</option>
+                        <option value="understudy">Understudy</option>
+                        <option value="alternate">Alternate</option>
                       </select>
                     </label>
                     <label className="checkbox-card">

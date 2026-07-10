@@ -163,7 +163,22 @@ export async function syncProjectRoleToPlaybill(projectId: string, roleId: strin
       vacant: !showRole.person_id
     }
   });
+  const { error: roleStatusError } = await supabase
+    .from("project_roles")
+    .update({ playbill_sync_status: "synced", sync_notes: "" })
+    .eq("project_id", projectId)
+    .eq("id", roleId);
+  if (roleStatusError) throw new Error(roleStatusError.message);
   return { show, role, showRole };
+}
+
+export async function markProjectRolePlaybillSyncFailed(projectId: string, roleId: string, error: unknown) {
+  const supabase = await createSupabaseServerClient();
+  await supabase
+    .from("project_roles")
+    .update({ playbill_sync_status: "failed", sync_notes: error instanceof Error ? error.message : "Playbill sync failed." })
+    .eq("project_id", projectId)
+    .eq("id", roleId);
 }
 
 export async function syncAssignmentToPlaybill(projectId: string, assignmentId: string) {
@@ -174,7 +189,7 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
 
   const { data: assignment, error: assignmentError } = await supabase
     .from("role_assignments")
-    .select("id, role_id, person_id")
+    .select("id, role_id, person_id, assignment_kind")
     .eq("project_id", projectId)
     .eq("id", assignmentId)
     .maybeSingle();
@@ -182,6 +197,7 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
   if (!assignment) throw new Error("Role assignment not found.");
 
   const role = await getProjectRole(supabase, projectId, String(assignment.role_id));
+  const assignmentKind = String(assignment.assignment_kind ?? "primary");
   const { data: person, error: personError } = await supabase
     .from("people")
     .select("id, full_name, first_name, last_name, preferred_name, pronouns, email")
@@ -243,6 +259,7 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
   });
   if (personLinkError) throw new Error(personLinkError.message);
 
+  const projectRoleSlot = await linkedShowRoleForProjectRole(supabase, String(role.id));
   let showRole: PlaybillShowRole | null = null;
   const { data: assignmentRoleLink, error: assignmentRoleLinkError } = await supabase
     .from("external_links")
@@ -255,12 +272,18 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
     .maybeSingle();
   if (assignmentRoleLinkError) throw new Error(assignmentRoleLinkError.message);
   if (assignmentRoleLink?.external_id) showRole = await fetchPlaybillShowRoleById(String(assignmentRoleLink.external_id));
-  if (!showRole) showRole = await linkedShowRoleForProjectRole(supabase, String(role.id));
+  if (!showRole && (assignmentKind === "primary" || assignmentKind === "shared")) showRole = projectRoleSlot;
+
+  const roleName = assignmentKind === "understudy"
+    ? `${String(role.name)} (Understudy)`
+    : assignmentKind === "alternate"
+      ? `${String(role.name)} (Alternate)`
+      : String(role.name);
 
   const roleInput = {
     showId: show.id,
     personId: playbillPerson.id,
-    roleName: String(role.name),
+    roleName,
     category: categoryForRoleGroup(String(role.role_group))
   };
   if (showRole && (!showRole.person_id || showRole.person_id === playbillPerson.id)) {
@@ -270,13 +293,15 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
     showRole = showRole ? await updatePlaybillShowRole(showRole.id, roleInput) : await createPlaybillShowRole(roleInput);
   }
 
-  await replaceExternalLink(supabase, {
-    local_entity_type: "project_role",
-    local_entity_id: String(role.id),
-    external_table: "show_roles",
-    external_id: showRole.id,
-    metadata: { show_id: show.id, program_id: show.program_id, role_name: showRole.role_name, category: showRole.category, vacant: false }
-  });
+  if (!projectRoleSlot || projectRoleSlot.id === showRole.id) {
+    await replaceExternalLink(supabase, {
+      local_entity_type: "project_role",
+      local_entity_id: String(role.id),
+      external_table: "show_roles",
+      external_id: showRole.id,
+      metadata: { show_id: show.id, program_id: show.program_id, role_name: showRole.role_name, category: showRole.category, vacant: false }
+    });
+  }
   await replaceExternalLink(supabase, {
     local_entity_type: "role_assignment",
     local_entity_id: assignmentId,
@@ -311,7 +336,7 @@ export async function markAssignmentPlaybillSyncFailed(projectId: string, assign
     .eq("id", assignmentId);
 }
 
-export async function vacateAssignmentInPlaybill(projectId: string, assignmentId: string) {
+export async function vacateAssignmentInPlaybill(projectId: string, assignmentId: string, preserveAssignmentRoleLink = false) {
   if (!ENABLE_PLAYBILL_WRITES) return;
   const supabase = await createSupabaseServerClient();
   const show = await getLinkedDraftShow(supabase, projectId);
@@ -349,7 +374,8 @@ export async function vacateAssignmentInPlaybill(projectId: string, assignmentId
     .delete()
     .eq("local_entity_type", "role_assignment")
     .eq("local_entity_id", assignmentId)
-    .eq("external_app", "playbill");
+    .eq("external_app", "playbill")
+    .neq("external_table", preserveAssignmentRoleLink ? "show_roles" : "__keep_none__");
   if (deleteError) throw new Error(deleteError.message);
   if (assignment?.role_id) await syncProjectRoleToPlaybill(projectId, String(assignment.role_id));
 }
