@@ -140,6 +140,8 @@ The direct Budget assignment picker reads existing guest artists and resolves a 
 
 High-volume entry uses client-side repeatable rows that submit validated JSON batches to server actions. Each row still passes through the same duplicate checks, external-link creation, and Playbill sync helpers as a single assignment. Assignment redirects include `#assignments` to preserve the user's working position after a server action refresh.
 
+Assignment availability treats draft, offered, and accepted assignments as filling a role; declined and withdrawn assignments reopen it. Filled roles are removed from creation pickers and rechecked server-side to prevent stale-page races. People are never removed from pickers because one person may hold multiple roles; assigned people and linked Budget artists are marked with `*`.
+
 ## Managed Reference Data
 
 Production Management should use managed reference data for reusable institutional/selectable options that are not specific to one user or one project. Users should not repeatedly type reusable institutional values by hand when those values should be shared, searched, reported on, archived, and reused.

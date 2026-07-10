@@ -42,6 +42,15 @@ async function replaceBudgetLink(
 
 export async function assignExistingBudgetGuestArtistToRole(input: BudgetRoleAssignmentInput) {
   const supabase = await createSupabaseServerClient();
+  const { data: existingRoleAssignments, error: roleAvailabilityError } = await supabase
+    .from("role_assignments")
+    .select("id, status")
+    .eq("project_id", input.projectId)
+    .eq("role_id", input.roleId);
+  if (roleAvailabilityError) throw new Error(roleAvailabilityError.message);
+  if ((existingRoleAssignments ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
+    throw new Error("That role is already filled. Choose another role.");
+  }
   const guestArtist = await fetchTheatreBudgetGuestArtistById(input.guestArtistId);
   if (!guestArtist) throw new Error("The Theatre Budget guest artist was not found.");
 
@@ -104,7 +113,14 @@ export async function assignExistingBudgetGuestArtistToRole(input: BudgetRoleAss
   if (assignmentId) {
     const { error } = await supabase
       .from("role_assignments")
-      .update({ is_guest_artist: true, assignment_kind: input.assignmentKind, guest_artist_sync_status: "synced" })
+      .update({
+        status: "draft",
+        confirmation_status: "not_sent",
+        is_guest_artist: true,
+        assignment_kind: input.assignmentKind,
+        guest_artist_sync_status: "synced",
+        playbill_sync_status: "not_ready"
+      })
       .eq("id", assignmentId);
     if (error) throw new Error(error.message);
   } else {

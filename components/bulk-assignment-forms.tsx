@@ -55,7 +55,7 @@ export function BulkAssignmentForms({
           {regularRows.map((row) => (
             <div className="assignment-create-form" key={`regular-${row.key}`}>
               <select aria-label="Role" value={row.roleId} onChange={(event) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId: event.target.value } : item))} required>
-                <option value="">Choose role</option>{roles.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                <option value="">Choose role</option>{roles.filter((option) => !regularRows.some((item) => item.key !== row.key && item.roleId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
               <select aria-label="Person" value={row.personId} onChange={(event) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, personId: event.target.value } : item))} required>
                 <option value="">Choose person</option>{people.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
@@ -82,7 +82,7 @@ export function BulkAssignmentForms({
                 <option value="">Choose guest artist</option>{guestArtists.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
               <select aria-label="Project role" value={row.roleId} onChange={(event) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId: event.target.value } : item))} required>
-                <option value="">Choose role</option>{roles.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                <option value="">Choose role</option>{roles.filter((option) => !budgetRows.some((item) => item.key !== row.key && item.roleId === option.id)).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
               <select aria-label="Assignment type" value={row.assignmentKind} onChange={(event) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, assignmentKind: event.target.value as AssignmentKind } : item))}>
                 {kinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}

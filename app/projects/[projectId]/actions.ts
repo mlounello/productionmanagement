@@ -683,6 +683,15 @@ export async function createRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  const { data: existingRoleAssignments, error: roleAvailabilityError } = await supabase
+    .from("role_assignments")
+    .select("id, status")
+    .eq("project_id", input.projectId)
+    .eq("role_id", input.roleId);
+  if (roleAvailabilityError) redirect(projectAssignmentErrorPath(input.projectId, roleAvailabilityError.message));
+  if ((existingRoleAssignments ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
+    redirect(projectAssignmentErrorPath(input.projectId, "That role is already filled. Choose another role."));
+  }
   const { data: createdAssignment, error } = await supabase.from("role_assignments").insert({
     project_id: input.projectId,
     role_id: input.roleId,
@@ -787,25 +796,20 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
     seen.add(key);
     const { data: existing, error: lookupError } = await supabase
       .from("role_assignments")
-      .select("id")
+      .select("id, person_id, status")
       .eq("project_id", projectId.data)
-      .eq("role_id", row.roleId)
-      .eq("person_id", row.personId)
-      .maybeSingle();
+      .eq("role_id", row.roleId);
     if (lookupError) {
       failed += 1;
       continue;
     }
-    if (existing) {
+    if ((existing ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
       skipped += 1;
       continue;
     }
-    const { data: assignment, error } = await supabase
-      .from("role_assignments")
-      .insert({
-        project_id: projectId.data,
-        role_id: row.roleId,
-        person_id: row.personId,
+    const revivable = (existing ?? []).find((assignment) => String(assignment.person_id) === row.personId);
+    let assignmentId = "";
+    const assignmentValues = {
         status: "draft",
         confirmation_status: "not_sent",
         assignment_kind: row.assignmentKind,
@@ -813,19 +817,32 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
         guest_artist_sync_status: row.isGuestArtist ? "not_ready" : "not_guest_artist",
         playbill_sync_status: "not_ready",
         notes: ""
-      })
-      .select("id")
-      .single();
-    if (error) {
-      failed += 1;
-      continue;
+    };
+    if (revivable) {
+      const { error } = await supabase.from("role_assignments").update(assignmentValues).eq("id", String(revivable.id));
+      if (error) {
+        failed += 1;
+        continue;
+      }
+      assignmentId = String(revivable.id);
+    } else {
+      const { data: assignment, error } = await supabase
+        .from("role_assignments")
+        .insert({ project_id: projectId.data, role_id: row.roleId, person_id: row.personId, ...assignmentValues })
+        .select("id")
+        .single();
+      if (error) {
+        failed += 1;
+        continue;
+      }
+      assignmentId = String(assignment.id);
     }
     created += 1;
     try {
-      await syncAssignmentToPlaybill(projectId.data, String(assignment.id));
+      await syncAssignmentToPlaybill(projectId.data, assignmentId);
     } catch (syncError) {
       playbillRetries += 1;
-      await markAssignmentPlaybillSyncFailed(projectId.data, String(assignment.id), syncError);
+      await markAssignmentPlaybillSyncFailed(projectId.data, assignmentId, syncError);
     }
   }
   revalidatePath(`/projects/${projectId.data}`);

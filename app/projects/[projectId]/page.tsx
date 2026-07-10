@@ -520,6 +520,23 @@ export default async function ProjectPage({
   const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
+  const filledRoleIds = new Set(
+    assignmentRows
+      .filter((assignment) => !["declined", "withdrawn"].includes(assignment.status))
+      .map((assignment) => assignment.role_id)
+  );
+  const assignedPersonIds = new Set(assignmentRows.map((assignment) => assignment.person_id));
+  const assignedBudgetArtistIds = new Set(budgetLinks.map((link) => link.external_id));
+  const availableAssignmentRoles = roles
+    .filter((role) => !filledRoleIds.has(role.id))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const sortedPeople = [...peopleRows].sort((left, right) => left.full_name.localeCompare(right.full_name));
+  const sortedProjectPersonIds = [...projectPersonIds].sort((left, right) =>
+    (peopleById.get(left)?.full_name ?? "").localeCompare(peopleById.get(right)?.full_name ?? "")
+  );
+  const sortedBudgetGuestArtists = [...theatreBudgetGuestArtists.data].sort((left, right) =>
+    left.display_name.localeCompare(right.display_name)
+  );
   const runRows = items.filter((item) => item.is_run_of_show_relevant).sort(compareRunOfShowItems);
   const projectLocationRows = (projectLocations ?? []) as unknown as ProjectLocation[];
   const groups = (timelineGroups ?? []) as TimelineGroup[];
@@ -1097,15 +1114,18 @@ export default async function ProjectPage({
         </div>
         <BulkAssignmentForms
           projectId={typedProject.id}
-          roles={roles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
-          people={peopleRows.map((person) => ({ id: person.id, label: `${person.full_name}${person.email ? ` · ${person.email}` : ""}` }))}
-          guestArtists={theatreBudgetGuestArtists.data.map((artist) => ({
+          roles={availableAssignmentRoles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
+          people={sortedPeople.map((person) => ({ id: person.id, label: `${person.full_name}${assignedPersonIds.has(person.id) ? " *" : ""}${person.email ? ` · ${person.email}` : ""}` }))}
+          guestArtists={sortedBudgetGuestArtists.map((artist) => ({
             id: artist.id,
-            label: `${artist.display_name}${artist.email ? ` · ${artist.email}` : ""}${artist.vendor_number ? ` · Vendor ${artist.vendor_number}` : ""}${!artist.active ? " · Inactive" : ""}`
+            label: `${artist.display_name}${assignedBudgetArtistIds.has(artist.id) ? " *" : ""}${artist.email ? ` · ${artist.email}` : ""}${artist.vendor_number ? ` · Vendor ${artist.vendor_number}` : ""}${!artist.active ? " · Inactive" : ""}`
           }))}
           regularAction={bulkCreateRoleAssignmentsAction}
           budgetAction={bulkAssignTheatreBudgetGuestArtistsAction}
         />
+        <p className="muted">
+          Filled roles are hidden from new-assignment dropdowns. An asterisk (*) marks people and Theatre Budget guest artists who already hold a role in this project; they remain selectable for additional roles.
+        </p>
         {theatreBudgetGuestArtists.error ? <p className="setup-warning">{theatreBudgetGuestArtists.error}</p> : null}
         <details className="integration-panel">
           <summary><strong>Detailed single assignment</strong><span>Use this form when you need status, confirmation, or notes immediately.</span></summary>
@@ -1115,7 +1135,7 @@ export default async function ProjectPage({
             <span>Role</span>
             <select name="roleId" defaultValue="" required>
               <option value="">Choose role</option>
-              {roles.map((role) => (
+              {availableAssignmentRoles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name} ({titleCase(role.role_group)})
                 </option>
@@ -1126,9 +1146,9 @@ export default async function ProjectPage({
             <span>Person</span>
             <select name="personId" defaultValue="" required>
               <option value="">Choose person</option>
-              {peopleRows.map((person) => (
+              {sortedPeople.map((person) => (
                 <option key={person.id} value={person.id}>
-                  {person.full_name}
+                  {person.full_name}{assignedPersonIds.has(person.id) ? " *" : ""}
                   {person.email ? ` · ${person.email}` : ""}
                 </option>
               ))}
@@ -1277,9 +1297,9 @@ export default async function ProjectPage({
                               <option value="">Choose existing guest artist</option>
                               {guestArtistSuggestions.length ? (
                                 <optgroup label="Suggested matches">
-                                  {guestArtistSuggestions.map((artist) => (
+                                  {[...guestArtistSuggestions].sort((left, right) => left.display_name.localeCompare(right.display_name)).map((artist) => (
                                     <option key={artist.id} value={artist.id}>
-                                      {artist.display_name}
+                                      {artist.display_name}{assignedBudgetArtistIds.has(artist.id) ? " *" : ""}
                                       {artist.email ? ` · ${artist.email}` : ""}
                                       {!artist.active ? " · Inactive" : ""}
                                     </option>
@@ -1287,9 +1307,9 @@ export default async function ProjectPage({
                                 </optgroup>
                               ) : null}
                               <optgroup label="All guest artists">
-                                {theatreBudgetGuestArtists.data.map((artist) => (
+                                {sortedBudgetGuestArtists.map((artist) => (
                                   <option key={artist.id} value={artist.id}>
-                                    {artist.display_name}
+                                    {artist.display_name}{assignedBudgetArtistIds.has(artist.id) ? " *" : ""}
                                     {artist.email ? ` · ${artist.email}` : ""}
                                     {!artist.active ? " · Inactive" : ""}
                                   </option>
@@ -1326,8 +1346,8 @@ export default async function ProjectPage({
                       <span>Replace assigned person</span>
                       <select name="newPersonId" defaultValue="" required>
                         <option value="">Choose replacement</option>
-                        {peopleRows.filter((candidate) => candidate.id !== assignment.person_id).map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.full_name}{candidate.email ? ` · ${candidate.email}` : ""}</option>
+                        {sortedPeople.filter((candidate) => candidate.id !== assignment.person_id).map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>{candidate.full_name}{assignedPersonIds.has(candidate.id) ? " *" : ""}{candidate.email ? ` · ${candidate.email}` : ""}</option>
                         ))}
                       </select>
                     </label>
@@ -1412,7 +1432,7 @@ export default async function ProjectPage({
             <span>Person</span>
             <select name="personId" defaultValue="" required>
               <option value="">Choose project person</option>
-              {projectPersonIds.map((personId) => {
+              {sortedProjectPersonIds.map((personId) => {
                 const person = peopleById.get(personId);
                 return person ? (
                   <option key={person.id} value={person.id}>
@@ -1444,7 +1464,7 @@ export default async function ProjectPage({
 
         <div className="people-file-grid">
           {projectPersonIds.length ? (
-            projectPersonIds.map((personId) => {
+            sortedProjectPersonIds.map((personId) => {
               const person = peopleById.get(personId);
               const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === personId);
               const personNoteRows = notes.filter((note) => note.person_id === personId);

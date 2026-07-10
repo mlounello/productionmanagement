@@ -31,6 +31,8 @@ Existing Theatre Budget guest artists can be selected directly while creating a 
 
 Both existing-person assignments and Theatre Budget guest-artist assignments support repeatable batch rows with a single submit. Assignment actions return to the assignment workspace anchor so repetitive entry does not reset the user to the top of the project.
 
+New-assignment pickers hide roles that already have an active assignment. People and Budget guest artists remain selectable for multiple roles and display an asterisk when already assigned in the project. Role, person, replacement, and guest-artist choices are alphabetized.
+
 - Compare Production Management role/person data to `app_playbill.programs`, `app_playbill.shows`, `app_playbill.people`, `app_playbill.show_roles`, and submission request tables.
 - Start with read-only manual linking from a Production Management project to an existing Playbill show/program.
 - For draft, unpublished Playbill shows, allow a manual per-assignment sync behind `ENABLE_PLAYBILL_WRITES=true` that creates/updates Playbill people, show roles, and draft bio requests while recording every touched external row in `external_links`.
