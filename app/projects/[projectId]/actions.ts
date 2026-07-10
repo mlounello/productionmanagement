@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { fetchTheatreBudgetGuestArtistById } from "@/lib/theatre-budget";
 
 const projectIdSchema = z.string().uuid();
 
@@ -72,6 +73,12 @@ const personNoteSchema = z.object({
   visibility: z.enum(["internal", "client_visible"]),
   note: z.string().trim().min(1, "Note is required.").max(4000),
   isPinned: z.boolean()
+});
+
+const guestArtistLinkSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid(),
+  guestArtistId: z.string().uuid()
 });
 
 const runOfShowSchema = z.object({
@@ -526,6 +533,140 @@ export async function addPersonNoteAction(formData: FormData) {
 
   if (error) {
     redirect(projectErrorPath(input.projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function linkTheatreBudgetGuestArtistAction(formData: FormData) {
+  await requireUser();
+  const parsed = guestArtistLinkSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    guestArtistId: requiredString(formData.get("guestArtistId"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid guest artist link.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("role_assignments")
+    .select("id, is_guest_artist")
+    .eq("project_id", input.projectId)
+    .eq("id", input.assignmentId)
+    .maybeSingle();
+
+  if (assignmentError) {
+    redirect(projectErrorPath(input.projectId, assignmentError.message));
+  }
+
+  if (!assignment?.id || !assignment.is_guest_artist) {
+    redirect(projectErrorPath(input.projectId, "Only guest artist assignments can be linked to Theatre Budget."));
+  }
+
+  let guestArtist;
+  try {
+    guestArtist = await fetchTheatreBudgetGuestArtistById(input.guestArtistId);
+  } catch (error) {
+    redirect(
+      projectErrorPath(
+        input.projectId,
+        error instanceof Error ? error.message : "Could not read Theatre Budget guest artist."
+      )
+    );
+  }
+
+  if (!guestArtist) {
+    redirect(projectErrorPath(input.projectId, "The selected Theatre Budget guest artist was not found."));
+  }
+
+  const linkFilter = {
+    local_entity_type: "role_assignment",
+    local_entity_id: input.assignmentId,
+    external_app: "theatre_budget",
+    external_schema: "app_theatre_budget",
+    external_table: "guest_artists"
+  };
+
+  const { error: deleteExistingError } = await supabase
+    .from("external_links")
+    .delete()
+    .match(linkFilter);
+
+  if (deleteExistingError) {
+    redirect(projectErrorPath(input.projectId, deleteExistingError.message));
+  }
+
+  const { error: linkError } = await supabase.from("external_links").insert({
+    ...linkFilter,
+    external_id: input.guestArtistId,
+    sync_direction: "read_only",
+    sync_status: "linked",
+    metadata: {
+      display_name: guestArtist.display_name,
+      email: guestArtist.email,
+      active: guestArtist.active,
+      linked_from: "production_management_role_assignment"
+    }
+  });
+
+  if (linkError) {
+    redirect(projectErrorPath(input.projectId, linkError.message));
+  }
+
+  const { error: assignmentUpdateError } = await supabase
+    .from("role_assignments")
+    .update({ guest_artist_sync_status: "synced" })
+    .eq("project_id", input.projectId)
+    .eq("id", input.assignmentId);
+
+  if (assignmentUpdateError) {
+    redirect(projectErrorPath(input.projectId, assignmentUpdateError.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function unlinkTheatreBudgetGuestArtistAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("assignmentId"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid guest artist link.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error: linkError } = await supabase
+    .from("external_links")
+    .delete()
+    .match({
+      local_entity_type: "role_assignment",
+      local_entity_id: input.id,
+      external_app: "theatre_budget",
+      external_schema: "app_theatre_budget",
+      external_table: "guest_artists"
+    });
+
+  if (linkError) {
+    redirect(projectErrorPath(input.projectId, linkError.message));
+  }
+
+  const { error: assignmentUpdateError } = await supabase
+    .from("role_assignments")
+    .update({ guest_artist_sync_status: "not_ready" })
+    .eq("project_id", input.projectId)
+    .eq("id", input.id)
+    .eq("is_guest_artist", true);
+
+  if (assignmentUpdateError) {
+    redirect(projectErrorPath(input.projectId, assignmentUpdateError.message));
   }
 
   revalidatePath(`/projects/${input.projectId}`);

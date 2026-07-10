@@ -14,12 +14,15 @@ import {
   deleteProjectAction,
   deleteRoleAssignmentAction,
   deleteRunOfShowItemAction,
+  linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
+  unlinkTheatreBudgetGuestArtistAction,
   updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
+import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +118,14 @@ type PersonNote = {
   created_at: string;
 };
 
+type ExternalLink = {
+  id: string;
+  local_entity_id: string;
+  external_id: string;
+  sync_status: string;
+  metadata: Record<string, unknown>;
+};
+
 type ProjectLocation = {
   id: string;
   location_id: string;
@@ -199,6 +210,27 @@ function compareRunOfShowItems(left: CalendarItem, right: CalendarItem) {
   }
 
   return left.title.localeCompare(right.title);
+}
+
+function normalizeMatchValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function suggestedGuestArtistMatches(person: Person | undefined, guestArtists: TheatreBudgetGuestArtist[]) {
+  if (!person) {
+    return [];
+  }
+
+  const personEmail = normalizeMatchValue(person.email);
+  const personName = normalizeMatchValue(person.full_name);
+
+  return guestArtists
+    .filter((artist) => {
+      const artistEmail = normalizeMatchValue(artist.email ?? "");
+      const artistName = normalizeMatchValue(artist.display_name);
+      return (personEmail && artistEmail === personEmail) || (personName && artistName === personName);
+    })
+    .slice(0, 3);
 }
 
 function formatItemDates(item: CalendarItem) {
@@ -377,7 +409,24 @@ export default async function ProjectPage({
         .order("is_pinned", { ascending: false })
         .order("created_at", { ascending: false })
     : { data: [] };
+  const { data: guestArtistLinks } = assignmentRows.length
+    ? await supabase
+        .from("external_links")
+        .select("id, local_entity_id, external_id, sync_status, metadata")
+        .eq("local_entity_type", "role_assignment")
+        .eq("external_app", "theatre_budget")
+        .eq("external_schema", "app_theatre_budget")
+        .eq("external_table", "guest_artists")
+        .in(
+          "local_entity_id",
+          assignmentRows.map((assignment) => assignment.id)
+        )
+    : { data: [] };
+  const theatreBudgetGuestArtists = await fetchTheatreBudgetGuestArtists();
   const notes = (personNotes ?? []) as PersonNote[];
+  const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
+  const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
+  const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
   const runRows = items.filter((item) => item.is_run_of_show_relevant).sort(compareRunOfShowItems);
@@ -838,6 +887,9 @@ export default async function ProjectPage({
             assignmentRows.map((assignment) => {
               const role = rolesById.get(assignment.role_id);
               const person = peopleById.get(assignment.person_id);
+              const budgetLink = budgetLinksByAssignmentId.get(assignment.id);
+              const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
+              const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
 
               return (
                 <details className="assignment-card" key={assignment.id}>
@@ -852,9 +904,74 @@ export default async function ProjectPage({
                     <div className="badge-row">
                       {assignment.is_guest_artist ? <span className="status-badge gold">Guest Artist</span> : null}
                       <span className="status-badge">Playbill {titleCase(assignment.playbill_sync_status)}</span>
-                      <span className="status-badge">Budget {titleCase(assignment.guest_artist_sync_status)}</span>
+                      <span className="status-badge">
+                        Budget {budgetLink ? "Linked" : titleCase(assignment.guest_artist_sync_status)}
+                      </span>
                     </div>
                   </summary>
+                  {assignment.is_guest_artist ? (
+                    <div className="integration-panel">
+                      <div>
+                        <strong>Theatre Budget Guest Artist</strong>
+                        <p className="muted">
+                          Read-only lookup. Linking stores a Production Management external link and does not edit Theatre Budget.
+                        </p>
+                      </div>
+                      {theatreBudgetGuestArtists.error ? (
+                        <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
+                      ) : linkedGuestArtist ? (
+                        <div className="linked-record">
+                          <div>
+                            <strong>{linkedGuestArtist.display_name}</strong>
+                            <span>
+                              {linkedGuestArtist.email ?? "No email"}
+                              {linkedGuestArtist.vendor_number ? ` · Vendor ${linkedGuestArtist.vendor_number}` : ""}
+                              {!linkedGuestArtist.active ? " · Inactive" : ""}
+                            </span>
+                          </div>
+                          <form action={unlinkTheatreBudgetGuestArtistAction}>
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <button className="button secondary" type="submit">
+                              Unlink
+                            </button>
+                          </form>
+                        </div>
+                      ) : (
+                        <form action={linkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
+                          <input name="projectId" type="hidden" value={typedProject.id} />
+                          <input name="assignmentId" type="hidden" value={assignment.id} />
+                          <label className="field">
+                            <span>Existing Theatre Budget guest artist</span>
+                            <select name="guestArtistId" defaultValue="" required>
+                              <option value="">Choose existing guest artist</option>
+                              {guestArtistSuggestions.length ? (
+                                <optgroup label="Suggested matches">
+                                  {guestArtistSuggestions.map((artist) => (
+                                    <option key={artist.id} value={artist.id}>
+                                      {artist.display_name}
+                                      {artist.email ? ` · ${artist.email}` : ""}
+                                      {!artist.active ? " · Inactive" : ""}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ) : null}
+                              <optgroup label="All guest artists">
+                                {theatreBudgetGuestArtists.data.map((artist) => (
+                                  <option key={artist.id} value={artist.id}>
+                                    {artist.display_name}
+                                    {artist.email ? ` · ${artist.email}` : ""}
+                                    {!artist.active ? " · Inactive" : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </label>
+                          <button type="submit">Link existing artist</button>
+                        </form>
+                      )}
+                    </div>
+                  ) : null}
                   <form action={updateRoleAssignmentAction} className="assignment-edit-form">
                     <input name="projectId" type="hidden" value={typedProject.id} />
                     <input name="id" type="hidden" value={assignment.id} />

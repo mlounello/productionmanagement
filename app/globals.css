@@ -628,6 +628,38 @@ button {
   padding-bottom: 14px;
 }
 
+.integration-panel {
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.integration-panel strong {
+  display: block;
+}
+
+.integration-panel p {
+  margin-bottom: 0;
+}
+
+.linked-record,
+.guest-artist-link-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.linked-record span {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+}
+
 .assignment-card form + form {
   margin-top: 10px;
 }
@@ -950,6 +982,8 @@ button {
   .assignment-edit-form,
   .person-note-form,
   .people-file-grid,
+  .linked-record,
+  .guest-artist-link-form,
   .form-row,
   .inline-create,
   .inline-create.run-create {
