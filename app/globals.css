@@ -339,6 +339,15 @@ button {
   color: var(--danger);
 }
 
+.setup-success {
+  background: #edf7f1;
+  border: 1px solid #b9dbc9;
+  border-radius: 8px;
+  color: var(--siena-green);
+  font-weight: 750;
+  padding: 12px 14px;
+}
+
 .gantt {
   border: 1px solid var(--line);
   border-radius: 8px;

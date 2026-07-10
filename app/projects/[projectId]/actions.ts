@@ -40,7 +40,15 @@ const calendarItemUpdateSchema = calendarItemSchema.extend({
 const projectRoleSchema = z.object({
   projectId: projectIdSchema,
   name: z.string().trim().min(1, "Role name is required.").max(120),
-  roleGroup: z.enum(["production_team", "cast", "crew", "designer", "department_head", "staff", "guest_artist"]),
+  roleGroup: z.enum([
+    "creative_team",
+    "production_team",
+    "cast",
+    "directorial_team",
+    "administrative",
+    "front_of_house",
+    "music_band"
+  ]),
   departmentId: z.string().uuid().optional()
 });
 
@@ -148,6 +156,10 @@ function timestampFromInput(datetimeValue?: string, dateValue?: string) {
 
 function projectErrorPath(projectId: string, message: string) {
   return `/projects/${projectId}?error=${encodeURIComponent(message)}`;
+}
+
+function projectSuccessPath(projectId: string, message: string) {
+  return `/projects/${projectId}?success=${encodeURIComponent(message)}`;
 }
 
 function slugify(value: string) {
@@ -463,6 +475,23 @@ export async function updateRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  if (!input.isGuestArtist) {
+    const { error: unlinkError } = await supabase
+      .from("external_links")
+      .delete()
+      .match({
+        local_entity_type: "role_assignment",
+        local_entity_id: input.id,
+        external_app: "theatre_budget",
+        external_schema: "app_theatre_budget",
+        external_table: "guest_artists"
+      });
+
+    if (unlinkError) {
+      redirect(projectErrorPath(input.projectId, unlinkError.message));
+    }
+  }
+
   const { error } = await supabase
     .from("role_assignments")
     .update({
@@ -482,6 +511,7 @@ export async function updateRoleAssignmentAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Assignment saved."));
 }
 
 export async function deleteRoleAssignmentAction(formData: FormData) {
@@ -504,6 +534,7 @@ export async function deleteRoleAssignmentAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Theatre Budget guest artist linked."));
 }
 
 export async function addPersonNoteAction(formData: FormData) {
@@ -536,6 +567,7 @@ export async function addPersonNoteAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Theatre Budget guest artist unlinked."));
 }
 
 export async function linkTheatreBudgetGuestArtistAction(formData: FormData) {

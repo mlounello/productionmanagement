@@ -10,7 +10,7 @@
 
 This is now the main MVP spine. Production Management should first help Siena create a project, define the roles needed for that project, assign people into those roles, and keep a durable file for each person.
 
-- Project roles: cast, crew, designers, production team, department heads, event team, guest artists, and future role groups.
+- Project roles grouped by Creative Team, Production Team, Cast, Directorial Team, Administrative, Front of House, Music / Band, and future role groups.
 - Role assignments linking a person to a project role.
 - Role assignment status tracking: draft, offered, accepted, declined, withdrawn.
 - Confirmation status tracking: not sent, sent, accepted, declined, bounced.

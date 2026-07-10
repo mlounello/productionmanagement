@@ -326,7 +326,7 @@ export default async function ProjectPage({
   searchParams
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams?: Promise<{ error?: string }>;
+  searchParams?: Promise<{ error?: string; success?: string }>;
 }) {
   const { projectId } = await params;
   const query = await searchParams;
@@ -486,6 +486,7 @@ export default async function ProjectPage({
       </div>
 
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
+      {query?.success ? <p className="setup-success">{query.success}</p> : null}
 
       <nav className="workspace-nav" aria-label="Project workspace sections">
         <a href="#calendar">Calendar</a>
