@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { fetchPlaybillShowById } from "@/lib/playbill";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { fetchTheatreBudgetGuestArtistById } from "@/lib/theatre-budget";
 
@@ -110,6 +111,11 @@ const guestArtistLinkSchema = z.object({
   projectId: projectIdSchema,
   assignmentId: z.string().uuid(),
   guestArtistId: z.string().uuid()
+});
+
+const playbillShowLinkSchema = z.object({
+  projectId: projectIdSchema,
+  showId: z.string().uuid()
 });
 
 const runOfShowSchema = z.object({
@@ -773,6 +779,96 @@ export async function unlinkTheatreBudgetGuestArtistAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+}
+
+export async function linkPlaybillShowAction(formData: FormData) {
+  await requireUser();
+  const parsed = playbillShowLinkSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    showId: requiredString(formData.get("showId"))
+  });
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid Playbill link.")}`);
+  }
+
+  const input = parsed.data;
+  let show;
+  try {
+    show = await fetchPlaybillShowById(input.showId);
+  } catch (error) {
+    redirect(projectErrorPath(input.projectId, error instanceof Error ? error.message : "Could not read Playbill show."));
+  }
+
+  if (!show) {
+    redirect(projectErrorPath(input.projectId, "The selected Playbill show was not found."));
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const linkFilter = {
+    local_entity_type: "project",
+    local_entity_id: input.projectId,
+    external_app: "playbill",
+    external_schema: "app_playbill",
+    external_table: "shows"
+  };
+
+  const { error: deleteExistingError } = await supabase.from("external_links").delete().match(linkFilter);
+
+  if (deleteExistingError) {
+    redirect(projectErrorPath(input.projectId, deleteExistingError.message));
+  }
+
+  const { error: linkError } = await supabase.from("external_links").insert({
+    ...linkFilter,
+    external_id: input.showId,
+    sync_direction: "read_only",
+    sync_status: "linked",
+    metadata: {
+      title: show.title,
+      slug: show.slug,
+      status: show.status,
+      program_id: show.program_id,
+      program_title: show.programs?.title ?? null,
+      linked_from: "production_management_project"
+    }
+  });
+
+  if (linkError) {
+    redirect(projectErrorPath(input.projectId, linkError.message));
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectSuccessPath(input.projectId, "Playbill show linked."));
+}
+
+export async function unlinkPlaybillShowAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectIdSchema.safeParse(formData.get("projectId"));
+
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent("Invalid Playbill link.")}`);
+  }
+
+  const projectId = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("external_links")
+    .delete()
+    .match({
+      local_entity_type: "project",
+      local_entity_id: projectId,
+      external_app: "playbill",
+      external_schema: "app_playbill",
+      external_table: "shows"
+    });
+
+  if (error) {
+    redirect(projectErrorPath(projectId, error.message));
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  redirect(projectSuccessPath(projectId, "Playbill show unlinked."));
 }
 
 export async function createRunOfShowItemAction(formData: FormData) {

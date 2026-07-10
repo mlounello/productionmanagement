@@ -74,6 +74,18 @@ Cross-app sync should flow through explicit local records:
 
 This lets Production Management retry or disable sync without corrupting Playbill or Theatre Budget data.
 
+## Field Ownership And Editability
+
+Every cross-app synchronized field must have an owning system. Production Management must not present fields owned by another app as casually editable local fields.
+
+Field categories:
+
+- Production Management-owned fields are editable here. Examples include project roles, role assignments, production notes, client-visible notes, audition context, accomplishments, local profile organization, and local communication status.
+- External-owned fields are displayed read-only here. Examples include Theatre Budget financial/vendor/contract/payment fields and Playbill public-program output once linked as the published source of truth.
+- Sync-sensitive fields may be locally edited only through an explicit review flow once sync is enabled. Examples may include display name, email, phone, headshot, and bio-related content when those fields are connected to Playbill or another external record.
+
+When a field is linked to another source of truth, Production Management should store local intent, status, and external links, but should not overwrite the external value without an explicit review-and-confirm workflow. This prevents accidental breakage, duplicate records, and silent overwrites across the shared Supabase ecosystem.
+
 Calendar, Gantt, and Run of Show must stay synchronized views over `app_production_management.calendar_items`. The calendar view reads and edits calendar items directly. The Gantt view reads the same calendar items and groups them through project-scoped `project_timeline_groups`. The Run of Show view reads calendar items where `is_run_of_show_relevant = true`; run-of-show cue, order, duration, and note fields live on the same calendar item row.
 
 The existing `run_of_show_items` table is legacy/future extension detail only. It should not be used as the primary source for independent run-of-show events. If it remains long term, rows should extend a source calendar item through `calendar_item_id` rather than duplicating event title/date data. Full recurrence behavior is deferred and should be designed carefully before implementation, including single-occurrence edits, entire-series edits, and this-and-following series splits.
@@ -92,6 +104,8 @@ Playbill sync should be designed against these existing `app_playbill` tables:
 - `submissions`
 
 Production Management should not assume that a durable local person is the same row as an `app_playbill.people` row. Playbill people are currently program-scoped, so sync should link local people and role assignments to Playbill program/show/people/role rows through `external_links`.
+
+The first Playbill integration step is read-only manual linking from a Production Management project to an existing `app_playbill.shows` row. The linked show carries its `program_id` as metadata for later person, role, bio, and headshot mapping. Production Management must not create or update Playbill shows, programs, people, roles, bios, or submission requests until a reviewed write-sync flow is explicitly built.
 
 Theatre Budget guest artist sync should be designed against:
 

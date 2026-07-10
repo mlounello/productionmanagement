@@ -54,6 +54,7 @@ Production Management, Playbill, and Theatre Budget share the same Supabase proj
 - Google Calendar writes are gated by `ENABLE_GOOGLE_CALENDAR_SYNC`.
 - Integrations should use explicit `external_links` records so linked external rows can be audited, retried, or disconnected without guessing.
 - Existing Theatre Budget guest artist rows are protected live records. Production Management may read and manually link to them, but must not automatically overwrite, delete, deactivate, or mutate them.
+- Cross-app synced fields need clear ownership. Fields owned by Playbill or Theatre Budget should be read-only here unless a future review-and-confirm update flow is explicitly built.
 
 ## Product architecture direction
 

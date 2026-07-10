@@ -14,14 +14,17 @@ import {
   deleteProjectAction,
   deleteRoleAssignmentAction,
   deleteRunOfShowItemAction,
+  linkPlaybillShowAction,
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
+  unlinkPlaybillShowAction,
   unlinkTheatreBudgetGuestArtistAction,
   updateProjectRoleAction,
   updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
+import { fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 
@@ -424,8 +427,24 @@ export default async function ProjectPage({
           assignmentRows.map((assignment) => assignment.id)
         )
     : { data: [] };
-  const theatreBudgetGuestArtists = await fetchTheatreBudgetGuestArtists();
+  const [{ data: playbillLinks }, theatreBudgetGuestArtists, playbillShows] = await Promise.all([
+    supabase
+      .from("external_links")
+      .select("id, external_id, sync_status, metadata")
+      .eq("local_entity_type", "project")
+      .eq("local_entity_id", typedProject.id)
+      .eq("external_app", "playbill")
+      .eq("external_schema", "app_playbill")
+      .eq("external_table", "shows"),
+    fetchTheatreBudgetGuestArtists(),
+    fetchPlaybillShows()
+  ]);
   const notes = (personNotes ?? []) as PersonNote[];
+  const playbillLink = ((playbillLinks ?? []) as Array<Pick<ExternalLink, "id" | "external_id" | "sync_status" | "metadata">>)[0];
+  const linkedPlaybillShow = playbillLink
+    ? playbillShows.data.find((show) => show.id === playbillLink.external_id) ?? null
+    : null;
+  const linkedPlaybillMetadata = playbillLink?.metadata ?? {};
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
   const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
@@ -497,6 +516,7 @@ export default async function ProjectPage({
         <a href="#roles">Roles</a>
         <a href="#people">People</a>
         <a href="#assignments">Assignments</a>
+        <a href="#integrations">Integrations</a>
         <a href="#run-of-show">Run of Show</a>
       </nav>
 
@@ -517,6 +537,61 @@ export default async function ProjectPage({
           <span>{assignmentRows.filter((assignment) => assignment.is_guest_artist).length}</span>
           <p>Guest Artists</p>
         </div>
+      </section>
+
+      <section className="panel workspace-section" id="integrations">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Integrations</p>
+            <h2>Playbill Link</h2>
+            <p className="muted">
+              Read-only lookup. Linking stores a Production Management external link and does not edit Playbill.
+            </p>
+          </div>
+        </div>
+        {playbillShows.error ? <p className="setup-warning">{playbillShows.error}</p> : null}
+        {linkedPlaybillShow || playbillLink ? (
+          <div className="linked-record">
+            <div>
+              <strong>{linkedPlaybillShow?.title ?? String(linkedPlaybillMetadata.title ?? "Linked Playbill show")}</strong>
+              <span>
+                {linkedPlaybillShow?.programs?.title
+                  ? `${linkedPlaybillShow.programs.title} · `
+                  : linkedPlaybillMetadata.program_title
+                    ? `${String(linkedPlaybillMetadata.program_title)} · `
+                    : ""}
+                {linkedPlaybillShow?.status ?? String(linkedPlaybillMetadata.status ?? playbillLink?.sync_status ?? "linked")}
+                {linkedPlaybillShow?.venue ? ` · ${linkedPlaybillShow.venue}` : ""}
+                {linkedPlaybillShow?.programs?.show_dates ? ` · ${linkedPlaybillShow.programs.show_dates}` : ""}
+              </span>
+            </div>
+            <form action={unlinkPlaybillShowAction}>
+              <input name="projectId" type="hidden" value={typedProject.id} />
+              <button className="button secondary" type="submit">
+                Unlink
+              </button>
+            </form>
+          </div>
+        ) : (
+          <form action={linkPlaybillShowAction} className="guest-artist-link-form">
+            <input name="projectId" type="hidden" value={typedProject.id} />
+            <label className="field">
+              <span>Existing Playbill show</span>
+              <select name="showId" defaultValue="" required>
+                <option value="">Choose existing Playbill show</option>
+                {playbillShows.data.map((show) => (
+                  <option key={show.id} value={show.id}>
+                    {show.title}
+                    {show.programs?.title ? ` · ${show.programs.title}` : ""}
+                    {show.venue ? ` · ${show.venue}` : ""}
+                    {show.status ? ` · ${show.status}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Link Playbill show</button>
+          </form>
+        )}
       </section>
 
       <ProjectCalendar

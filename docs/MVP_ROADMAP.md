@@ -26,6 +26,7 @@ Source-of-truth rule: Production Management owns project role assignment intent.
 ## Phase 3 Playbill And Theatre Budget Sync Preparation
 
 - Compare Production Management role/person data to `app_playbill.programs`, `app_playbill.shows`, `app_playbill.people`, `app_playbill.show_roles`, and submission request tables.
+- Start with read-only manual linking from a Production Management project to an existing Playbill show/program.
 - Compare guest artist role assignments to `app_theatre_budget.guest_artists` and contract guest artist links.
 - Store sync intent and external ids in `external_links`.
 - Add sync statuses on local rows where needed, especially role assignments.
@@ -38,6 +39,7 @@ Source-of-truth rule: Production Management owns project role assignment intent.
   - `ENABLE_BUDGET_WRITES`
 - Start with manually triggered sync actions before background automation.
 - Never blindly create Playbill or Theatre Budget records without matching/deduplication checks.
+- Add field ownership rules before any write sync: Production Management-owned fields are editable here, external-owned fields display read-only, and sync-sensitive fields require an explicit review-and-confirm flow before pushing updates.
 
 ## Phase 4 Audition Workflow
 
