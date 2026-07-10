@@ -19,9 +19,10 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type PmClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
-function categoryForRoleGroup(roleGroup: string): "cast" | "creative" | "production" {
+function categoryForRoleGroup(roleGroup: string): "cast" | "creative" | "production" | "band" {
   if (roleGroup === "cast") return "cast";
-  if (["creative_team", "directorial_team", "music_band"].includes(roleGroup)) return "creative";
+  if (roleGroup === "music_band") return "band";
+  if (["creative_team", "directorial_team", "administrative"].includes(roleGroup)) return "creative";
   return "production";
 }
 

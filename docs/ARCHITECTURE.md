@@ -62,7 +62,7 @@ Future authenticated person access should allow people to log in and edit a cont
 
 Project roles and role assignments are now the main MVP spine. A person is assigned to a role on a project, and that assignment can drive Playbill role/bio prompts, Theatre Budget guest artist sync, announcement emails, and later calendar/team workflows. Guest artist status belongs on the assignment because a person may be a guest artist for one project and not for another.
 
-Project role groups classify the type of role for organization, announcements, reporting, and future Playbill mapping. The active role group set is Creative Team, Production Team, Cast, Directorial Team, Administrative, Front of House, and Music / Band. Guest Artist is not a role group; it is an assignment-level flag used for Theatre Budget guest artist linking.
+Project role groups classify the type of role for organization, announcements, reporting, and Playbill mapping. The active role group set is Creative Team, Production Team, Cast, Directorial Team, Administrative, Front of House, and Music / Band. These groups remain distinct in Production Management. For Playbill, Creative Team, Directorial Team, and Administrative route to Creative Team; Production Team and Front of House route to Production Team; Music / Band routes to its own Band section. Guest Artist is not a role group; it is an assignment-level flag used for Theatre Budget guest artist linking.
 
 Cross-app sync should flow through explicit local records:
 

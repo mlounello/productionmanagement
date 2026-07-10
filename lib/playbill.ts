@@ -39,7 +39,7 @@ export type PlaybillRoleInput = {
   showId: string;
   personId: string | null;
   roleName: string;
-  category: "cast" | "creative" | "production";
+  category: "cast" | "creative" | "production" | "band";
 };
 
 export type PlaybillPerson = {

@@ -569,6 +569,57 @@ button {
   align-self: end;
 }
 
+.searchable-picker {
+  min-width: 0;
+  position: relative;
+}
+
+.searchable-picker > input {
+  background: #fff;
+  border: 1px solid #cbd8d1;
+  border-radius: 6px;
+  min-height: 42px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
+.searchable-picker-menu {
+  background: #fff;
+  border: 1px solid #cbd8d1;
+  border-radius: 6px;
+  box-shadow: 0 12px 28px rgb(20 45 35 / 16%);
+  display: grid;
+  left: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 5px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+}
+
+.searchable-picker-menu button {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  justify-content: flex-start;
+  min-height: 34px;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.searchable-picker-menu button:hover,
+.searchable-picker-menu button[aria-selected="true"] {
+  background: #edf5f1;
+}
+
+.searchable-picker-menu span,
+.searchable-picker-menu small {
+  color: var(--muted);
+  padding: 8px 9px;
+}
+
 .checkbox-card {
   align-items: flex-start;
   background: #fbfcfb;
