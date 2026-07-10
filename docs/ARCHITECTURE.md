@@ -138,6 +138,8 @@ The confirmed creation flow writes only a new guest artist identity/contact shel
 
 The direct Budget assignment picker reads existing guest artists and resolves a durable local person by an existing external link, vendor number, email, or display name in that order. If none exists, it creates a minimal Production Management person file, links both the person and role assignment to the existing Budget row, and triggers the standard draft Playbill sync. It never modifies the selected Budget row.
 
+High-volume entry uses client-side repeatable rows that submit validated JSON batches to server actions. Each row still passes through the same duplicate checks, external-link creation, and Playbill sync helpers as a single assignment. Assignment redirects include `#assignments` to preserve the user's working position after a server action refresh.
+
 ## Managed Reference Data
 
 Production Management should use managed reference data for reusable institutional/selectable options that are not specific to one user or one project. Users should not repeatedly type reusable institutional values by hand when those values should be shared, searched, reported on, archived, and reused.

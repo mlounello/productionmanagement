@@ -29,6 +29,8 @@ Role Operations and Integration combines the production-facing work into one wor
 
 Existing Theatre Budget guest artists can be selected directly while creating a role assignment. Production Management reuses or creates the durable local person file, records person-level and assignment-level Budget links, and then follows the normal Playbill assignment sync without requiring a separate Add Person step.
 
+Both existing-person assignments and Theatre Budget guest-artist assignments support repeatable batch rows with a single submit. Assignment actions return to the assignment workspace anchor so repetitive entry does not reset the user to the top of the project.
+
 - Compare Production Management role/person data to `app_playbill.programs`, `app_playbill.shows`, `app_playbill.people`, `app_playbill.show_roles`, and submission request tables.
 - Start with read-only manual linking from a Production Management project to an existing Playbill show/program.
 - For draft, unpublished Playbill shows, allow a manual per-assignment sync behind `ENABLE_PLAYBILL_WRITES=true` that creates/updates Playbill people, show roles, and draft bio requests while recording every touched external row in `external_links`.

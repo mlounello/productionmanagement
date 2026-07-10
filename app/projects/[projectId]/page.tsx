@@ -5,8 +5,9 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   addProjectLocationAction,
   addPersonNoteAction,
-  assignTheatreBudgetGuestArtistToRoleAction,
   archiveTimelineGroupAction,
+  bulkAssignTheatreBudgetGuestArtistsAction,
+  bulkCreateRoleAssignmentsAction,
   bulkCreateProjectRolesAction,
   copyProjectRolesAction,
   createAndLinkTheatreBudgetGuestArtistAction,
@@ -32,6 +33,7 @@ import {
 } from "@/app/projects/[projectId]/actions";
 import { ProjectCalendar } from "@/components/project-calendar";
 import { BulkRoleImport } from "@/components/bulk-role-import";
+import { BulkAssignmentForms } from "@/components/bulk-assignment-forms";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
@@ -1093,49 +1095,20 @@ export default async function ProjectPage({
             </p>
           </div>
         </div>
+        <BulkAssignmentForms
+          projectId={typedProject.id}
+          roles={roles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
+          people={peopleRows.map((person) => ({ id: person.id, label: `${person.full_name}${person.email ? ` · ${person.email}` : ""}` }))}
+          guestArtists={theatreBudgetGuestArtists.data.map((artist) => ({
+            id: artist.id,
+            label: `${artist.display_name}${artist.email ? ` · ${artist.email}` : ""}${artist.vendor_number ? ` · Vendor ${artist.vendor_number}` : ""}${!artist.active ? " · Inactive" : ""}`
+          }))}
+          regularAction={bulkCreateRoleAssignmentsAction}
+          budgetAction={bulkAssignTheatreBudgetGuestArtistsAction}
+        />
+        {theatreBudgetGuestArtists.error ? <p className="setup-warning">{theatreBudgetGuestArtists.error}</p> : null}
         <details className="integration-panel">
-          <summary>
-            <strong>Assign from Theatre Budget</strong>
-            <span>Select an existing guest artist and role without opening the Add Person form.</span>
-          </summary>
-          {theatreBudgetGuestArtists.error ? (
-            <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
-          ) : (
-            <form action={assignTheatreBudgetGuestArtistToRoleAction} className="assignment-create-form">
-              <input name="projectId" type="hidden" value={typedProject.id} />
-              <label className="field">
-                <span>Theatre Budget guest artist</span>
-                <select name="guestArtistId" defaultValue="" required>
-                  <option value="">Choose guest artist</option>
-                  {theatreBudgetGuestArtists.data.map((artist) => (
-                    <option key={artist.id} value={artist.id}>
-                      {artist.display_name}{artist.email ? ` · ${artist.email}` : ""}{artist.vendor_number ? ` · Vendor ${artist.vendor_number}` : ""}{!artist.active ? " · Inactive" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Project role</span>
-                <select name="roleId" defaultValue="" required>
-                  <option value="">Choose role</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>{role.name} ({titleCase(role.role_group)})</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Assignment type</span>
-                <select name="assignmentKind" defaultValue="primary">
-                  <option value="primary">Primary</option>
-                  <option value="shared">Shared role</option>
-                  <option value="understudy">Understudy</option>
-                  <option value="alternate">Alternate</option>
-                </select>
-              </label>
-              <button type="submit">Assign existing Budget artist</button>
-            </form>
-          )}
-        </details>
+          <summary><strong>Detailed single assignment</strong><span>Use this form when you need status, confirmation, or notes immediately.</span></summary>
         <form action={createRoleAssignmentAction} className="assignment-create-form">
           <input name="projectId" type="hidden" value={typedProject.id} />
           <label className="field">
@@ -1203,6 +1176,7 @@ export default async function ProjectPage({
           </label>
           <button type="submit">Assign person</button>
         </form>
+        </details>
 
         <div className="assignment-list">
           {assignmentRows.length ? (
