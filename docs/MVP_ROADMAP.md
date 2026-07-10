@@ -26,6 +26,10 @@ Source-of-truth rule: Production Management owns project role assignment intent.
 - Compare guest artist role assignments to `app_theatre_budget.guest_artists` and contract guest artist links.
 - Store sync intent and external ids in `external_links`.
 - Add sync statuses on local rows where needed, especially role assignments.
+- Treat existing Theatre Budget guest artists as protected live records.
+- Start Theatre Budget integration with read-only lookup and explicit manual linking to existing guest artists.
+- Do not automatically update, overwrite, delete, or deactivate existing Theatre Budget guest artist rows.
+- Only create new Theatre Budget guest artists after a deliberate confirmation flow.
 - Feature-gate actual writes:
   - `ENABLE_PLAYBILL_WRITES`
   - `ENABLE_BUDGET_WRITES`

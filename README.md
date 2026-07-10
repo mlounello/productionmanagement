@@ -53,6 +53,7 @@ Production Management, Playbill, and Theatre Budget share the same Supabase proj
 - Theatre Budget writes are gated by `ENABLE_BUDGET_WRITES`.
 - Google Calendar writes are gated by `ENABLE_GOOGLE_CALENDAR_SYNC`.
 - Integrations should use explicit `external_links` records so linked external rows can be audited, retried, or disconnected without guessing.
+- Existing Theatre Budget guest artist rows are protected live records. Production Management may read and manually link to them, but must not automatically overwrite, delete, deactivate, or mutate them.
 
 ## Product architecture direction
 
@@ -67,7 +68,7 @@ The main MVP path is now:
 - keep durable person files with internal and client-visible notes
 - create audition sessions, slots, paperwork, and submissions
 - generate cast, crew, role confirmation, and ACTF/recognition emails
-- sync selected people/role data to Playbill and guest artist data to Theatre Budget through guarded integration records
+- sync selected people/role data to Playbill and link guest artist assignments to Theatre Budget through guarded integration records
 
 Forms should use reusable searchable selectors with controlled "add new" flows where appropriate. Historical records should keep working when reference records are archived/inactive.
 

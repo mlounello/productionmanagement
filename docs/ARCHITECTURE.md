@@ -75,7 +75,17 @@ Theatre Budget guest artist sync should be designed against:
 - `app_theatre_budget.guest_artists`
 - `app_theatre_budget.contracts.guest_artist_id`
 
-Production Management should initially create or link guest artist profiles only from role assignments marked as guest artist, with matching/deduplication by existing external link, email, and normalized display name before inserting anything.
+Existing Theatre Budget guest artist rows are live budget-system records and must be treated as protected data. Production Management must not automatically update, overwrite, delete, deactivate, merge, or otherwise mutate existing `app_theatre_budget.guest_artists` rows.
+
+The safe Theatre Budget sync progression is:
+
+- read-only lookup of existing guest artists
+- suggested matches by existing external link, email, and normalized display name
+- explicit manual link from a Production Management role assignment to an existing Theatre Budget guest artist
+- optional creation of a new Theatre Budget guest artist only after a deliberate confirmation flow
+- no contract/payment/vendor/tax-field writes from Production Management
+
+If future updates are allowed, they must be reviewed, field-scoped, feature-gated, and auditable. Theatre Budget remains the authority for guest artist financial, contract, vendor, tax, and payment details.
 
 ## Managed Reference Data
 
