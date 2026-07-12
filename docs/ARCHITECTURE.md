@@ -49,6 +49,10 @@ Each `people` row should evolve into a durable profile for the person, not merel
 - project history
 - role assignment history
 - audition history where applicable
+
+Audition forms are project-owned, versioned records composed of ordered sections and fields. Published forms are immutable in the builder; changes begin as a new draft version so submitted answers retain their original meaning. Public applicants access only a published form through an unguessable token and manage only their own booking through a separate applicant token. Submission review is restricted to production managers, directors, and explicitly designated intimacy staff. Sensitive comfort, accessibility, and intimacy fields remain marked at the field level and are excluded from ordinary exports unless an authorized reviewer explicitly selects them. Every selective export records its applicant set, included field categories, settings, generator, and timestamp.
+
+Audition scheduling uses sessions as configurable blocks and slots as bookable capacity units. A project may mix short individual appointments, multi-person intervals, group calls, workshops, walk-ins, and staff-assigned blocks. Booking, rescheduling, and cancellation windows are enforced in database functions to prevent over-capacity race conditions. Per-applicant start/end overrides support accommodations and exceptions without changing the shared block.
 - director, stage manager, casting, producer, and internal production notes
 - client-visible notes where appropriate
 - accomplishments, recognitions, and ACTF-related history

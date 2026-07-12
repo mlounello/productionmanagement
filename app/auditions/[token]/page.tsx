@@ -1,0 +1,56 @@
+import { notFound } from "next/navigation";
+import { submitAuditionAction } from "@/app/auditions/[token]/actions";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const dynamic = "force-dynamic";
+
+type Field = { id: string; section_key: string; field_key: string; label: string; field_type: string; required: boolean; options: string[]; help_text: string; placeholder: string; sensitivity: string; sort_order: number };
+type Section = { id: string; section_key: string; title: string; description: string; sort_order: number };
+type Role = { id: string; name: string; role_group: string };
+type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
+type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string };
+
+function formatSlot(slot: Slot, session?: Session) {
+  const start = new Date(slot.starts_at);
+  const end = slot.ends_at ? new Date(slot.ends_at) : null;
+  return `${session?.title ?? "Audition"} · ${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${end ? `–${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}${session?.location ? ` · ${session.location}` : ""} (${slot.capacity - Number(slot.booked)} open)`;
+}
+
+export default async function PublicAuditionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string }> }) {
+  const { token } = await params;
+  const query = await searchParams;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_public_audition_form", { form_token: token });
+  if (error || !data) notFound();
+  const payload = data as { form: { id: string; title: string; description: string }; project: { title: string }; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
+  const sessionById = new Map(payload.sessions.map((session) => [session.id, session]));
+  const availableSlots = payload.slots.filter((slot) => Number(slot.booked) < slot.capacity && sessionById.get(slot.session_id)?.booking_mode === "self_book");
+  const renderField = (field: Field) => {
+    const common = { name: field.field_key, required: field.required };
+    if (field.field_type === "long_text") return <textarea {...common} rows={5} placeholder={field.placeholder} />;
+    if (["short_text", "email", "phone"].includes(field.field_type)) return <input {...common} type={field.field_type === "email" ? "email" : field.field_type === "phone" ? "tel" : "text"} placeholder={field.placeholder} />;
+    if (field.field_type === "file") return <input {...common} type="file" accept={field.field_key === "headshot" ? "image/*" : ".pdf,.doc,.docx,image/*"} />;
+    if (field.field_type === "role_selector") return <div className="choice-grid">{payload.roles.map((role) => <label className="checkbox-card" key={role.id}><input type="checkbox" name={field.field_key} value={role.id} /><span>{role.name}</span></label>)}</div>;
+    if (field.field_type === "slot_selector") return availableSlots.length ? <select name="audition_slot" required={field.required} defaultValue=""><option value="">Choose an available time</option>{availableSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatSlot(slot, sessionById.get(slot.session_id))}</option>)}</select> : <p className="setup-warning">No self-bookable times are currently available. Staff will contact you if assignment is required.</p>;
+    const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
+    const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";
+    return <div className="choice-grid">{options.map((option) => <label className="checkbox-card" key={option}><input type={checkbox ? "checkbox" : "radio"} name={field.field_key} value={option} required={field.required && !checkbox} /><span>{option}</span></label>)}</div>;
+  };
+  return <div className="page audition-public-page">
+    <header className="page-header"><div><p className="eyebrow">{payload.project.title}</p><h1>{payload.form.title}</h1><p className="muted">{payload.form.description}</p></div></header>
+    {query?.error ? <p className="setup-warning">{query.error}</p> : null}
+    <form action={submitAuditionAction} className="stacked-form" encType="multipart/form-data">
+      <input type="hidden" name="formToken" value={token} />
+      <input type="hidden" name="fieldDefinitions" value={JSON.stringify(payload.fields.map(({ field_key, field_type, required }) => ({ field_key, field_type, required })))} />
+      {payload.sections.map((section) => {
+        const fields = payload.fields.filter((field) => field.section_key === section.section_key);
+        if (!fields.length) return null;
+        return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
+          <h2>{section.title}</h2><p className="muted">{section.description}</p>
+          <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
+        </section>;
+      })}
+      <button type="submit">Submit audition form</button>
+    </form>
+  </div>;
+}

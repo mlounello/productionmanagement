@@ -581,6 +581,9 @@ export default async function ProjectPage({
           </p>
         </div>
         <div className="top-actions">
+          <Link className="button" href={`/projects/${typedProject.id}/auditions`}>
+            Auditions
+          </Link>
           <Link className="button secondary" href="/projects">
             Projects
           </Link>
@@ -597,6 +600,7 @@ export default async function ProjectPage({
       {query?.success ? <p className="setup-success">{query.success}</p> : null}
 
       <nav className="workspace-nav" aria-label="Project workspace sections">
+        <Link href={`/projects/${typedProject.id}/auditions`}>Auditions</Link>
         <a href="#calendar">Calendar</a>
         <a href="#gantt">Gantt</a>
         <a href="#timeline-groups">Timeline Groups</a>

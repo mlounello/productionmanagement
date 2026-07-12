@@ -53,12 +53,12 @@ New-assignment pickers hide roles that already have an active assignment. People
 
 ## Phase 4 Audition Workflow
 
-- Audition sessions and slots.
-- Capacity per slot.
-- Audition form fields and submissions.
-- Durable people profile creation/linking from audition paperwork.
-- Printable audition lists with submitted answers.
-- Casting/assignment workflow from audition submissions into project roles.
+- Implemented: versioned, fully customizable audition forms with reusable Siena defaults, arbitrary director questions, optional music/movement fields, restricted consent/access fields, file uploads, and project-role selectors.
+- Implemented: mixed audition blocks for individual appointments, group calls, workshops, walk-ins, and staff assignment, with independently configurable intervals, capacity, booking windows, rescheduling/cancellation deadlines, and per-applicant schedule overrides.
+- Implemented: public submission and self-service booking, durable people profile creation/linking, automatic email matching, and explicit duplicate-person review.
+- Implemented: project-scoped reviewer permissions for production managers, directors, and intimacy staff; independent customizable rubrics and reviewer notes; check-in, callback, casting, no-show, and cancellation states.
+- Implemented: clean PDF director packets, roster exports, duplex notes pages, and bulk/individual selective supplements with checkbox-controlled fields, restricted-field warnings, and export audit records.
+- Implemented: casting from audition submissions directly into project roles.
 
 ## Phase 5 Communication And Recognition
 

@@ -620,6 +620,128 @@ button {
   padding: 8px 9px;
 }
 
+.audition-builder {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.audition-builder-section {
+  background: #f8faf9;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.audition-builder-heading {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.button-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.audition-question-editor {
+  background: #fff;
+  border: 1px solid #cfdbd4;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.audition-public-page {
+  max-width: 860px;
+}
+
+.audition-form-section {
+  scroll-margin-top: 20px;
+}
+
+.audition-field > small {
+  color: var(--muted);
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.choice-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.sensitive-section,
+.sensitive-answer,
+.sensitive-choice {
+  background: #fff9ed;
+  border-color: #e8c978;
+}
+
+.sensitive-section::before {
+  color: #78570c;
+  content: "Restricted response section";
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.audition-applicant-card > div {
+  padding: 16px;
+}
+
+.audition-answer-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  padding: 16px 0;
+}
+
+.audition-answer-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.audition-answer-grid p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.audition-answer-grid small {
+  color: #78570c;
+  font-weight: 750;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  padding: 14px;
+}
+
+legend {
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.success-message,
+.setup-success {
+  background: #eaf7ef;
+  border: 1px solid #a9d5b9;
+  border-radius: 8px;
+  color: #135c31;
+  padding: 12px;
+}
+
 .checkbox-card {
   align-items: flex-start;
   background: #fbfcfb;
