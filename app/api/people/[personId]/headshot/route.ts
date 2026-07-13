@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 3 * 1024 * 1024;
@@ -50,6 +52,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       new_headshot_url: versionedUrl
     });
     if (profileError) throw profileError;
+
+    // An uploaded reusable headshot fills every unlocked production copy. If a
+    // person already approved a copy, resubmit it to Playbill automatically.
+    const admin = createSupabaseAdminClient();
+    const { data: refreshedPerson } = await admin.from("people").select("publicity_profile_version").eq("id", personId).maybeSingle();
+    const { data: unlocked } = await admin.from("project_publicity_submissions")
+      .select("id, status")
+      .eq("person_id", personId)
+      .neq("playbill_submission_status", "locked");
+    for (const submission of unlocked ?? []) {
+      await admin.from("project_publicity_submissions").update({
+        headshot_url: versionedUrl,
+        source_profile_version: Number(refreshedPerson?.publicity_profile_version ?? 1),
+        playbill_sync_status: ["person_approved", "approved"].includes(String(submission.status)) ? "pending" : "not_ready",
+        playbill_sync_error: ""
+      }).eq("id", submission.id);
+      if (["person_approved", "approved"].includes(String(submission.status))) {
+        try { await syncApprovedPublicityToPlaybill(String(submission.id)); }
+        catch (syncError) {
+          await admin.from("project_publicity_submissions").update({
+            playbill_sync_status: "failed",
+            playbill_sync_error: syncError instanceof Error ? syncError.message : "Unknown Playbill sync error."
+          }).eq("id", submission.id);
+        }
+      }
+    }
 
     return applyCookies(NextResponse.json({ url: versionedUrl, size: output.length, width: 1200, height: 1200 }));
   } catch (error) {

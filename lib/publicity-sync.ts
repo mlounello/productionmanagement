@@ -1,8 +1,10 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { markPlaybillBioRequestSubmitted, updatePlaybillPersonPublicity } from "@/lib/playbill";
 
 export async function syncApprovedPublicityToPlaybill(submissionId: string) {
-  const supabase = await createSupabaseServerClient();
+  // A person approval can originate from a passwordless contributor session,
+  // which should not need direct write privileges in the Playbill schema.
+  const supabase = createSupabaseAdminClient();
   const { data: submission, error } = await supabase
     .from("project_publicity_submissions")
     .select("id, project_id, person_id, credited_name, bio, headshot_url, source_profile_version, status")
@@ -10,7 +12,9 @@ export async function syncApprovedPublicityToPlaybill(submissionId: string) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!submission) throw new Error("Publicity submission not found.");
-  if (submission.status !== "approved") throw new Error("Only editorially approved production copy can be sent to Playbill.");
+  if (!["person_approved", "approved"].includes(String(submission.status))) {
+    throw new Error("The person must approve this production copy before it can be sent to Playbill.");
+  }
 
   const { data: personLinks, error: personLinkError } = await supabase
     .from("external_links")
@@ -81,7 +85,7 @@ export async function syncApprovedPublicityToPlaybill(submissionId: string) {
     entity_id: submission.id,
     action: "playbill_publicity_synced",
     after_value: { playbill_person_id: personLink.external_id, submission_request_ids: requestLinks.map((link) => link.external_id), synced_at: syncedAt },
-    reason: "Approved production publicity snapshot sent to Playbill."
+    reason: "Person-approved production publicity snapshot sent to Playbill for editorial review."
   });
   if (auditError) throw new Error(auditError.message);
 }

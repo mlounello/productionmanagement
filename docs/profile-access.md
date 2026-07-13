@@ -6,7 +6,7 @@ Production Management profile access mirrors Playbill contributor access:
 2. Resend sends a branded HTML message containing the Production Management access-page URL.
 3. Opening the email does not authenticate the recipient, so link scanners cannot consume the login session.
 4. The recipient presses **Continue** on the access page.
-5. The server creates a one-time Supabase token and sends the recipient directly to `/my-profile`.
+5. The server creates and directly verifies a one-time Supabase token, stores the session in the app cookie, and sends the recipient to `/my-profile`.
 6. The opaque access token is marked used and cannot be used again.
 
 ## Required production configuration
@@ -28,3 +28,5 @@ Open **Settings → Profile Access Email**. The subject and HTML body support:
 - `{{expires_in}}`
 
 The profile URL variable must remain in the message so the recipient can open the access page.
+
+The callback deliberately uses token verification rather than a PKCE code exchange. A recipient can open the branded message in a different browser or on a different device without receiving a “PKCE code verifier not found” error. Links generated before this callback was deployed should be replaced with a newly sent link.

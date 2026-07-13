@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SITE_URL } from "@/lib/config";
+import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 
 const profileSchema = z.object({
   personId: z.string().uuid(),
@@ -17,7 +18,7 @@ const profileSchema = z.object({
   pronouns: z.string().trim().max(80).optional(),
   vendorNumber: z.string().trim().max(40).optional(),
   phone: z.string().trim().max(40).optional(),
-  bio: z.string().trim().max(12000).optional()
+  bio: z.string().trim().max(350, "Your reusable bio must be 350 characters or fewer.").optional()
 });
 
 function optional(formData: FormData, name: string) {
@@ -98,32 +99,68 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: submission, error: readError } = await supabase
     .from("project_publicity_submissions")
-    .select("id, person_id, status")
+    .select("id, project_id, person_id, status")
     .eq("id", submissionId)
     .maybeSingle();
   if (readError || !submission) redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Submission not found.")}`);
 
   const { data: person } = await supabase.from("people").select("id").eq("id", submission.person_id).eq("auth_user_id", user.id).maybeSingle();
   if (!person) redirect("/my-profile?error=That%20submission%20does%20not%20belong%20to%20you.");
-  if (!['awaiting_person_approval', 'changes_requested'].includes(String(submission.status))) {
+  if (!['draft', 'awaiting_person_approval', 'changes_requested'].includes(String(submission.status))) {
     redirect("/my-profile?error=This%20production%20copy%20is%20not%20awaiting%20your%20approval.");
   }
 
-  const { error } = await supabase
-    .from("project_publicity_submissions")
-    .update({
-      status: "person_approved",
-      person_approved_at: new Date().toISOString(),
-      person_approved_by: user.id,
-      editorial_approved_at: null,
-      editorial_approved_by: null,
-      playbill_sync_status: "not_ready",
-      playbill_sync_error: ""
-    })
-    .eq("id", submissionId)
-    .eq("person_id", person.id);
+  const { error } = await supabase.rpc("approve_my_project_publicity", { target_submission_id: submissionId });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
 
+  let syncWarning = "";
+  try {
+    await syncApprovedPublicityToPlaybill(submissionId);
+  } catch (syncError) {
+    syncWarning = syncError instanceof Error ? syncError.message : "Unknown Playbill sync error.";
+    await supabase.from("project_publicity_submissions").update({
+      playbill_sync_status: "failed", playbill_sync_error: syncWarning
+    }).eq("id", submissionId);
+  }
+
   revalidatePath("/my-profile");
-  redirect("/my-profile?success=Production%20bio%20and%20headshot%20approved.");
+  revalidatePath(`/projects/${submission.project_id}/publicity`);
+  if (syncWarning) {
+    redirect(`/my-profile?error=${encodeURIComponent(`Your copy was approved, but Playbill could not receive it yet: ${syncWarning}`)}`);
+  }
+  redirect("/my-profile?success=Approved%20and%20submitted%20to%20Playbill%20for%20editorial%20review.");
+}
+
+export async function updateMyProjectPublicityBioAction(formData: FormData) {
+  await requireUser();
+  const submissionId = z.string().uuid().parse(String(formData.get("submissionId") ?? ""));
+  const bio = z.string().trim().max(12000, "This production bio is too long.").parse(String(formData.get("bio") ?? ""));
+  const supabase = await createSupabaseServerClient();
+  const { data: before, error: readError } = await supabase.from("project_publicity_submissions")
+    .select("id, project_id, status, playbill_submission_status")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (readError || !before) redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Production publicity record not found.")}`);
+  if (before.playbill_submission_status === "locked") redirect("/my-profile?error=This%20Playbill%20submission%20is%20locked.");
+
+  const { error } = await supabase.rpc("update_my_project_publicity_bio", {
+    target_submission_id: submissionId,
+    new_bio: bio
+  });
+  if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
+
+  let message = "Show-specific bio saved.";
+  if (["person_approved", "approved"].includes(String(before.status))) {
+    try {
+      await syncApprovedPublicityToPlaybill(submissionId);
+      message = "Show-specific bio saved and resubmitted to Playbill.";
+    } catch (syncError) {
+      const warning = syncError instanceof Error ? syncError.message : "Unknown Playbill sync error.";
+      await supabase.from("project_publicity_submissions").update({ playbill_sync_status: "failed", playbill_sync_error: warning }).eq("id", submissionId);
+      redirect(`/my-profile?error=${encodeURIComponent(`Bio saved, but Playbill sync failed: ${warning}`)}`);
+    }
+  }
+  revalidatePath("/my-profile");
+  revalidatePath(`/projects/${before.project_id}/publicity`);
+  redirect(`/my-profile?success=${encodeURIComponent(message)}`);
 }

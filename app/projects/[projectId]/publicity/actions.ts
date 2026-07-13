@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { sendPublicityReminder } from "@/lib/profile-access-links";
 
 const uuid = z.string().uuid();
 const copySchema = z.object({
@@ -18,6 +19,15 @@ const copySchema = z.object({
 
 function path(projectId: string, kind: "error" | "success", message: string) {
   return `/projects/${projectId}/publicity?${kind}=${encodeURIComponent(message)}`;
+}
+
+async function requirePublicityManager(projectId: string) {
+  const supabase = await createSupabaseServerClient();
+  const [{ data: projectAllowed }, { data: appAllowed }] = await Promise.all([
+    supabase.rpc("has_project_role", { target_project_id: projectId, allowed_roles: ["project_manager", "producer", "department_head", "staff"] }),
+    supabase.rpc("has_app_role", { allowed_roles: ["admin", "producer"] })
+  ]);
+  if (!projectAllowed && !appAllowed) throw new Error("You do not have permission to manage publicity for this project.");
 }
 
 function values(formData: FormData) {
@@ -85,6 +95,9 @@ export async function saveProjectPublicityCopyAction(formData: FormData) {
     redirect(path(projectId, "error", parsed.error.issues[0]?.message ?? "Invalid publicity copy."));
   }
   const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase.from("project_publicity_submissions")
+    .select("playbill_submission_status").eq("id", parsed.data.submissionId).eq("project_id", parsed.data.projectId).maybeSingle();
+  if (existing?.playbill_submission_status === "locked") redirect(path(parsed.data.projectId, "error", "This copy is locked in Playbill and is read-only."));
   const { error } = await supabase.from("project_publicity_submissions").update({
     credited_name: parsed.data.creditedName,
     bio: parsed.data.bio,
@@ -173,4 +186,61 @@ export async function retryPublicitySyncAction(formData: FormData) {
   }
   revalidatePath(`/projects/${projectId}/publicity`);
   redirect(path(projectId, "success", "Approved copy resynced to Playbill."));
+}
+
+export async function savePublicitySettingsAction(formData: FormData) {
+  await requireUser();
+  const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
+  const dateValue = (name: string) => {
+    const raw = String(formData.get(name) ?? "").trim();
+    return raw || null;
+  };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("project_publicity_settings").upsert({
+    project_id: projectId,
+    bio_due_on: dateValue("bioDueOn"),
+    headshot_due_on: dateValue("headshotDueOn"),
+    reminders_enabled: formData.get("remindersEnabled") === "on"
+  }, { onConflict: "project_id" });
+  if (error) redirect(path(projectId, "error", error.message));
+  revalidatePath(`/projects/${projectId}/publicity`);
+  revalidatePath("/my-profile");
+  redirect(path(projectId, "success", "Publicity deadlines and reminder settings saved."));
+}
+
+export async function sendPublicityReminderAction(formData: FormData) {
+  const user = await requireUser();
+  const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
+  const personId = uuid.parse(String(formData.get("personId") ?? ""));
+  try { await requirePublicityManager(projectId); }
+  catch (error) { redirect(path(projectId, "error", error instanceof Error ? error.message : "Permission denied.")); }
+  let email = "";
+  let failure = "";
+  try { email = (await sendPublicityReminder(personId, projectId, user.id)).email; }
+  catch (error) { failure = error instanceof Error ? error.message : "Reminder could not be sent."; }
+  if (failure) redirect(path(projectId, "error", failure));
+  revalidatePath(`/projects/${projectId}/publicity`);
+  redirect(path(projectId, "success", `Reminder sent to ${email}.`));
+}
+
+export async function sendBulkPublicityRemindersAction(formData: FormData) {
+  const user = await requireUser();
+  const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
+  try { await requirePublicityManager(projectId); }
+  catch (error) { redirect(path(projectId, "error", error instanceof Error ? error.message : "Permission denied.")); }
+  const personIds = [...new Set(formData.getAll("personId").map(String))].filter((value) => uuid.safeParse(value).success);
+  if (!personIds.length) redirect(path(projectId, "error", "Select at least one person."));
+  const failures: string[] = [];
+  let sent = 0;
+  for (const personId of personIds) {
+    try {
+      await sendPublicityReminder(personId, projectId, user.id);
+      sent += 1;
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : "Unknown reminder error.");
+    }
+  }
+  revalidatePath(`/projects/${projectId}/publicity`);
+  if (failures.length) redirect(path(projectId, "error", `${sent} reminder${sent === 1 ? "" : "s"} sent; ${failures.length} failed. ${failures[0]}`));
+  redirect(path(projectId, "success", `${sent} reminder${sent === 1 ? "" : "s"} sent.`));
 }

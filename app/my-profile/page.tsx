@@ -5,6 +5,7 @@ import {
   approveMyPublicitySubmissionAction,
   connectMyProfileAction,
   requestMyEmailChangeAction,
+  updateMyProjectPublicityBioAction,
   updateMyPublicityProfileAction
 } from "@/app/my-profile/actions";
 
@@ -15,7 +16,8 @@ type Profile = {
   preferred_name: string; email: string; vendor_number: string; phone: string; pronouns: string;
   publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number;
 };
-type Submission = { id: string; credited_name: string; bio: string; headshot_url: string; status: string; source_profile_version: number; projects: { title: string } | null };
+type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; projects: { title: string } | null };
+type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null };
 type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
 type Accomplishment = { id: string; title: string; accomplishment_type: string; issuer: string; awarded_on: string | null; description: string; projects: { title: string } | null };
 type VisibleNote = { id: string; note: string; created_at: string; projects: { title: string } | null };
@@ -24,6 +26,7 @@ function titleCase(value: string) { return value.split("_").map((part) => part.s
 function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)) : "Date not listed";
 }
+function formatStatus(value: string) { return value.split("_").map((part) => part.slice(0, 1).toUpperCase() + part.slice(1)).join(" "); }
 
 export default async function MyProfilePage({ searchParams }: { searchParams?: Promise<{ error?: string; success?: string }> }) {
   const user = await requireUser();
@@ -45,16 +48,18 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   );
 
   const typedProfile = profile as Profile;
-  const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }] = await Promise.all([
-    supabase.from("project_publicity_submissions").select("id, credited_name, bio, headshot_url, status, source_profile_version, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
+  const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }] = await Promise.all([
+    supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
     supabase.from("role_assignments").select("id, status, is_guest_artist, projects(title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
     supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).order("awarded_on", { ascending: false }),
-    supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false })
+    supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
+    supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on")
   ]);
   const submissionRows = (submissions ?? []) as unknown as Submission[];
   const assignmentRows = (assignments ?? []) as unknown as Assignment[];
   const accomplishmentRows = (accomplishments ?? []) as unknown as Accomplishment[];
   const noteRows = (notes ?? []) as unknown as VisibleNote[];
+  const settingsByProject = new Map(((publicitySettings ?? []) as PublicitySettings[]).map((item) => [item.project_id, item]));
 
   return (
     <div className="page workspace-page">
@@ -81,8 +86,8 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
               <label className="field"><span>90#</span><input name="vendorNumber" defaultValue={typedProfile.vendor_number} /></label>
             </div>
             <label className="field"><span>Phone number</span><input name="phone" type="tel" defaultValue={typedProfile.phone} /></label>
-            <label className="field"><span>Publicity bio</span><textarea name="bio" rows={12} defaultValue={typedProfile.publicity_bio} /></label>
-            <p className="muted">Profile version {typedProfile.publicity_profile_version}. Saving does not silently alter a production copy you already approved.</p>
+            <label className="field"><span>Overall publicity bio (350 characters maximum)</span><textarea name="bio" rows={7} maxLength={350} defaultValue={typedProfile.publicity_bio} /></label>
+            <p className="muted">{typedProfile.publicity_bio.length}/350 characters · Profile version {typedProfile.publicity_profile_version}. New productions begin with this bio; each show then keeps its own editable copy.</p>
             <button type="submit">Save my profile</button>
           </form>
 
@@ -120,13 +125,24 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
         </div><p className="muted">Only notes explicitly marked client-visible appear here. Management-only notes are never sent to this page.</p></section>
       </div>
 
-      <section className="panel workspace-section"><p className="eyebrow">Production Approvals</p><h2>Review requested Playbill copies</h2><div className="compact-list">
-        {submissionRows.length ? submissionRows.map((submission) => <article className="panel" key={submission.id}>
-          <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><p className="muted">{titleCase(submission.status)}</p></div><span className="status-badge">v{submission.source_profile_version}</span></div>
-          <p><strong>Credit:</strong> {submission.credited_name}</p><p style={{ whiteSpace: "pre-wrap" }}>{submission.bio || "No bio supplied."}</p>
-          {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review headshot</a></p> : <p className="muted">No headshot supplied.</p>}
-          {["awaiting_person_approval", "changes_requested"].includes(submission.status) ? <form action={approveMyPublicitySubmissionAction}><input type="hidden" name="submissionId" value={submission.id} /><button type="submit">Approve this production copy</button></form> : null}
-        </article>) : <p className="muted">No production approval requests yet.</p>}
+      <section className="panel workspace-section"><p className="eyebrow">Production Publicity</p><h2>Your show-specific bios</h2><p className="muted">Each production has its own bio. You can edit it until Playbill locks the final program copy.</p><div className="compact-list">
+        {submissionRows.length ? submissionRows.map((submission) => {
+          const settings = settingsByProject.get(submission.project_id);
+          const locked = submission.playbill_submission_status === "locked";
+          return <article className="panel" key={submission.id}>
+            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><p className="muted">Your approval: {formatStatus(submission.status)} · Playbill: {formatStatus(submission.playbill_submission_status)}</p></div><span className={`status-badge${locked ? " gold" : ""}`}>{locked ? "Final & locked" : `v${submission.source_profile_version}`}</span></div>
+            <p className="muted">Bio due: {formatDate(settings?.bio_due_on ?? null)} · Headshot due: {formatDate(settings?.headshot_due_on ?? null)}</p>
+            <p><strong>Credit:</strong> {submission.credited_name}</p>
+            {locked ? <p style={{ whiteSpace: "pre-wrap" }}>{submission.bio || "No bio supplied."}</p> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
+              <input type="hidden" name="submissionId" value={submission.id} />
+              <label className="field"><span>Bio for {submission.projects?.title ?? "this production"}</span><textarea name="bio" rows={8} defaultValue={submission.bio} /></label>
+              <button type="submit" className="secondary">Save show-specific bio</button>
+            </form>}
+            {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}
+            {!locked && ["draft", "awaiting_person_approval", "changes_requested"].includes(submission.status) ? <form action={approveMyPublicitySubmissionAction}><input type="hidden" name="submissionId" value={submission.id} /><button type="submit">Approve &amp; submit to Playbill</button></form> : null}
+            {locked ? <p className="muted">This final Playbill copy remains here for historical reference and can no longer be changed.</p> : null}
+          </article>;
+        }) : <p className="muted">No production publicity records yet.</p>}
       </div></section>
     </div>
   );
