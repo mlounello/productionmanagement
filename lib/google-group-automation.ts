@@ -1,5 +1,5 @@
-import { ENABLE_GOOGLE_GROUP_SYNC } from "@/lib/config";
-import { ensureGoogleGroupMember, removeGoogleGroupMember } from "@/lib/google-groups";
+import { ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK } from "@/lib/config";
+import { checkGoogleGroupMembership } from "@/lib/google-group-membership";
 import { renderTemplate, sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -56,16 +56,18 @@ export async function syncAssignmentGoogleAutomation(projectId: string, assignme
   if (!settings) return { warnings: [] as string[] };
   const warnings: string[] = []; let groupStatus = "skipped";
   if (settings.google_group_sync_enabled && settings.active_google_group_email) {
-    if (!ENABLE_GOOGLE_GROUP_SYNC) groupStatus = "disabled";
+    if (!ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK) groupStatus = "disabled";
     else if (!context.personEmail) { groupStatus = "failed"; warnings.push("Google Group sync skipped because the person has no email address."); }
     else try {
-      const result = await ensureGoogleGroupMember(settings.active_google_group_email, context.personEmail); groupStatus = result.added ? "synced" : "already_synced";
-      await log(supabase, context, settings, result.added ? "member_added" : "member_already_present", "success", actorUserId, "", result.response);
-    } catch (error) { groupStatus = "failed"; const warning = error instanceof Error ? error.message : "Google Group member sync failed."; warnings.push(warning); await log(supabase, context, settings, "member_add_failed", "failed", actorUserId, warning); }
+      const isMember = await checkGoogleGroupMembership(settings.active_google_group_email, context.personEmail); groupStatus = isMember ? "verified" : "missing";
+      const warning = isMember ? "" : `${context.personEmail} is not currently listed in ${settings.active_google_group_email}.`;
+      if (warning) warnings.push(warning);
+      await log(supabase, context, settings, isMember ? "membership_checked_present" : "membership_checked_missing", isMember ? "success" : "failed", actorUserId, warning, { isMember });
+    } catch (error) { groupStatus = "failed"; const warning = error instanceof Error ? error.message : "Google Group membership check failed."; warnings.push(warning); await log(supabase, context, settings, "membership_check_failed", "failed", actorUserId, warning); }
   }
   const welcome = await sendWelcome(supabase, context, settings, actorUserId);
   if (welcome.warning) warnings.push(welcome.warning);
-  await supabase.from("role_assignments").update({ google_group_sync_status: groupStatus, google_group_sync_error: groupStatus === "failed" ? warnings[0] ?? "Sync failed." : "", welcome_email_status: welcome.status, welcome_email_error: welcome.warning }).eq("id", assignmentId);
+  await supabase.from("role_assignments").update({ google_group_sync_status: groupStatus, google_group_sync_error: ["failed", "missing"].includes(groupStatus) ? warnings[0] ?? "Membership check failed." : "", google_group_membership_checked_at: ["verified", "missing"].includes(groupStatus) ? new Date().toISOString() : null, welcome_email_status: welcome.status, welcome_email_error: welcome.warning }).eq("id", assignmentId);
   await supabase.from("project_role_group_google_settings").update({ last_sync_status: groupStatus, last_sync_error: warnings.join(" "), last_synced_at: new Date().toISOString() }).eq("id", settings.id);
   return { warnings };
 }
@@ -73,9 +75,10 @@ export async function syncAssignmentGoogleAutomation(projectId: string, assignme
 export async function removeAssignmentGoogleAutomation(projectId: string, assignmentId: string, actorUserId: string | null = null) {
   const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).maybeSingle();
-  if (!settings?.remove_from_google_group_on_unassign || !settings.google_group_sync_enabled || !settings.active_google_group_email || !ENABLE_GOOGLE_GROUP_SYNC || !context.personEmail) return { warnings: [] as string[] };
-  try { const result = await removeGoogleGroupMember(settings.active_google_group_email, context.personEmail); await log(supabase, context, settings, result.removed ? "member_removed" : "member_not_present", "success", actorUserId, "", result.response); return { warnings: [] as string[] }; }
-  catch (error) { const warning = error instanceof Error ? error.message : "Google Group member removal failed."; await log(supabase, context, settings, "member_remove_failed", "failed", actorUserId, warning); return { warnings: [warning] }; }
+  if (!settings?.remove_from_google_group_on_unassign || !settings.google_group_sync_enabled || !settings.active_google_group_email || !context.personEmail) return { warnings: [] as string[] };
+  const warning = `Remove ${context.personEmail} manually from ${settings.active_google_group_email}.`;
+  await log(supabase, context, settings, "member_removal_needed", "failed", actorUserId, warning);
+  return { warnings: [warning] };
 }
 
 export async function resendAssignmentWelcome(projectId: string, assignmentId: string, actorUserId: string | null) {
