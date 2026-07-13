@@ -1,5 +1,4 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export type PlaybillShow = {
   id: string;
@@ -403,7 +402,7 @@ export async function updatePlaybillPersonPublicity(input: {
   bio: string;
   headshotUrl: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerClient();
   const submittedAt = new Date().toISOString();
   let { data, error } = await supabase
     .schema("app_playbill")
@@ -439,7 +438,7 @@ export async function updatePlaybillPersonPublicity(input: {
 }
 
 export async function markPlaybillBioRequestSubmitted(requestId: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerClient();
   let { error } = await supabase
     .schema("app_playbill")
     .from("submission_requests")

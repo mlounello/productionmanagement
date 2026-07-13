@@ -42,8 +42,11 @@ In the shared Supabase project, apply these in order before deploying the new Pr
 3. Production Management `supabase/migrations/202607132000_secure_contributor_profiles_and_headshots.sql`
 4. Production Management `supabase/migrations/202607132200_branded_profile_access_links.sql`
 5. Production Management `supabase/migrations/202607132300_publicity_dashboard_automation.sql`
+6. Production Management `supabase/migrations/202607132310_publicity_sync_privilege_bridge.sql`
 
 The final migration adds deadlines, reminder tracking, the Playbill status mirror, narrow contributor RPCs, and the automatic cross-schema trigger. It also reconciles already-linked records by `production_management_approval_id`. It does not create people, projects, roles, or Playbill records.
+
+The privilege-bridge migration fixes cross-app writes without granting the PM service key blanket access to Playbill’s `people` table. All PM-to-Playbill publicity submissions pass through one security-definer function that validates the PM approval, project link, person link, active role assignment, bio request, and Playbill lock state before updating anything.
 
 ## Standalone Playbill productions
 
