@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { createOrAdoptGoogleGroup, generateGoogleGroupEmail, testGoogleGroup } from "@/lib/google-groups";
+import { createOrAdoptGoogleGroup, generateGoogleGroupEmail } from "@/lib/google-groups";
+import { testGoogleGroupMembershipAccess } from "@/lib/google-group-membership";
 import { resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -66,7 +67,7 @@ export async function testRoleGroupGoogleGroupAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("active_google_group_email").eq("project_id", projectId).eq("role_group", roleGroupSlug).single();
   if (!settings?.active_google_group_email) redirect(route(projectId, "Set an active Google Group email first.", true));
-  try { const group = await testGoogleGroup(settings.active_google_group_email); await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: roleGroupSlug, actor_user_id: user.id, active_google_group_email: settings.active_google_group_email, action_type: "group_tested", status: "success", provider_response: { id: group.id ?? "", email: group.email ?? "" } }); redirect(route(projectId, `Google Group connection succeeded: ${settings.active_google_group_email}`)); }
+  try { const group = await testGoogleGroupMembershipAccess(settings.active_google_group_email); await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: roleGroupSlug, actor_user_id: user.id, active_google_group_email: settings.active_google_group_email, action_type: "group_tested", status: "success", provider_response: { email: String(group.groupEmail ?? settings.active_google_group_email) } }); redirect(route(projectId, `Apps Script can read the Google Group: ${settings.active_google_group_email}`)); }
   catch (error) { const message = error instanceof Error ? error.message : "Google Group test failed."; await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: roleGroupSlug, actor_user_id: user.id, active_google_group_email: settings.active_google_group_email, action_type: "group_tested", status: "failed", error_message: message }); redirect(route(projectId, message, true)); }
 }
 
@@ -81,7 +82,20 @@ export async function createRoleGroupWelcomeTemplateAction(formData: FormData) {
 
 export async function retryAssignmentGoogleSyncAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const assignmentId = uuid.parse(formData.get("assignmentId")); const { user } = await context(projectId);
-  const result = await syncAssignmentGoogleAutomation(projectId, assignmentId, user.id); redirect(route(projectId, result.warnings.length ? result.warnings.join(" ") : "Google Group membership and welcome automation completed.", result.warnings.length > 0));
+  const result = await syncAssignmentGoogleAutomation(projectId, assignmentId, user.id); redirect(route(projectId, result.warnings.length ? result.warnings.join(" ") : "Google Group membership verified.", result.warnings.length > 0));
+}
+
+export async function recheckRoleGroupMembershipsAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
+  const { data: assignments, error } = await supabase.from("role_assignments").select("id, project_roles!inner(role_group)").eq("project_id", projectId).eq("project_roles.role_group", roleGroupSlug);
+  if (error) redirect(route(projectId, error.message, true));
+  let verified = 0; let needsAttention = 0;
+  for (const assignment of assignments ?? []) {
+    try { const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id); if (result.warnings.length) needsAttention += 1; else verified += 1; }
+    catch { needsAttention += 1; }
+  }
+  revalidatePath(route(projectId));
+  redirect(route(projectId, `${verified} verified; ${needsAttention} need attention.`, needsAttention > 0));
 }
 
 export async function resendAssignmentWelcomeAction(formData: FormData) {

@@ -1,6 +1,150 @@
 # Google Group automation setup guide
 
-This guide assumes you have never created a Google Cloud service account before. Complete the sections in order. Production Management uses the **manual group connection model**: an administrator creates each Google Group in Google, then pastes its actual email into Production Management. The app automates membership and custom welcome emails after that connection is saved.
+## Current Siena approach: Apps Script membership reconciliation
+
+Siena does not permit the service-account/domain-wide-delegation approach, and the available group-manager account cannot use the Admin SDK. Production Management therefore uses this supported workflow:
+
+1. Create and manage each Google Group manually.
+2. Deploy a small read-only Google Apps Script as a Siena group manager.
+3. Production Management asks that script whether each assigned email is a direct member.
+4. The app marks people **verified**, **missing**, or **unable to check**.
+5. A Google Group manager adds/removes missing people manually and runs the check again.
+6. Custom HTML welcome email remains automated through Resend.
+
+The older service-account instructions remain later in this document for reference only. Do not configure them unless Siena changes its policy.
+
+## Apps Script setup from the beginning
+
+### 1. Create the script
+
+1. Sign into the Siena Google account that successfully ran the `GroupsApp.hasUser()` test.
+2. Open [Google Apps Script](https://script.google.com/).
+3. Click **New project**.
+4. Click the project title near the top-left and rename it `Production Management Group Membership Check`.
+5. Open the repository file `integrations/apps-script/google-groups-membership-check.gs`.
+6. Copy its complete contents.
+7. Return to Apps Script, open `Code.gs`, delete the sample function, and paste the copied code.
+8. Click **Save project**.
+
+The script is read-only. It calls `GroupsApp.getGroupByEmail()` and `group.hasUser()`; it does not add, remove, or modify Google Group members.
+
+### 2. Create a shared secret
+
+The shared secret prevents someone who discovers the web-app URL from using it freely.
+
+1. Generate a long random value with a password manager. Use at least 32 random characters.
+2. In Apps Script, click **Project Settings** (the gear icon).
+3. Scroll to **Script Properties**.
+4. Click **Add script property**.
+5. Enter `SHARED_SECRET` as the property name.
+6. Paste the random value as its value.
+7. Save the property.
+8. Store the same value in an approved password manager. Do not put it in the source code or Git.
+
+### 3. Authorize the script
+
+1. Add this temporary test function at the bottom of `Code.gs`:
+
+   ```javascript
+   function authorizeGroupsAccess() {
+     const group = GroupsApp.getGroupByEmail('replace-with-a-group@siena.edu');
+     console.log(group.getEmail());
+   }
+   ```
+
+2. Replace the sample address with a group you manage.
+3. Save.
+4. Select `authorizeGroupsAccess` in the function menu.
+5. Click **Run**.
+6. Review Google's permission prompt and authorize the script using the Siena account.
+7. Confirm the execution log shows the group email.
+8. Delete the temporary `authorizeGroupsAccess` function and save again.
+
+### 4. Deploy as a web app
+
+1. Click **Deploy → New deployment**.
+2. Click the gear beside **Select type** and choose **Web app**.
+3. Enter a description such as `Production membership check v1`.
+4. For **Execute as**, choose **Me**. This makes every check use the group-level permissions you already confirmed.
+5. For **Who has access**, select the broadest option Siena permits that allows the Production Management server to call it. Depending on Siena policy, this may appear as **Anyone**.
+6. Click **Deploy**.
+7. Approve authorization if Google asks again.
+8. Copy the **Web app URL**. Use the deployed URL ending in `/exec`, not the development URL ending in `/dev`.
+
+If Siena does not permit a web app callable by the Production Management server, this bridge cannot be used without IT assistance. The request body includes the shared secret, and Production Management validates that the URL is hosted on Google's Apps Script domains.
+
+### 5. Configure Vercel
+
+In the Production Management Vercel project, open **Settings → Environment Variables** and add:
+
+- `GOOGLE_GROUPS_APPS_SCRIPT_URL`
+  - Paste the deployed `/exec` URL.
+- `GOOGLE_GROUPS_APPS_SCRIPT_SHARED_SECRET`
+  - Paste the exact `SHARED_SECRET` value from Apps Script.
+- `ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK=true`
+
+Keep these older flags off:
+
+- `ENABLE_GOOGLE_GROUP_SYNC=false`
+- `ENABLE_GOOGLE_GROUP_AUTO_CREATE=false`
+
+Redeploy Production Management after saving the variables.
+
+### 6. Apply the reconciliation migration
+
+Apply:
+
+`supabase/migrations/202607131300_google_group_membership_reconciliation.sql`
+
+This adds the last-checked timestamp and new audit action types. It does not contact Google, change assignments, send email, or modify Google membership.
+
+### 7. Connect and test a role group
+
+1. Open a test project in Production Management.
+2. Open **Google Groups**.
+3. Choose **Manual existing group** for a role group.
+4. Paste the actual Google Group email.
+5. Turn on **Check assigned people against Google membership**.
+6. If desired, turn on **Flag manual Google removal when unassigned**.
+7. Save.
+8. Click **Test Google Group Connection**.
+9. Click **Check all memberships**.
+10. Confirm known internal and external members show **verified**.
+11. Confirm a deliberately absent test address shows **missing**.
+12. Copy the missing-address list, add those people in Google Groups, and click **Check all memberships** again.
+
+When a new role assignment is created, Production Management automatically runs the same read-only check. A missing membership produces a visible warning but never blocks the assignment.
+
+### 8. Updating the Apps Script later
+
+Editing and saving `Code.gs` does not automatically update the deployed `/exec` version.
+
+1. Make and save the script change.
+2. Click **Deploy → Manage deployments**.
+3. Open the existing web-app deployment for editing.
+4. Choose **New version**.
+5. Add a description and deploy.
+6. The existing `/exec` URL normally remains the same.
+7. Retest the group connection from Production Management.
+
+If you create a completely new deployment and its URL changes, update `GOOGLE_GROUPS_APPS_SCRIPT_URL` in Vercel and redeploy Production Management.
+
+### 9. Apps Script troubleshooting
+
+- **Unauthorized:** the Apps Script `SHARED_SECRET` and Vercel secret differ.
+- **Membership checking is disabled:** `ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK` is missing/false or the app was not redeployed.
+- **Apps Script URL is invalid:** use the deployed Google `/exec` URL.
+- **You do not have permission to view the group's member list:** the account that deployed the script cannot view that specific group. Add it as a group manager/owner or deploy from the correct account.
+- **A member appears missing:** the check is for direct membership. Nested-group membership is not treated as direct membership.
+- **External member appears missing unexpectedly:** verify the exact email in Google Groups, including aliases, and run the simple `hasUser()` test for that address in Apps Script.
+- **Changes are not reflected:** Google may take a short time to reflect membership changes; wait briefly and check again.
+- **The script works in the editor but not from Production Management:** confirm the web app executes as **Me**, the `/exec` deployment is current, and its access setting permits server calls.
+
+---
+
+## Legacy service-account reference
+
+This guide assumes you have never created a Google Cloud service account before. Production Management uses the **manual group connection model**: an administrator creates each Google Group in Google, then pastes its actual email into Production Management. The service-account path below is currently unavailable at Siena and is retained only in case policy changes.
 
 ## What you are setting up
 
