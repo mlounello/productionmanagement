@@ -312,6 +312,17 @@ grant execute on function app_production_management.submit_public_audition(uuid,
 grant execute on function app_production_management.manage_public_audition_submission(uuid, text, uuid) to anon, authenticated;
 grant execute on function app_production_management.upload_public_audition_file(uuid, text, text, text, bytea) to anon, authenticated;
 
+-- These tables are created after the foundation migration's schema-wide
+-- authenticated grant, so grant their underlying privileges explicitly. RLS
+-- policies below remain the authority for which rows each user may access.
+grant select, insert, update, delete on table
+  app_production_management.audition_form_sections,
+  app_production_management.audition_reviewer_permissions,
+  app_production_management.audition_reviews,
+  app_production_management.audition_files,
+  app_production_management.audition_export_audit
+to authenticated;
+
 alter table app_production_management.audition_form_sections enable row level security;
 alter table app_production_management.audition_reviewer_permissions enable row level security;
 alter table app_production_management.audition_reviews enable row level security;
