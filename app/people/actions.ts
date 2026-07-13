@@ -22,7 +22,9 @@ const personProfileSchema = z.object({
   affiliation: z.string().trim().max(160).optional(),
   personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"]),
   status: z.enum(["active", "inactive", "archived"]),
-  notes: z.string().trim().max(4000).optional()
+  notes: z.string().trim().max(4000).optional(),
+  publicityBio: z.string().trim().max(12000).optional(),
+  publicityHeadshotUrl: z.union([z.string().trim().url("Enter a complete headshot URL."), z.literal("")])
 });
 
 function requiredString(value: FormDataEntryValue | null) {
@@ -60,7 +62,9 @@ export async function updatePersonProfileAction(formData: FormData) {
     affiliation: optionalString(formData.get("affiliation")),
     personType: optionalString(formData.get("personType")) ?? "person",
     status: optionalString(formData.get("status")) ?? "active",
-    notes: optionalString(formData.get("notes"))
+    notes: optionalString(formData.get("notes")),
+    publicityBio: optionalString(formData.get("publicityBio")),
+    publicityHeadshotUrl: requiredString(formData.get("publicityHeadshotUrl")).trim()
   });
 
   if (!parsed.success) {
@@ -70,6 +74,9 @@ export async function updatePersonProfileAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  const { data: current } = await supabase.from("people").select("publicity_profile_version, publicity_bio, publicity_headshot_url").eq("id", input.id).maybeSingle();
+  const publicityChanged = String(current?.publicity_bio ?? "") !== (input.publicityBio ?? "")
+    || String(current?.publicity_headshot_url ?? "") !== input.publicityHeadshotUrl;
   const { error } = await supabase
     .from("people")
     .update({
@@ -84,7 +91,11 @@ export async function updatePersonProfileAction(formData: FormData) {
       affiliation: input.affiliation ?? "",
       person_type: input.personType,
       status: input.status,
-      notes: input.notes ?? ""
+      notes: input.notes ?? "",
+      publicity_bio: input.publicityBio ?? "",
+      publicity_headshot_url: input.publicityHeadshotUrl,
+      publicity_profile_version: Number(current?.publicity_profile_version ?? 1) + (publicityChanged ? 1 : 0),
+      publicity_profile_updated_at: publicityChanged ? new Date().toISOString() : undefined
     })
     .eq("id", input.id);
 

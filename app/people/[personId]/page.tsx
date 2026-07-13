@@ -20,6 +20,9 @@ type Person = {
   person_type: string;
   status: string;
   notes: string;
+  publicity_bio: string;
+  publicity_headshot_url: string;
+  publicity_profile_version: number;
 };
 
 type AssignmentRow = {
@@ -102,7 +105,7 @@ export default async function PersonPage({
     supabase
       .from("people")
       .select(
-        "id, first_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, notes"
+        "id, first_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, notes, publicity_bio, publicity_headshot_url, publicity_profile_version"
       )
       .eq("id", personId)
       .maybeSingle(),
@@ -276,6 +279,15 @@ export default async function PersonPage({
               <span>Profile notes</span>
               <textarea name="notes" defaultValue={typedPerson.notes} rows={4} />
             </label>
+            <label className="field">
+              <span>Reusable publicity bio</span>
+              <textarea name="publicityBio" defaultValue={typedPerson.publicity_bio} rows={10} />
+            </label>
+            <label className="field">
+              <span>Primary headshot URL</span>
+              <input name="publicityHeadshotUrl" defaultValue={typedPerson.publicity_headshot_url} type="url" placeholder="https://…" />
+            </label>
+            <p className="muted">Profile version {typedPerson.publicity_profile_version}. Production copies remain frozen until deliberately refreshed.</p>
             <button type="submit">Save profile</button>
           </form>
         </section>
@@ -290,9 +302,10 @@ export default async function PersonPage({
               </p>
             </div>
           </div>
-          <div className="headshot-placeholder">
-            <span>{typedPerson.full_name.slice(0, 1).toUpperCase()}</span>
-          </div>
+          {typedPerson.publicity_headshot_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={typedPerson.publicity_headshot_url} alt={`${typedPerson.full_name} headshot`} style={{ width: "100%", maxWidth: 320, borderRadius: 12 }} />
+          ) : <div className="headshot-placeholder"><span>{typedPerson.full_name.slice(0, 1).toUpperCase()}</span></div>}
         </section>
       </div>
 

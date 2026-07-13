@@ -9,6 +9,7 @@ import {
   fetchPlaybillShowRoleById,
   findPlaybillPerson,
   findPlaybillShowRole,
+  markBioSubmissionRequestSource,
   updatePlaybillPersonIdentity,
   updatePlaybillShowRole,
   type PlaybillPerson,
@@ -312,6 +313,7 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
   });
 
   const request = await ensureBioSubmissionRequest(showRole.id);
+  await markBioSubmissionRequestSource(showRole.id, "production_management");
   await replaceExternalLink(supabase, {
     local_entity_type: "role_assignment",
     local_entity_id: assignmentId,

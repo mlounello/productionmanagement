@@ -20,6 +20,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           </Link>
           <nav aria-label="Primary navigation">
             <Link href="/projects">Projects</Link>
+            {user ? <Link href="/my-profile">My Profile</Link> : null}
             {user ? <Link href="/people">People</Link> : null}
             {user ? <Link href="/settings/reference-data">Settings</Link> : null}
             {user ? (

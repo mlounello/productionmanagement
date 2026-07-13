@@ -11,6 +11,7 @@ export type PlaybillShow = {
   venue: string;
   season_tag: string;
   program_id: string | null;
+  bio_intake_mode: "playbill_standalone" | "production_managed" | "hybrid";
   programs: {
     id: string;
     title: string;
@@ -21,7 +22,20 @@ export type PlaybillShow = {
 };
 
 const showSelect =
+  "id, title, slug, status, is_published, start_date, end_date, venue, season_tag, program_id, bio_intake_mode, programs(id, title, slug, theatre_name, show_dates)";
+const legacyShowSelect =
   "id, title, slug, status, is_published, start_date, end_date, venue, season_tag, program_id, programs(id, title, slug, theatre_name, show_dates)";
+
+function withDefaultIntakeMode<T extends Record<string, unknown>>(row: T) {
+  return { ...row, bio_intake_mode: row.bio_intake_mode ?? "playbill_standalone" } as unknown as PlaybillShow;
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null, columns: string[]) {
+  if (!error) return false;
+  const message = String(error.message ?? "").toLowerCase();
+  return ["42703", "PGRST204"].includes(String(error.code ?? ""))
+    && columns.some((column) => message.includes(column.toLowerCase()));
+}
 
 export type PlaybillPersonInput = {
   programId: string;
@@ -83,7 +97,15 @@ export async function fetchPlaybillShows(): Promise<{
     .order("title", { ascending: true });
 
   if (error) {
-    return { data: [], error: error.message };
+    if (!isMissingColumnError(error, ["bio_intake_mode"])) return { data: [], error: error.message };
+    const { data: legacyData, error: legacyError } = await supabase
+      .schema("app_playbill")
+      .from("shows")
+      .select(legacyShowSelect)
+      .order("start_date", { ascending: false, nullsFirst: false })
+      .order("title", { ascending: true });
+    if (legacyError) return { data: [], error: error.message };
+    return { data: (legacyData ?? []).map((row) => withDefaultIntakeMode(row as Record<string, unknown>)), error: null };
   }
 
   return { data: (data ?? []) as unknown as PlaybillShow[], error: null };
@@ -99,7 +121,15 @@ export async function fetchPlaybillShowById(id: string) {
     .maybeSingle();
 
   if (error) {
-    throw new Error(error.message);
+    if (!isMissingColumnError(error, ["bio_intake_mode"])) throw new Error(error.message);
+    const { data: legacyData, error: legacyError } = await supabase
+      .schema("app_playbill")
+      .from("shows")
+      .select(legacyShowSelect)
+      .eq("id", id)
+      .maybeSingle();
+    if (legacyError) throw new Error(error.message);
+    return legacyData ? withDefaultIntakeMode(legacyData as Record<string, unknown>) : null;
   }
 
   return data as unknown as PlaybillShow | null;
@@ -147,28 +177,37 @@ export async function findPlaybillPerson(input: PlaybillPersonInput) {
 
 export async function createPlaybillPerson(input: PlaybillPersonInput) {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const baseRow = {
+    program_id: input.programId,
+    full_name: input.fullName,
+    first_name: input.firstName,
+    last_name: input.lastName,
+    preferred_name: input.preferredName,
+    pronouns: input.pronouns,
+    email: input.email,
+    role_title: input.roleTitle,
+    team_type: input.teamType,
+    bio: "",
+    submission_status: "pending",
+    submission_type: "bio"
+  };
+  let { data, error } = await supabase
     .schema("app_playbill")
     .from("people")
     .insert({
-      program_id: input.programId,
-      full_name: input.fullName,
-      first_name: input.firstName,
-      last_name: input.lastName,
-      preferred_name: input.preferredName,
-      pronouns: input.pronouns,
-      email: input.email,
-      role_title: input.roleTitle,
-      team_type: input.teamType,
-      bio: "",
-      submission_status: "pending",
-      submission_type: "bio"
+      ...baseRow,
+      submission_source: "production_management"
     })
     .select("id, program_id, full_name, first_name, last_name, preferred_name, pronouns, email, role_title, team_type")
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    if (!isMissingColumnError(error, ["submission_source"])) throw new Error(error.message);
+    const legacy = await supabase.schema("app_playbill").from("people").insert(baseRow)
+      .select("id, program_id, full_name, first_name, last_name, preferred_name, pronouns, email, role_title, team_type").single();
+    data = legacy.data;
+    error = legacy.error;
+    if (error) throw new Error(error.message);
   }
 
   return data as PlaybillPerson;
@@ -193,9 +232,7 @@ export async function updatePlaybillPersonIdentity(id: string, input: PlaybillPe
     .select("id, program_id, full_name, first_name, last_name, preferred_name, pronouns, email, role_title, team_type")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   return data as PlaybillPerson;
 }
@@ -286,9 +323,7 @@ export async function updatePlaybillShowRole(id: string, input: PlaybillRoleInpu
     .select("id, show_id, person_id, role_name, category")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   return data as PlaybillShowRole;
 }
@@ -312,23 +347,109 @@ export async function ensureBioSubmissionRequest(showRoleId: string) {
     return existing as PlaybillSubmissionRequest;
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .schema("app_playbill")
     .from("submission_requests")
     .insert({
       show_role_id: showRoleId,
       request_type: "bio",
       label: "Bio",
-      status: "draft"
+      status: "draft",
+      submission_source: "production_management"
     })
     .select("id, show_role_id, request_type, status")
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    if (!isMissingColumnError(error, ["submission_source"])) throw new Error(error.message);
+    const legacy = await supabase.schema("app_playbill").from("submission_requests").insert({
+      show_role_id: showRoleId,
+      request_type: "bio",
+      label: "Bio",
+      status: "draft"
+    }).select("id, show_role_id, request_type, status").single();
+    data = legacy.data;
+    error = legacy.error;
+    if (error) throw new Error(error.message);
   }
 
   return data as PlaybillSubmissionRequest;
+}
+
+export async function markBioSubmissionRequestSource(showRoleId: string, source: "playbill" | "production_management") {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .schema("app_playbill")
+    .from("submission_requests")
+    .update({ submission_source: source })
+    .eq("show_role_id", showRoleId)
+    .eq("request_type", "bio")
+    .select("id, show_role_id, request_type, status")
+    .single();
+  if (error) {
+    if (!isMissingColumnError(error, ["submission_source"])) throw new Error(error.message);
+    return ensureBioSubmissionRequest(showRoleId);
+  }
+  return data as PlaybillSubmissionRequest;
+}
+
+export async function updatePlaybillPersonPublicity(input: {
+  personId: string;
+  productionManagementPersonId: string;
+  productionManagementApprovalId: string;
+  profileVersion: number;
+  creditedName: string;
+  bio: string;
+  headshotUrl: string;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const submittedAt = new Date().toISOString();
+  let { data, error } = await supabase
+    .schema("app_playbill")
+    .from("people")
+    .update({
+      full_name: input.creditedName,
+      bio: input.bio,
+      headshot_url: input.headshotUrl,
+      submission_status: "submitted",
+      submitted_at: submittedAt,
+      submission_source: "production_management",
+      production_management_person_id: input.productionManagementPersonId,
+      production_management_approval_id: input.productionManagementApprovalId,
+      source_profile_version: input.profileVersion
+    })
+    .eq("id", input.personId)
+    .select("id")
+    .single();
+  if (error) {
+    if (!isMissingColumnError(error, ["submission_source", "production_management_person_id", "production_management_approval_id", "source_profile_version"])) throw new Error(error.message);
+    const legacy = await supabase.schema("app_playbill").from("people").update({
+      full_name: input.creditedName,
+      bio: input.bio,
+      headshot_url: input.headshotUrl,
+      submission_status: "submitted",
+      submitted_at: submittedAt
+    }).eq("id", input.personId).select("id").single();
+    data = legacy.data;
+    error = legacy.error;
+    if (error) throw new Error(error.message);
+  }
+  return data;
+}
+
+export async function markPlaybillBioRequestSubmitted(requestId: string) {
+  const supabase = await createSupabaseServerClient();
+  let { error } = await supabase
+    .schema("app_playbill")
+    .from("submission_requests")
+    .update({ status: "submitted", submission_source: "production_management" })
+    .eq("id", requestId);
+  if (error) {
+    if (!isMissingColumnError(error, ["submission_source"])) throw new Error(error.message);
+    const legacy = await supabase.schema("app_playbill").from("submission_requests").update({ status: "submitted" }).eq("id", requestId);
+    error = legacy.error;
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function deletePlaybillSubmissionRequestsForRole(showRoleId: string) {
