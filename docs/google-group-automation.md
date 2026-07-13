@@ -1,6 +1,6 @@
 # Google Group automation setup guide
 
-This guide assumes you have never created a Google Cloud service account before. Complete the sections in order. Nothing in Google will begin creating groups or changing memberships merely because you create the account; those actions begin only after the app is configured and its feature flags are enabled.
+This guide assumes you have never created a Google Cloud service account before. Complete the sections in order. Production Management uses the **manual group connection model**: an administrator creates each Google Group in Google, then pastes its actual email into Production Management. The app automates membership and custom welcome emails after that connection is saved.
 
 ## What you are setting up
 
@@ -14,7 +14,7 @@ There are three distinct pieces:
 
 The app uses:
 
-- **Admin SDK Directory API** to find/create groups and add/remove members.
+- **Admin SDK Directory API** to find groups and add/remove members. Group creation is performed manually in Google Admin.
 - **Groups Settings API** to configure external membership, posting, moderation, and spam settings.
 - **Resend**, not Gmail, to send the separate custom HTML welcome message.
 
@@ -199,10 +199,10 @@ Change either to `true` only after Siena IT confirms that the domain policy perm
 
 ### Feature flags
 
-For the first deployment, keep both off:
+Automatic group creation is not part of the active Siena workflow:
 
 - `ENABLE_GOOGLE_GROUP_SYNC=false`
-- `ENABLE_GOOGLE_GROUP_AUTO_CREATE=false`
+- `ENABLE_GOOGLE_GROUP_AUTO_CREATE=false` — leave this false.
 
 After changing Vercel variables, redeploy the current Production deployment so the running application receives the new values.
 
@@ -291,23 +291,20 @@ Do this only after Siena IT approves external members.
 
 These defaults are applied when the app creates/configures a group. They do not bypass Siena policy.
 
-## Part 14: Enable automatic group creation
+## Part 14: Repeat the manual connection for each role group
 
-Only proceed after manual lookup and membership synchronization work.
+For every production role group that needs email communication:
 
-1. Confirm `GOOGLE_GROUP_DOMAIN` and `GOOGLE_GROUP_EMAIL_SUFFIX` produce the expected proposed address.
-2. Create a disposable project/role group for the test.
-3. Set `ENABLE_GOOGLE_GROUP_AUTO_CREATE=true` in Vercel.
-4. Redeploy.
-5. Open the project's Google Groups page.
-6. Select **Auto create** and save.
-7. Click **Create Google Group**.
-8. Confirm the proposed address becomes the active address.
-9. Confirm the group exists in Google Admin.
-10. Review its member, posting, external-access, moderation, and spam settings.
-11. Assign an internal test person and verify membership.
+1. Review the suggested address in Production Management.
+2. Create the group manually in Google Admin using that address when available.
+3. Configure membership, posting, external access, moderation, and spam controls in Google Admin according to Siena policy.
+4. Copy the actual group email Google displays after creation. Do not assume it exactly matches the suggestion.
+5. In Production Management, choose **Manual existing group**.
+6. Paste the actual group email.
+7. Enable membership synchronization and the welcome email options desired for that role group.
+8. Save and click **Test Google Group Connection**.
 
-If the proposed group already exists, the app adopts it instead of attempting a destructive duplicate creation. If creation fails, switch to manual mode and enter an existing group. Both paths use the same active-group field and synchronization system.
+Leave `ENABLE_GOOGLE_GROUP_AUTO_CREATE=false`. All membership synchronization, unassignment handling, welcome emails, retry actions, and audit logging use the manually entered active address.
 
 ## Architecture and data behavior
 
@@ -323,7 +320,7 @@ Assignment creation remains authoritative. Google or email failures are recorded
 
 ### “Automatic Google Group creation is disabled”
 
-`ENABLE_GOOGLE_GROUP_AUTO_CREATE` is false or missing. This is expected during manual-mode testing.
+This is expected because Siena is using manual group creation. Leave `ENABLE_GOOGLE_GROUP_AUTO_CREATE=false`, create the group in Google Admin, and connect it using Manual existing group.
 
 ### “Google Group sync is disabled” or no membership change occurs
 
@@ -386,10 +383,9 @@ Confirm `202607122200_google_group_automation.sql` was applied to the correct da
 - Manually resend the welcome.
 - Remove a member when removal-on-unassign is enabled.
 - Leave a member when removal-on-unassign is disabled.
-- Create a disposable group automatically.
-- Adopt an already-existing proposed group.
+- Connect multiple manually created disposable groups.
 - Confirm a permission failure leaves the project assignment intact and writes an audit entry.
-- Confirm manual fallback works after auto-create failure.
+- Confirm each role group uses its manually entered active address.
 - Review external access, posting, moderation, and spam settings in Google Admin.
 
 Use designated test projects, groups, and addresses. Do not run acceptance tests against active production groups until Siena approves the API configuration.
