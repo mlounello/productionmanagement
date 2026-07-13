@@ -950,17 +950,17 @@ export async function deleteRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  try {
+    await vacateAssignmentInPlaybill(input.projectId, input.id);
+  } catch (syncError) {
+    redirect(projectErrorPath(input.projectId, `Could not vacate the linked Playbill role: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
+  }
   let googleWarning = "";
   try {
     const result = await removeAssignmentGoogleAutomation(input.projectId, input.id, user.id);
     googleWarning = result.warnings.join(" ");
   } catch (automationError) {
     googleWarning = automationError instanceof Error ? automationError.message : "Google Group removal could not run.";
-  }
-  try {
-    await vacateAssignmentInPlaybill(input.projectId, input.id);
-  } catch (syncError) {
-    redirect(projectErrorPath(input.projectId, `Could not vacate the linked Playbill role: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
   const { error } = await supabase.from("role_assignments").delete().eq("project_id", input.projectId).eq("id", input.id);
 
@@ -1244,17 +1244,17 @@ export async function replaceRoleAssignmentPersonAction(formData: FormData) {
     .maybeSingle();
   if (duplicateError) redirect(projectErrorPath(parsed.data.projectId, duplicateError.message));
   if (duplicateAssignment) redirect(projectErrorPath(parsed.data.projectId, "That person already has an assignment for this role."));
+  try {
+    await vacateAssignmentInPlaybill(parsed.data.projectId, parsed.data.assignmentId, true);
+  } catch (error) {
+    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not vacate the Playbill role."));
+  }
   let googleWarning = "";
   try {
     const result = await removeAssignmentGoogleAutomation(parsed.data.projectId, parsed.data.assignmentId, user.id);
     googleWarning = result.warnings.join(" ");
   } catch (automationError) {
     googleWarning = automationError instanceof Error ? automationError.message : "The prior Google Group membership could not be checked.";
-  }
-  try {
-    await vacateAssignmentInPlaybill(parsed.data.projectId, parsed.data.assignmentId, true);
-  } catch (error) {
-    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not vacate the Playbill role."));
   }
   const { error: unlinkBudgetError } = await supabase
     .from("external_links")
