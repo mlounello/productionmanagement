@@ -44,6 +44,7 @@ In the shared Supabase project, apply these in order before deploying the new Pr
 5. Production Management `supabase/migrations/202607132300_publicity_dashboard_automation.sql`
 6. Production Management `supabase/migrations/202607132310_publicity_sync_privilege_bridge.sql`
 7. Production Management `supabase/migrations/202607132320_publicity_bridge_owner_privileges.sql`
+8. Production Management `supabase/migrations/202607132330_profile_link_service_role_privileges.sql`
 
 The final migration adds deadlines, reminder tracking, the Playbill status mirror, narrow contributor RPCs, and the automatic cross-schema trigger. It also reconciles already-linked records by `production_management_approval_id`. It does not create people, projects, roles, or Playbill records.
 

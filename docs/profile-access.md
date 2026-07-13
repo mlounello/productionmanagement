@@ -19,6 +19,8 @@ Production Management profile access mirrors Playbill contributor access:
 
 Apply `supabase/migrations/202607132200_branded_profile_access_links.sql` before deploying the feature.
 
+Also apply `supabase/migrations/202607132330_profile_link_service_role_privileges.sql`. Supabase service-role keys bypass row-level security but still need explicit table privileges in a custom schema. This migration grants only the reads and writes used by branded links, reminder emails, and unlocked publicity/headshot propagation.
+
 ## Customize the message
 
 Open **Settings → Profile Access Email**. The subject and HTML body support:
