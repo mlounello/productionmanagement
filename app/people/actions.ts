@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { syncPersonAssignmentsToPlaybill } from "@/lib/playbill-sync";
 import { sendBrandedProfileAccessLink } from "@/lib/profile-access-links";
+import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
 const personIdSchema = z.string().uuid();
 
@@ -25,7 +26,7 @@ const personProfileSchema = z.object({
   personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"]),
   status: z.enum(["active", "inactive", "archived"]),
   notes: z.string().trim().max(4000).optional(),
-  publicityBio: z.string().trim().max(12000).optional(),
+  publicityBio: z.string().trim().max(5000).optional(),
   publicityHeadshotUrl: z.union([z.string().trim().url("Enter a complete headshot URL."), z.literal("")])
 });
 
@@ -76,9 +77,13 @@ export async function updatePersonProfileAction(formData: FormData) {
   }
 
   const input = parsed.data;
+  const cleanPublicityBio = sanitizeRichText(input.publicityBio ?? "");
+  if (stripRichTextToPlain(cleanPublicityBio).length > 350) {
+    redirect(peopleErrorPath(input.id, "The reusable publicity bio must be 350 visible characters or fewer."));
+  }
   const supabase = await createSupabaseServerClient();
   const { data: current } = await supabase.from("people").select("publicity_profile_version, publicity_bio, publicity_headshot_url").eq("id", input.id).maybeSingle();
-  const publicityChanged = String(current?.publicity_bio ?? "") !== (input.publicityBio ?? "")
+  const publicityChanged = String(current?.publicity_bio ?? "") !== cleanPublicityBio
     || String(current?.publicity_headshot_url ?? "") !== input.publicityHeadshotUrl;
   const { error } = await supabase
     .from("people")
@@ -95,7 +100,7 @@ export async function updatePersonProfileAction(formData: FormData) {
       affiliation: input.affiliation ?? "",
       person_type: input.personType,
       status: input.status,
-      publicity_bio: input.publicityBio ?? "",
+      publicity_bio: cleanPublicityBio,
       publicity_headshot_url: input.publicityHeadshotUrl,
       publicity_profile_version: Number(current?.publicity_profile_version ?? 1) + (publicityChanged ? 1 : 0),
       publicity_profile_updated_at: publicityChanged ? new Date().toISOString() : undefined

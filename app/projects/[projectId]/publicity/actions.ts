@@ -7,13 +7,14 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 import { sendPublicityReminder } from "@/lib/profile-access-links";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 const uuid = z.string().uuid();
 const copySchema = z.object({
   projectId: uuid,
   submissionId: uuid,
   creditedName: z.string().trim().min(1, "Credited name is required.").max(180),
-  bio: z.string().trim().max(12000),
+  bio: z.string().trim().max(20000),
   headshotUrl: z.union([z.string().trim().url("Enter a complete headshot URL."), z.literal("")])
 });
 
@@ -95,12 +96,14 @@ export async function saveProjectPublicityCopyAction(formData: FormData) {
     redirect(path(projectId, "error", parsed.error.issues[0]?.message ?? "Invalid publicity copy."));
   }
   const supabase = await createSupabaseServerClient();
+  const cleanBio = sanitizeRichText(parsed.data.bio);
+  if (cleanBio.length > 12000) redirect(path(parsed.data.projectId, "error", "This formatted production bio is too long."));
   const { data: existing } = await supabase.from("project_publicity_submissions")
     .select("playbill_submission_status").eq("id", parsed.data.submissionId).eq("project_id", parsed.data.projectId).maybeSingle();
   if (existing?.playbill_submission_status === "locked") redirect(path(parsed.data.projectId, "error", "This copy is locked in Playbill and is read-only."));
   const { error } = await supabase.from("project_publicity_submissions").update({
     credited_name: parsed.data.creditedName,
-    bio: parsed.data.bio,
+    bio: cleanBio,
     headshot_url: parsed.data.headshotUrl,
     status: "draft",
     person_approved_at: null,

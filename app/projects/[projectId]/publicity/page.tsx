@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
+import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import {
   prepareProjectPublicityAction,
   refreshPublicityFromProfileAction,
@@ -135,6 +136,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           );
           const profileChanged = Number(assignment.people?.publicity_profile_version ?? 1) > item.source_profile_version;
           const isLocked = item.playbill_submission_status === "locked";
+          const previewRole = rolesByPerson.get(assignment.person_id)?.join(", ") || "Production role";
           return (
             <section className="panel workspace-section" key={assignment.id}>
               <div className="section-heading">
@@ -142,13 +144,13 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
                 <div className="top-actions">{profileChanged && !isLocked ? <span className="status-badge gold">New profile version available</span> : null}<span className={`status-badge${isLocked ? " gold" : ""}`}>{isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`}</span></div>
               </div>
               {item.playbill_sync_error ? <p className="setup-warning">{item.playbill_sync_error}</p> : null}
-              <form action={saveProjectPublicityCopyAction} className="stacked-form">
+              {!isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">
                 <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} />
-                <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={item.credited_name} required readOnly={isLocked} /></label>
-                <label className="field"><span>Production bio</span><textarea name="bio" defaultValue={item.bio} rows={8} readOnly={isLocked} /></label>
-                <label className="field"><span>Production headshot URL</span><input name="headshotUrl" type="url" defaultValue={item.headshot_url} placeholder="https://…" readOnly={isLocked} /></label>
-                {!isLocked ? <button type="submit">Save production copy</button> : null}
-              </form>
+                <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={item.credited_name} required /></label>
+                <PublicityBioField name="bio" label="Production bio" initialValue={item.bio} previewName={item.credited_name} previewRole={previewRole} compact />
+                <label className="field"><span>Production headshot URL</span><input name="headshotUrl" type="url" defaultValue={item.headshot_url} placeholder="https://…" /></label>
+                <button type="submit">Save production copy</button>
+              </form> : <PublicityBioPreview bio={item.bio} name={item.credited_name} role={previewRole} />}
               <div className="top-actions" style={{ marginTop: 12 }}>
                 {!isLocked ? <form action={refreshPublicityFromProfileAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button className="button secondary" type="submit">Refresh from profile</button></form> : null}
                 {!isLocked && ['draft', 'changes_requested'].includes(item.status) ? <form action={requestPublicityApprovalAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Request person approval</button></form> : null}

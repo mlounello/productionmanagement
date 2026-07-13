@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SITE_URL } from "@/lib/config";
 import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
 const profileSchema = z.object({
   personId: z.string().uuid(),
@@ -18,7 +19,7 @@ const profileSchema = z.object({
   pronouns: z.string().trim().max(80).optional(),
   vendorNumber: z.string().trim().max(40).optional(),
   phone: z.string().trim().max(40).optional(),
-  bio: z.string().trim().max(350, "Your reusable bio must be 350 characters or fewer.").optional()
+  bio: z.string().trim().max(5000).optional()
 });
 
 function optional(formData: FormData, name: string) {
@@ -50,6 +51,10 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
     bio: optional(formData, "bio")
   });
   if (!parsed.success) redirect(`/my-profile?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid profile.")}`);
+  const cleanBio = sanitizeRichText(parsed.data.bio ?? "");
+  if (stripRichTextToPlain(cleanBio).length > 350) {
+    redirect("/my-profile?error=Your%20reusable%20bio%20must%20be%20350%20visible%20characters%20or%20fewer.");
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: person, error: personError } = await supabase
@@ -69,7 +74,7 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
     new_pronouns: parsed.data.pronouns ?? "",
     new_vendor_number: parsed.data.vendorNumber ?? "",
     new_phone: parsed.data.phone ?? "",
-    new_publicity_bio: parsed.data.bio ?? ""
+    new_publicity_bio: cleanBio
   });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
 
@@ -134,7 +139,9 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
 export async function updateMyProjectPublicityBioAction(formData: FormData) {
   await requireUser();
   const submissionId = z.string().uuid().parse(String(formData.get("submissionId") ?? ""));
-  const bio = z.string().trim().max(12000, "This production bio is too long.").parse(String(formData.get("bio") ?? ""));
+  const rawBio = z.string().trim().max(20000, "This production bio is too long.").parse(String(formData.get("bio") ?? ""));
+  const bio = sanitizeRichText(rawBio);
+  if (bio.length > 12000) redirect("/my-profile?error=This%20formatted%20production%20bio%20is%20too%20long.");
   const supabase = await createSupabaseServerClient();
   const { data: before, error: readError } = await supabase.from("project_publicity_submissions")
     .select("id, project_id, status, playbill_submission_status")

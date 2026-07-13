@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
+import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import {
   approveMyPublicitySubmissionAction,
   connectMyProfileAction,
@@ -18,7 +19,7 @@ type Profile = {
 };
 type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; projects: { title: string } | null };
 type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null };
-type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
+type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { id: string; title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
 type Accomplishment = { id: string; title: string; accomplishment_type: string; issuer: string; awarded_on: string | null; description: string; projects: { title: string } | null };
 type VisibleNote = { id: string; note: string; created_at: string; projects: { title: string } | null };
 
@@ -50,7 +51,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   const typedProfile = profile as Profile;
   const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }] = await Promise.all([
     supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
-    supabase.from("role_assignments").select("id, status, is_guest_artist, projects(title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
+    supabase.from("role_assignments").select("id, status, is_guest_artist, projects(id, title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
     supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).order("awarded_on", { ascending: false }),
     supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
     supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on")
@@ -60,6 +61,15 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   const accomplishmentRows = (accomplishments ?? []) as unknown as Accomplishment[];
   const noteRows = (notes ?? []) as unknown as VisibleNote[];
   const settingsByProject = new Map(((publicitySettings ?? []) as PublicitySettings[]).map((item) => [item.project_id, item]));
+  const rolesByProject = new Map<string, string[]>();
+  for (const assignment of assignmentRows) {
+    const projectId = assignment.projects?.id;
+    const role = assignment.project_roles?.name;
+    if (!projectId || !role) continue;
+    const roles = rolesByProject.get(projectId) ?? [];
+    if (!roles.includes(role)) roles.push(role);
+    rolesByProject.set(projectId, roles);
+  }
 
   return (
     <div className="page workspace-page">
@@ -86,8 +96,8 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
               <label className="field"><span>90#</span><input name="vendorNumber" defaultValue={typedProfile.vendor_number} /></label>
             </div>
             <label className="field"><span>Phone number</span><input name="phone" type="tel" defaultValue={typedProfile.phone} /></label>
-            <label className="field"><span>Overall publicity bio (350 characters maximum)</span><textarea name="bio" rows={7} maxLength={350} defaultValue={typedProfile.publicity_bio} /></label>
-            <p className="muted">{typedProfile.publicity_bio.length}/350 characters · Profile version {typedProfile.publicity_profile_version}. New productions begin with this bio; each show then keeps its own editable copy.</p>
+            <PublicityBioField name="bio" label="Overall publicity bio" initialValue={typedProfile.publicity_bio} previewName={typedProfile.preferred_name || typedProfile.full_name} previewRole="Role supplied by each production" characterLimit={350} />
+            <p className="muted">Profile version {typedProfile.publicity_profile_version}. New productions begin with this reusable 350-character bio; each show then keeps its own editable copy.</p>
             <button type="submit">Save my profile</button>
           </form>
 
@@ -129,13 +139,14 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
         {submissionRows.length ? submissionRows.map((submission) => {
           const settings = settingsByProject.get(submission.project_id);
           const locked = submission.playbill_submission_status === "locked";
+          const previewRole = rolesByProject.get(submission.project_id)?.join(", ") || "Production role";
           return <article className="panel" key={submission.id}>
             <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><p className="muted">Your approval: {formatStatus(submission.status)} · Playbill: {formatStatus(submission.playbill_submission_status)}</p></div><span className={`status-badge${locked ? " gold" : ""}`}>{locked ? "Final & locked" : `v${submission.source_profile_version}`}</span></div>
             <p className="muted">Bio due: {formatDate(settings?.bio_due_on ?? null)} · Headshot due: {formatDate(settings?.headshot_due_on ?? null)}</p>
             <p><strong>Credit:</strong> {submission.credited_name}</p>
-            {locked ? <p style={{ whiteSpace: "pre-wrap" }}>{submission.bio || "No bio supplied."}</p> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
+            {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
               <input type="hidden" name="submissionId" value={submission.id} />
-              <label className="field"><span>Bio for {submission.projects?.title ?? "this production"}</span><textarea name="bio" rows={8} defaultValue={submission.bio} /></label>
+              <PublicityBioField name="bio" label={`Bio for ${submission.projects?.title ?? "this production"}`} initialValue={submission.bio} previewName={submission.credited_name} previewRole={previewRole} compact />
               <button type="submit" className="secondary">Save show-specific bio</button>
             </form>}
             {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}

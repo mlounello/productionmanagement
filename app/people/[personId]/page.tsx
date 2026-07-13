@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { sendPersonProfileAccessLinkAction, updatePersonProfileAction } from "@/app/people/actions";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
+import { PublicityBioField } from "@/components/publicity-bio-field";
 
 export const dynamic = "force-dynamic";
 
@@ -287,10 +288,7 @@ export default async function PersonPage({
               <span>Profile notes</span>
               <textarea name="notes" defaultValue={String(managementDetails?.notes ?? "")} rows={4} />
             </label>
-            <label className="field">
-              <span>Reusable publicity bio</span>
-              <textarea name="publicityBio" defaultValue={typedPerson.publicity_bio} rows={10} />
-            </label>
+            <PublicityBioField name="publicityBio" label="Reusable publicity bio" initialValue={typedPerson.publicity_bio} previewName={typedPerson.preferred_name || typedPerson.full_name} previewRole="Role supplied by each production" characterLimit={350} compact />
             <label className="field">
               <span>Primary headshot URL</span>
               <input name="publicityHeadshotUrl" defaultValue={typedPerson.publicity_headshot_url} type="url" placeholder="https://…" />
