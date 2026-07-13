@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type");
-  const next = url.searchParams.get("next") || "/projects";
+  const requestedNext = url.searchParams.get("next") || "/projects";
+  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/projects";
   const origin = url.origin;
   const { applyCookies, cookieName, isSecure, supabase } = createSupabaseRouteClient(request);
   const stampCallback = (
@@ -37,6 +38,13 @@ export async function GET(request: NextRequest) {
     });
     return response;
   };
+  const prepareProfile = async () => {
+    if (!next.startsWith("/my-profile")) return null;
+    const { error: claimError } = await supabase.rpc("claim_my_person_profile");
+    if (claimError) return claimError.message;
+    const { error: emailError } = await supabase.rpc("sync_my_person_email");
+    return emailError?.message ?? null;
+  };
 
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
@@ -52,7 +60,9 @@ export async function GET(request: NextRequest) {
         }
       );
     }
-    const response = applyCookies(NextResponse.redirect(new URL(next, origin)));
+    const profileError = await prepareProfile();
+    const destination = profileError ? `/my-profile?error=${encodeURIComponent(profileError)}` : next;
+    const response = applyCookies(NextResponse.redirect(new URL(destination, origin)));
     const persisted =
       cookieName && data?.session
         ? persistSupabaseSessionCookie({
@@ -90,7 +100,9 @@ export async function GET(request: NextRequest) {
         }
       );
     }
-    const response = applyCookies(NextResponse.redirect(new URL(next, origin)));
+    const profileError = await prepareProfile();
+    const destination = profileError ? `/my-profile?error=${encodeURIComponent(profileError)}` : next;
+    const response = applyCookies(NextResponse.redirect(new URL(destination, origin)));
     const persisted =
       cookieName && data?.session
         ? persistSupabaseSessionCookie({

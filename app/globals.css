@@ -1006,6 +1006,42 @@ legend {
   max-width: 280px;
 }
 
+.headshot-uploader {
+  display: grid;
+  gap: 14px;
+}
+
+.headshot-crop-canvas {
+  aspect-ratio: 1;
+  border: 2px solid var(--siena-green);
+  border-radius: 12px;
+  display: block;
+  height: auto;
+  max-width: 420px;
+  width: 100%;
+}
+
+.headshot-crop-controls {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+
+.headshot-crop-controls label {
+  display: grid;
+  gap: 4px;
+}
+
+.headshot-crop-controls span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.headshot-crop-controls input[type="range"] {
+  width: 100%;
+}
+
 .mini-stack {
   display: grid;
   gap: 5px;

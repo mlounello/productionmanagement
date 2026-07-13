@@ -3,6 +3,7 @@ import { hasSupabaseEnv, SITE_URL } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/auth";
 import { GoogleLoginButton } from "@/app/login/google-login-button";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ export default async function LoginPage({
           </div>
           <button type="submit">Send magic link</button>
         </form>
+        <p className="muted">Only updating your contributor profile? <Link href="/profile-access">Request a secure profile link</Link>.</p>
       </section>
     </div>
   );

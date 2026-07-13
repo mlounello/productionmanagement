@@ -2,13 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { updatePersonProfileAction } from "@/app/people/actions";
+import { sendPersonProfileAccessLinkAction, updatePersonProfileAction } from "@/app/people/actions";
+import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
 
 export const dynamic = "force-dynamic";
 
 type Person = {
   id: string;
   first_name: string;
+  middle_name: string;
   last_name: string;
   preferred_name: string;
   full_name: string;
@@ -19,7 +21,6 @@ type Person = {
   affiliation: string;
   person_type: string;
   status: string;
-  notes: string;
   publicity_bio: string;
   publicity_headshot_url: string;
   publicity_profile_version: number;
@@ -100,12 +101,13 @@ export default async function PersonPage({
     { data: assignments },
     { data: notes },
     { data: accomplishments },
-    { data: personExternalLinks }
+    { data: personExternalLinks },
+    { data: managementDetails }
   ] = await Promise.all([
     supabase
       .from("people")
       .select(
-        "id, first_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, notes, publicity_bio, publicity_headshot_url, publicity_profile_version"
+        "id, first_name, middle_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_bio, publicity_headshot_url, publicity_profile_version"
       )
       .eq("id", personId)
       .maybeSingle(),
@@ -131,7 +133,8 @@ export default async function PersonPage({
       .from("external_links")
       .select("id, external_app, external_schema, external_table, external_id, sync_direction, sync_status")
       .eq("local_entity_type", "person")
-      .eq("local_entity_id", personId)
+      .eq("local_entity_id", personId),
+    supabase.from("person_management_details").select("notes").eq("person_id", personId).maybeSingle()
   ]);
 
   if (!person) {
@@ -168,6 +171,10 @@ export default async function PersonPage({
           </p>
         </div>
         <div className="top-actions">
+          <form action={sendPersonProfileAccessLinkAction}>
+            <input type="hidden" name="personId" value={typedPerson.id} />
+            <button type="submit">Send secure profile link</button>
+          </form>
           <Link className="button secondary" href="/people">
             People
           </Link>
@@ -219,10 +226,11 @@ export default async function PersonPage({
                 <input name="firstName" defaultValue={typedPerson.first_name} />
               </label>
               <label className="field">
-                <span>Last name</span>
-                <input name="lastName" defaultValue={typedPerson.last_name} />
+                <span>Middle name</span>
+                <input name="middleName" defaultValue={typedPerson.middle_name} />
               </label>
             </div>
+            <label className="field"><span>Last name</span><input name="lastName" defaultValue={typedPerson.last_name} /></label>
             <div className="form-row">
               <label className="field">
                 <span>Preferred name</span>
@@ -277,7 +285,7 @@ export default async function PersonPage({
             </div>
             <label className="field">
               <span>Profile notes</span>
-              <textarea name="notes" defaultValue={typedPerson.notes} rows={4} />
+              <textarea name="notes" defaultValue={String(managementDetails?.notes ?? "")} rows={4} />
             </label>
             <label className="field">
               <span>Reusable publicity bio</span>
@@ -298,7 +306,7 @@ export default async function PersonPage({
               <p className="eyebrow">Headshot</p>
               <h2>Playbill-Ready Asset</h2>
               <p className="muted">
-                Upload/storage comes next. This profile is the intended home for reusable headshots that can later feed Playbill.
+                Crop and save a reusable 1:1 headshot for Production Management, Playbill, and Propared.
               </p>
             </div>
           </div>
@@ -306,6 +314,7 @@ export default async function PersonPage({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={typedPerson.publicity_headshot_url} alt={`${typedPerson.full_name} headshot`} style={{ width: "100%", maxWidth: 320, borderRadius: 12 }} />
           ) : <div className="headshot-placeholder"><span>{typedPerson.full_name.slice(0, 1).toUpperCase()}</span></div>}
+          <ProfileHeadshotUploader personId={typedPerson.id} />
         </section>
       </div>
 

@@ -6,12 +6,14 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { syncPersonAssignmentsToPlaybill } from "@/lib/playbill-sync";
+import { SITE_URL } from "@/lib/config";
 
 const personIdSchema = z.string().uuid();
 
 const personProfileSchema = z.object({
   id: personIdSchema,
   firstName: z.string().trim().max(80).optional(),
+  middleName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
   preferredName: z.string().trim().max(120).optional(),
   fullName: z.string().trim().min(1, "Person name is required.").max(180),
@@ -52,6 +54,7 @@ export async function updatePersonProfileAction(formData: FormData) {
   const parsed = personProfileSchema.safeParse({
     id: requiredString(formData.get("id")),
     firstName: optionalString(formData.get("firstName")),
+    middleName: optionalString(formData.get("middleName")),
     lastName: optionalString(formData.get("lastName")),
     preferredName: optionalString(formData.get("preferredName")),
     fullName: requiredString(formData.get("fullName")),
@@ -81,6 +84,7 @@ export async function updatePersonProfileAction(formData: FormData) {
     .from("people")
     .update({
       first_name: input.firstName ?? "",
+      middle_name: input.middleName ?? "",
       last_name: input.lastName ?? "",
       preferred_name: input.preferredName ?? "",
       full_name: input.fullName,
@@ -91,7 +95,6 @@ export async function updatePersonProfileAction(formData: FormData) {
       affiliation: input.affiliation ?? "",
       person_type: input.personType,
       status: input.status,
-      notes: input.notes ?? "",
       publicity_bio: input.publicityBio ?? "",
       publicity_headshot_url: input.publicityHeadshotUrl,
       publicity_profile_version: Number(current?.publicity_profile_version ?? 1) + (publicityChanged ? 1 : 0),
@@ -103,6 +106,12 @@ export async function updatePersonProfileAction(formData: FormData) {
     redirect(peopleErrorPath(input.id, error.message));
   }
 
+  const { error: managementError } = await supabase.from("person_management_details").upsert({
+    person_id: input.id,
+    notes: input.notes ?? ""
+  }, { onConflict: "person_id" });
+  if (managementError) redirect(peopleErrorPath(input.id, `Profile details saved, but management notes failed: ${managementError.message}`));
+
   try {
     await syncPersonAssignmentsToPlaybill(input.id);
   } catch (syncError) {
@@ -112,4 +121,22 @@ export async function updatePersonProfileAction(formData: FormData) {
   revalidatePath("/people");
   revalidatePath(`/people/${input.id}`);
   redirect(peopleSuccessPath(input.id, "Profile saved."));
+}
+
+export async function sendPersonProfileAccessLinkAction(formData: FormData) {
+  await requireUser();
+  const personId = personIdSchema.parse(requiredString(formData.get("personId")));
+  const supabase = await createSupabaseServerClient();
+  const { data: person, error: readError } = await supabase.from("people").select("email").eq("id", personId).maybeSingle();
+  if (readError || !person) redirect(peopleErrorPath(personId, readError?.message ?? "Person not found."));
+  const email = String(person.email ?? "").trim().toLowerCase();
+  if (!email) redirect(peopleErrorPath(personId, "Add an email address before sending profile access."));
+
+  const next = encodeURIComponent("/my-profile");
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: `${SITE_URL}/auth/callback?next=${next}`, shouldCreateUser: true }
+  });
+  if (error) redirect(peopleErrorPath(personId, error.message));
+  redirect(peopleSuccessPath(personId, `Secure profile access sent to ${email}.`));
 }
