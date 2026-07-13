@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { syncPersonAssignmentsToPlaybill } from "@/lib/playbill-sync";
-import { SITE_URL } from "@/lib/config";
+import { sendBrandedProfileAccessLink } from "@/lib/profile-access-links";
 
 const personIdSchema = z.string().uuid();
 
@@ -124,7 +124,7 @@ export async function updatePersonProfileAction(formData: FormData) {
 }
 
 export async function sendPersonProfileAccessLinkAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const personId = personIdSchema.parse(requiredString(formData.get("personId")));
   const supabase = await createSupabaseServerClient();
   const { data: person, error: readError } = await supabase.from("people").select("email").eq("id", personId).maybeSingle();
@@ -132,11 +132,10 @@ export async function sendPersonProfileAccessLinkAction(formData: FormData) {
   const email = String(person.email ?? "").trim().toLowerCase();
   if (!email) redirect(peopleErrorPath(personId, "Add an email address before sending profile access."));
 
-  const next = encodeURIComponent("/my-profile");
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${SITE_URL}/auth/callback?next=${next}`, shouldCreateUser: true }
-  });
-  if (error) redirect(peopleErrorPath(personId, error.message));
+  try {
+    await sendBrandedProfileAccessLink(personId, user.id);
+  } catch (error) {
+    redirect(peopleErrorPath(personId, error instanceof Error ? error.message : "Could not send secure profile access."));
+  }
   redirect(peopleSuccessPath(personId, `Secure profile access sent to ${email}.`));
 }

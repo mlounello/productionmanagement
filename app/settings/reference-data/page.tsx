@@ -45,9 +45,7 @@ export default async function ReferenceDataPage({
             Manage reusable institutional options used by projects, calendar items, roles, and future modules.
           </p>
         </div>
-        <Link className="button secondary" href="/projects">
-          Projects
-        </Link>
+        <div className="top-actions"><Link className="button secondary" href="/settings/profile-access">Profile Access Email</Link><Link className="button secondary" href="/projects">Projects</Link></div>
       </div>
 
       {params?.error ? <p className="setup-warning">{params.error}</p> : null}
