@@ -115,6 +115,19 @@ This adds the last-checked timestamp and new audit action types. It does not con
 
 When a new role assignment is created, Production Management automatically runs the same read-only check. A missing membership produces a visible warning but never blocks the assignment.
 
+### Group checks, whole-project checks, and communication skips
+
+- **Check memberships for this group only** checks assignments whose roles belong to that specific role group.
+- **Check memberships for all groups** at the top of the page checks the entire project.
+- Membership-check buttons never send welcome emails. Welcome delivery occurs during a new assignment or through the explicit resend action.
+- **Skip communications** applies to one role assignment. It bypasses Google membership checks, Propared/welcome email, and manual Google-removal reminders for that assignment.
+- If the same person has another assignment, that other assignment keeps its own independent communication setting.
+- **Restore communications** re-enables the assignment but does not immediately send anything; run a membership check or use the appropriate welcome action when ready.
+
+Apply this migration before using assignment communication skips:
+
+`supabase/migrations/202607131500_assignment_communication_skips.sql`
+
 ### Add the role group's Propared link
 
 Each role group has a **Propared Production Book link** field on the Google Groups page.

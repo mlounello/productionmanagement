@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createOrAdoptGoogleGroup, generateGoogleGroupEmail } from "@/lib/google-groups";
 import { testGoogleGroupMembershipAccess } from "@/lib/google-group-membership";
-import { resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
+import { checkAssignmentGoogleMembership, resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { renderTemplate, sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -110,20 +110,49 @@ export async function sendRoleGroupWelcomeTestAction(formData: FormData) {
 
 export async function retryAssignmentGoogleSyncAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const assignmentId = uuid.parse(formData.get("assignmentId")); const { user } = await context(projectId);
-  const result = await syncAssignmentGoogleAutomation(projectId, assignmentId, user.id); redirect(route(projectId, result.warnings.length ? result.warnings.join(" ") : "Google Group membership verified.", result.warnings.length > 0));
+  const result = await checkAssignmentGoogleMembership(projectId, assignmentId, user.id); redirect(route(projectId, result.skipped ? "That assignment is skipped." : result.warnings.length ? result.warnings.join(" ") : result.status === "verified" ? "Google Group membership verified." : `Membership check status: ${result.status.replace(/_/g, " ")}.`, result.warnings.length > 0));
 }
 
 export async function recheckRoleGroupMembershipsAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
-  const { data: assignments, error } = await supabase.from("role_assignments").select("id, project_roles!inner(role_group)").eq("project_id", projectId).eq("project_roles.role_group", roleGroupSlug);
+  const { data: roles, error: roleError } = await supabase.from("project_roles").select("id").eq("project_id", projectId).eq("role_group", roleGroupSlug);
+  if (roleError) redirect(route(projectId, roleError.message, true));
+  const roleIds = (roles ?? []).map((role) => String(role.id));
+  const { data: assignments, error } = roleIds.length ? await supabase.from("role_assignments").select("id").eq("project_id", projectId).in("role_id", roleIds) : { data: [], error: null };
   if (error) redirect(route(projectId, error.message, true));
-  let verified = 0; let needsAttention = 0;
+  let verified = 0; let needsAttention = 0; let skipped = 0;
   for (const assignment of assignments ?? []) {
-    try { const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id); if (result.warnings.length) needsAttention += 1; else verified += 1; }
+    try { const result = await checkAssignmentGoogleMembership(projectId, String(assignment.id), user.id); if (result.skipped || !["verified", "missing", "failed"].includes(result.status)) skipped += 1; else if (result.warnings.length) needsAttention += 1; else verified += 1; }
     catch { needsAttention += 1; }
   }
   revalidatePath(route(projectId));
-  redirect(route(projectId, `${verified} verified; ${needsAttention} need attention.`, needsAttention > 0));
+  redirect(route(projectId, `${roleGroupSlug.replace(/_/g, " ")}: ${verified} verified; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
+}
+
+export async function recheckAllGoogleMembershipsAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId")); const { user, supabase } = await context(projectId);
+  const { data: assignments, error } = await supabase.from("role_assignments").select("id").eq("project_id", projectId);
+  if (error) redirect(route(projectId, error.message, true));
+  let verified = 0; let needsAttention = 0; let skipped = 0;
+  for (const assignment of assignments ?? []) {
+    try { const result = await checkAssignmentGoogleMembership(projectId, String(assignment.id), user.id); if (result.skipped || !["verified", "missing", "failed"].includes(result.status)) skipped += 1; else if (result.warnings.length) needsAttention += 1; else verified += 1; }
+    catch { needsAttention += 1; }
+  }
+  revalidatePath(route(projectId));
+  redirect(route(projectId, `All groups: ${verified} verified; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
+}
+
+export async function setAssignmentGoogleAutomationSkippedAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId")); const assignmentId = uuid.parse(formData.get("assignmentId")); const skipped = formData.get("skipped") === "true"; const { user, supabase } = await context(projectId);
+  const reason = skipped ? z.string().trim().max(500).parse(formData.get("skipReason")) || "Excluded from role-group communications." : "";
+  const { data: assignment, error: lookupError } = await supabase.from("role_assignments").select("id, person_id, project_roles(role_group), people(email)").eq("project_id", projectId).eq("id", assignmentId).single();
+  if (lookupError || !assignment) redirect(route(projectId, lookupError?.message ?? "Assignment not found.", true));
+  const { error } = await supabase.from("role_assignments").update({ google_automation_skipped: skipped, google_automation_skip_reason: reason, google_group_sync_status: skipped ? "skipped" : "not_attempted", google_group_sync_error: skipped ? reason : "", welcome_email_status: skipped ? "skipped" : "not_attempted", welcome_email_error: skipped ? reason : "" }).eq("id", assignmentId);
+  if (error) redirect(route(projectId, error.message, true));
+  const role = assignment.project_roles as unknown as { role_group: string } | null; const person = assignment.people as unknown as { email: string } | null;
+  await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: role?.role_group ?? "", role_assignment_id: assignmentId, person_id: assignment.person_id, actor_user_id: user.id, email_address: person?.email ?? "", action_type: skipped ? "assignment_automation_skipped" : "assignment_automation_resumed", status: "success", error_message: reason });
+  revalidatePath(route(projectId));
+  redirect(route(projectId, skipped ? "Assignment excluded from group checks and welcome communications." : "Assignment communications restored; run a membership check when ready."));
 }
 
 export async function resendAssignmentWelcomeAction(formData: FormData) {

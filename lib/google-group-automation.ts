@@ -6,16 +6,16 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 type Context = {
   assignmentId: string; projectId: string; personId: string; personName: string; personEmail: string;
-  projectTitle: string; roleName: string; roleGroup: string;
+  projectTitle: string; roleName: string; roleGroup: string; automationSkipped: boolean; automationSkipReason: string;
 };
 
 async function assignmentContext(supabase: Client, projectId: string, assignmentId: string): Promise<Context> {
-  const { data, error } = await supabase.from("role_assignments").select("id, project_id, person_id, project_roles(name, role_group), people(full_name, preferred_name, email), projects(title)").eq("id", assignmentId).eq("project_id", projectId).single();
+  const { data, error } = await supabase.from("role_assignments").select("id, project_id, person_id, google_automation_skipped, google_automation_skip_reason, project_roles(name, role_group), people(full_name, preferred_name, email), projects(title)").eq("id", assignmentId).eq("project_id", projectId).single();
   if (error || !data) throw new Error(error?.message ?? "Assignment not found.");
   const person = data.people as unknown as { full_name: string; preferred_name: string; email: string } | null;
   const role = data.project_roles as unknown as { name: string; role_group: string } | null;
   const project = data.projects as unknown as { title: string } | null;
-  return { assignmentId, projectId, personId: String(data.person_id), personName: person?.preferred_name || person?.full_name || "Production team member", personEmail: person?.email?.trim().toLowerCase() || "", projectTitle: project?.title || "Production", roleName: role?.name || "Role", roleGroup: role?.role_group || "" };
+  return { assignmentId, projectId, personId: String(data.person_id), personName: person?.preferred_name || person?.full_name || "Production team member", personEmail: person?.email?.trim().toLowerCase() || "", projectTitle: project?.title || "Production", roleName: role?.name || "Role", roleGroup: role?.role_group || "", automationSkipped: Boolean(data.google_automation_skipped), automationSkipReason: String(data.google_automation_skip_reason ?? "") };
 }
 
 async function log(supabase: Client, context: Context, settings: { active_google_group_email?: string }, actionType: string, status: "success" | "failed" | "skipped", actorUserId: string | null, errorMessage = "", providerResponse: Record<string, unknown> = {}) {
@@ -50,10 +50,14 @@ async function sendWelcome(supabase: Client, context: Context, settings: Record<
   }
 }
 
-export async function syncAssignmentGoogleAutomation(projectId: string, assignmentId: string, actorUserId: string | null = null) {
+export async function checkAssignmentGoogleMembership(projectId: string, assignmentId: string, actorUserId: string | null = null) {
   const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).maybeSingle();
-  if (!settings) return { warnings: [] as string[] };
+  if (context.automationSkipped) {
+    await supabase.from("role_assignments").update({ google_group_sync_status: "skipped", google_group_sync_error: context.automationSkipReason, welcome_email_status: "skipped", welcome_email_error: context.automationSkipReason }).eq("id", assignmentId);
+    return { warnings: [] as string[], skipped: true, status: "skipped" };
+  }
+  if (!settings) return { warnings: [] as string[], skipped: false, status: "not_configured" };
   const warnings: string[] = []; let groupStatus = "skipped";
   if (settings.google_group_sync_enabled && settings.active_google_group_email) {
     if (!ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK) groupStatus = "disabled";
@@ -65,15 +69,25 @@ export async function syncAssignmentGoogleAutomation(projectId: string, assignme
       await log(supabase, context, settings, isMember ? "membership_checked_present" : "membership_checked_missing", isMember ? "success" : "failed", actorUserId, warning, { isMember });
     } catch (error) { groupStatus = "failed"; const warning = error instanceof Error ? error.message : "Google Group membership check failed."; warnings.push(warning); await log(supabase, context, settings, "membership_check_failed", "failed", actorUserId, warning); }
   }
-  const welcome = await sendWelcome(supabase, context, settings, actorUserId);
-  if (welcome.warning) warnings.push(welcome.warning);
-  await supabase.from("role_assignments").update({ google_group_sync_status: groupStatus, google_group_sync_error: ["failed", "missing"].includes(groupStatus) ? warnings[0] ?? "Membership check failed." : "", google_group_membership_checked_at: ["verified", "missing"].includes(groupStatus) ? new Date().toISOString() : null, welcome_email_status: welcome.status, welcome_email_error: welcome.warning }).eq("id", assignmentId);
+  await supabase.from("role_assignments").update({ google_group_sync_status: groupStatus, google_group_sync_error: ["failed", "missing"].includes(groupStatus) ? warnings[0] ?? "Membership check failed." : "", google_group_membership_checked_at: ["verified", "missing"].includes(groupStatus) ? new Date().toISOString() : null }).eq("id", assignmentId);
   await supabase.from("project_role_group_google_settings").update({ last_sync_status: groupStatus, last_sync_error: warnings.join(" "), last_synced_at: new Date().toISOString() }).eq("id", settings.id);
-  return { warnings };
+  return { warnings, skipped: false, status: groupStatus };
+}
+
+export async function syncAssignmentGoogleAutomation(projectId: string, assignmentId: string, actorUserId: string | null = null) {
+  const membership = await checkAssignmentGoogleMembership(projectId, assignmentId, actorUserId);
+  if (membership.skipped) return { warnings: [] as string[] };
+  const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
+  const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).maybeSingle();
+  if (!settings) return { warnings: membership.warnings };
+  const welcome = await sendWelcome(supabase, context, settings, actorUserId);
+  await supabase.from("role_assignments").update({ welcome_email_status: welcome.status, welcome_email_error: welcome.warning }).eq("id", assignmentId);
+  return { warnings: [...membership.warnings, ...(welcome.warning ? [welcome.warning] : [])] };
 }
 
 export async function removeAssignmentGoogleAutomation(projectId: string, assignmentId: string, actorUserId: string | null = null) {
   const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
+  if (context.automationSkipped) return { warnings: [] as string[] };
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).maybeSingle();
   if (!settings?.remove_from_google_group_on_unassign || !settings.google_group_sync_enabled || !settings.active_google_group_email || !context.personEmail) return { warnings: [] as string[] };
   const warning = `Remove ${context.personEmail} manually from ${settings.active_google_group_email}.`;
@@ -83,6 +97,7 @@ export async function removeAssignmentGoogleAutomation(projectId: string, assign
 
 export async function resendAssignmentWelcome(projectId: string, assignmentId: string, actorUserId: string | null) {
   const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
+  if (context.automationSkipped) return { warnings: [context.automationSkipReason || "Communications are skipped for this assignment."] };
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).single();
   const result = await sendWelcome(supabase, context, settings ?? {}, actorUserId, true); return { warnings: result.warning ? [result.warning] : [] };
 }
