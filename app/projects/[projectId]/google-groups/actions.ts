@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { createOrAdoptGoogleGroup, generateGoogleGroupEmail } from "@/lib/google-groups";
 import { testGoogleGroupMembershipAccess } from "@/lib/google-group-membership";
 import { resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
+import { renderTemplate, sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const uuid = z.string().uuid();
@@ -37,6 +38,7 @@ export async function saveRoleGroupGoogleSettingsAction(formData: FormData) {
     google_group_sync_enabled: mode !== "disabled" && formData.get("googleGroupSyncEnabled") === "on",
     welcome_email_enabled: formData.get("welcomeEmailEnabled") === "on",
     welcome_email_template_id: String(formData.get("welcomeEmailTemplateId") ?? "") || null,
+    propared_role_group_link: z.string().trim().url().or(z.literal("")).parse(formData.get("proparedRoleGroupLink")),
     remove_from_google_group_on_unassign: formData.get("removeOnUnassign") === "on"
   }, { onConflict: "project_id,role_group" });
   if (error) redirect(route(projectId, error.message, true)); revalidatePath(route(projectId)); redirect(route(projectId, "Role-group Google settings saved."));
@@ -78,6 +80,32 @@ export async function createRoleGroupWelcomeTemplateAction(formData: FormData) {
   if (error || !template) redirect(route(projectId, error?.message ?? "Could not create template.", true));
   await supabase.from("project_role_group_google_settings").upsert({ project_id: projectId, role_group: roleGroupSlug, welcome_email_template_id: template.id }, { onConflict: "project_id,role_group" });
   redirect(route(projectId, "HTML welcome template created and selected."));
+}
+
+export async function sendRoleGroupWelcomeTestAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
+  const toEmail = z.string().trim().email().parse(formData.get("testEmail"));
+  const previewName = z.string().trim().min(1).max(120).parse(formData.get("previewName"));
+  const previewRole = z.string().trim().min(1).max(180).parse(formData.get("previewRole"));
+  const [{ data: project }, { data: settings }] = await Promise.all([
+    supabase.from("projects").select("title").eq("id", projectId).single(),
+    supabase.from("project_role_group_google_settings").select("active_google_group_email, propared_role_group_link, welcome_email_template_id").eq("project_id", projectId).eq("role_group", roleGroupSlug).single()
+  ]);
+  if (!project || !settings?.welcome_email_template_id) redirect(route(projectId, "Select and save a welcome template before sending a test.", true));
+  const { data: template, error: templateError } = await supabase.from("email_templates").select("subject_template, body_template").eq("id", settings.welcome_email_template_id).eq("active", true).single();
+  if (templateError || !template) redirect(route(projectId, templateError?.message ?? "Welcome template not found.", true));
+  const variables = { person_name: previewName, project_title: String(project.title), role_name: previewRole, role_group: roleGroupSlug.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? ""), propared_rolegroup_link: String(settings.propared_role_group_link ?? "") };
+  const subject = `[TEST] ${renderTemplate(String(template.subject_template), variables)}`;
+  const html = `<p style="padding:10px;background:#fff3cd;border:1px solid #e6cc75;"><strong>Test email:</strong> This preview was sent only to ${toEmail}. It did not contact the Google Group or mark a welcome email as delivered.</p>${renderTemplate(String(template.body_template), variables, true)}`;
+  try {
+    const provider = await sendHtmlEmail({ to: toEmail, subject, html });
+    await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: roleGroupSlug, actor_user_id: user.id, email_address: toEmail, active_google_group_email: settings.active_google_group_email, action_type: "welcome_email_test_sent", status: "success", provider_response: { id: provider.id } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Test email failed.";
+    await supabase.from("google_group_action_log").insert({ project_id: projectId, role_group: roleGroupSlug, actor_user_id: user.id, email_address: toEmail, active_google_group_email: settings.active_google_group_email, action_type: "welcome_email_test_failed", status: "failed", error_message: message });
+    redirect(route(projectId, message, true));
+  }
+  redirect(route(projectId, `Test welcome email sent only to ${toEmail}.`));
 }
 
 export async function retryAssignmentGoogleSyncAction(formData: FormData) {

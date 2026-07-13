@@ -115,6 +115,30 @@ This adds the last-checked timestamp and new audit action types. It does not con
 
 When a new role assignment is created, Production Management automatically runs the same read-only check. A missing membership produces a visible warning but never blocks the assignment.
 
+### Add the role group's Propared link
+
+Each role group has a **Propared Production Book link** field on the Google Groups page.
+
+1. Paste the Propared URL intended for that role group.
+2. Save the manual group connection.
+3. Use `{{propared_rolegroup_link}}` anywhere in the welcome subject or HTML body.
+
+The same template can be selected for multiple role groups. At delivery time, Production Management substitutes the Propared link stored on the recipient's role group.
+
+### Send a welcome-email test safely
+
+1. Select and save the welcome template for the role group.
+2. Save the Propared link.
+3. Expand **Send a safe test email**.
+4. Enter one test recipient address, plus the sample person and role names you want to preview.
+5. Click **Send test to this address only**.
+
+The test subject is prefixed with `[TEST]`, and the email contains a visible test banner. It is sent only to the exact test address entered. It does not send to the Google Group, assign a person, create a welcome-delivery record, or prevent the real recipient from later receiving their welcome.
+
+Apply this migration before using the Propared field or test-email action:
+
+`supabase/migrations/202607131400_propared_role_group_links_and_email_tests.sql`
+
 ### 8. Updating the Apps Script later
 
 Editing and saving `Code.gs` does not automatically update the deployed `/exec` version.

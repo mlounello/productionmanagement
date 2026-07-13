@@ -33,7 +33,7 @@ async function sendWelcome(supabase: Client, context: Context, settings: Record<
   if (templateError || !template) {
     const message = templateError?.message ?? "Welcome email template is unavailable."; await log(supabase, context, settings, "welcome_email_failed", "failed", actorUserId, message); return { status: "failed", warning: message };
   }
-  const variables = { person_name: context.personName, project_title: context.projectTitle, role_name: context.roleName, role_group: context.roleGroup.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? "") };
+  const variables = { person_name: context.personName, project_title: context.projectTitle, role_name: context.roleName, role_group: context.roleGroup.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? ""), propared_rolegroup_link: String(settings.propared_role_group_link ?? "") };
   const subject = renderTemplate(String(template.subject_template), variables); const html = renderTemplate(String(template.body_template), variables, true);
   const { data: message } = await supabase.from("email_messages").insert({ project_id: context.projectId, person_id: context.personId, template_id: template.id, message_type: "role_group_welcome", to_email: context.personEmail, subject, body: html, status: "queued", created_by: actorUserId }).select("id").single();
   try {
