@@ -61,6 +61,7 @@ for all to authenticated
 using (
   app_production_management.has_app_role(array['admin', 'producer'])
   or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff']))
+)
 with check (
   app_production_management.has_app_role(array['admin', 'producer'])
   or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff']))
