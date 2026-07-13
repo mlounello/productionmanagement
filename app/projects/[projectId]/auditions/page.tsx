@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditionFormBuilder } from "@/components/audition-form-builder";
+import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
@@ -46,6 +47,7 @@ export default async function AuditionsAdminPage({ params, searchParams }: { par
 
   return <div className="page audition-admin-page">
     <div className="page-header"><div><p className="eyebrow">Phase 4 · {project.title}</p><h1>Auditions</h1><p className="muted">Build forms, schedule flexible audition blocks, review applicants, generate packets, and cast directly into project roles.</p></div><div className="top-actions"><Link className="button secondary" href={`/projects/${projectId}`}>Back to project</Link></div></div>
+    <ProjectWorkspaceNav projectId={projectId} active="auditions" />
     {query?.error ? <p className="setup-warning">{query.error}</p> : null}{query?.success ? <p className="success-message">{query.success}</p> : null}
     {!canManage ? <p className="setup-warning">You can review audition materials but only the production manager or director can change the workflow.</p> : null}
     <nav className="workspace-nav" aria-label="Audition sections"><a href="#access">Access</a><a href="#forms">Forms</a><a href="#schedule">Schedule</a><a href="#review">Applicants</a><a href="#exports">Packets & Supplements</a></nav>

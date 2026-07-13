@@ -214,6 +214,77 @@ h2 {
   margin: -4px 0 16px;
 }
 
+.project-workspace-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 20px;
+  overflow-x: auto;
+  padding: 4px 0 10px;
+  scrollbar-width: thin;
+}
+
+.project-workspace-tabs a {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 9px 13px;
+  text-decoration: none;
+}
+
+.project-workspace-tabs a:hover,
+.project-workspace-tabs a.active {
+  background: var(--siena-green);
+  border-color: var(--siena-green);
+  color: #fff;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 22px;
+}
+
+.dashboard-module-full { grid-column: 1 / -1; }
+.dashboard-module-compact { align-self: start; }
+
+.dashboard-kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+
+.dashboard-kpis > div {
+  background: #f6f8f7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.dashboard-kpis strong,
+.dashboard-kpis span { display: block; }
+.dashboard-kpis strong { font-size: 22px; }
+.dashboard-kpis span { color: var(--muted); font-size: 12px; }
+.dashboard-module-link { display: inline-block; font-weight: 750; margin-top: 14px; }
+
+.dashboard-builder-list { display: grid; gap: 10px; }
+.dashboard-builder-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  padding: 12px;
+}
+.dashboard-builder-row strong,
+.dashboard-builder-row span { display: block; }
+.dashboard-builder-row span { color: var(--muted); font-size: 12px; }
+
 .workspace-nav a {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1215,6 +1286,8 @@ legend {
   .workspace-summary,
   .settings-grid,
   .reference-groups,
+  .dashboard-grid,
+  .dashboard-builder-row,
   .assignment-create-form,
   .assignment-edit-form,
   .person-note-form,

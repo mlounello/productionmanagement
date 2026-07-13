@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import {
   approveAndSyncPublicityAction,
   prepareProjectPublicityAction,
@@ -70,6 +71,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
         <div><p className="eyebrow">Publicity Workflow</p><h1>{project.title}</h1><p className="muted">Reusable profiles feed frozen production copies. Only person-approved and editorially approved copy is sent to Playbill.</p></div>
         <div className="top-actions"><Link className="button secondary" href={`/projects/${projectId}`}>Project</Link><Link className="button secondary" href="/my-profile">My Profile</Link></div>
       </div>
+      <ProjectWorkspaceNav projectId={projectId} active="publicity" />
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
       {query?.success ? <p className="setup-success">{query.success}</p> : null}
 

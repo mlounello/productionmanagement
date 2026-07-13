@@ -35,6 +35,7 @@ import { ProjectCalendar } from "@/components/project-calendar";
 import { BulkRoleImport } from "@/components/bulk-role-import";
 import { BulkAssignmentForms } from "@/components/bulk-assignment-forms";
 import { ProjectGantt, type ProjectGanttSection } from "@/components/project-gantt";
+import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
@@ -345,10 +346,12 @@ export default async function ProjectPage({
   searchParams
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams?: Promise<{ error?: string; success?: string }>;
+  searchParams?: Promise<{ error?: string; success?: string; workspace?: string }>;
 }) {
   const { projectId } = await params;
   const query = await searchParams;
+  const allowedWorkspaces = new Set(["overview", "calendar", "timeline", "roles", "people", "integrations", "run-of-show"]);
+  const workspace = allowedWorkspaces.has(query?.workspace ?? "") ? String(query?.workspace) : "overview";
   await requireUser();
   const supabase = await createSupabaseServerClient();
   const { data: project } = await supabase
@@ -605,21 +608,9 @@ export default async function ProjectPage({
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
       {query?.success ? <p className="setup-success">{query.success}</p> : null}
 
-      <nav className="workspace-nav" aria-label="Project workspace sections">
-        <Link href={`/projects/${typedProject.id}/publicity`}>Publicity</Link>
-        <Link href={`/projects/${typedProject.id}/auditions`}>Auditions</Link>
-        <Link href={`/projects/${typedProject.id}/google-groups`}>Google Groups</Link>
-        <a href="#calendar">Calendar</a>
-        <a href="#gantt">Gantt</a>
-        <a href="#timeline-groups">Timeline Groups</a>
-        <a href="#roles">Roles</a>
-        <a href="#people">People</a>
-        <a href="#assignments">Assignments</a>
-        <a href="#integrations">Integrations</a>
-        <a href="#run-of-show">Run of Show</a>
-      </nav>
+      <ProjectWorkspaceNav projectId={typedProject.id} active={workspace} />
 
-      <section className="workspace-summary" aria-label="Project summary">
+      <section className="workspace-summary" aria-label="Project summary" hidden={workspace !== "overview"}>
         <div>
           <span>{items.length}</span>
           <p>Calendar Items</p>
@@ -638,7 +629,19 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <section className="panel workspace-section" id="integrations">
+      {workspace === "overview" ? (
+        <section className="panel workspace-section">
+          <div className="section-heading"><div><p className="eyebrow">Project At A Glance</p><h2>Choose your workspace</h2><p className="muted">Open a focused workspace above, or build reusable dashboard views from the modules you use most.</p></div><Link className="button" href={`/projects/${typedProject.id}/dashboards`}>Build a dashboard</Link></div>
+          <div className="workspace-summary">
+            <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>
+            <div><span>{runRows.length}</span><p>Run Items</p></div>
+            <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Warnings</p></div>
+            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Links Needed</p></div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="panel workspace-section" id="integrations" hidden={workspace !== "integrations"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Integrations</p>
@@ -746,6 +749,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
+      <div hidden={workspace !== "calendar"}>
       <ProjectCalendar
         calendarItemTypes={calendarItemTypes.map((itemType) => ({
           id: itemType.id,
@@ -771,8 +775,9 @@ export default async function ProjectPage({
           isActive: group.is_active
         }))}
       />
+      </div>
 
-      <section className="panel workspace-section" id="timeline-groups">
+      <section className="panel workspace-section" id="timeline-groups" hidden={workspace !== "timeline"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Planning Core</p>
@@ -819,7 +824,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <section className="panel workspace-section">
+      <section className="panel workspace-section" hidden={workspace !== "calendar"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Project Scope</p>
@@ -868,7 +873,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <div className="workspace-grid single">
+      <div className="workspace-grid single" hidden={workspace !== "timeline"}>
         <section className="panel workspace-main" id="gantt">
           <div className="section-heading">
             <div>
@@ -888,7 +893,7 @@ export default async function ProjectPage({
 
       </div>
 
-      <section className="panel workspace-section">
+      <section className="panel workspace-section" hidden={workspace !== "calendar"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Production Calendar</p>
@@ -929,7 +934,7 @@ export default async function ProjectPage({
       </section>
 
       <div className="grid two workspace-lower">
-        <section className="panel" id="roles">
+        <section className="panel" id="roles" hidden={workspace !== "roles"}>
           <div className="section-heading">
             <div>
               <p className="eyebrow">People Structure</p>
@@ -1043,7 +1048,7 @@ export default async function ProjectPage({
           </div>
         </section>
 
-        <section className="panel" id="people">
+        <section className="panel" id="people" hidden={workspace !== "people"}>
           <div className="section-heading">
             <div>
               <p className="eyebrow">People Files</p>
@@ -1114,7 +1119,7 @@ export default async function ProjectPage({
         </section>
       </div>
 
-      <section className="panel workspace-section" id="assignments">
+      <section className="panel workspace-section" id="assignments" hidden={workspace !== "roles"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Main MVP Spine</p>
@@ -1430,7 +1435,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <section className="panel workspace-section">
+      <section className="panel workspace-section" hidden={workspace !== "people"}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">People Files</p>
@@ -1532,7 +1537,7 @@ export default async function ProjectPage({
         </div>
       </section>
 
-      <div className="grid two workspace-lower">
+      <div className="grid two workspace-lower" hidden={workspace !== "run-of-show"}>
         <section className="panel" id="run-of-show">
           <div className="section-heading">
             <div>

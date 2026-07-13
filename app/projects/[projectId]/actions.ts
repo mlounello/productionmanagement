@@ -251,20 +251,24 @@ function timestampFromInput(datetimeValue?: string, dateValue?: string) {
   return datetimeToTimestamp(datetimeValue) ?? dateToTimestamp(dateValue);
 }
 
-function projectErrorPath(projectId: string, message: string) {
-  return `/projects/${projectId}?error=${encodeURIComponent(message)}`;
+function projectErrorPath(projectId: string, message: string, workspace?: string) {
+  const params = new URLSearchParams({ error: message });
+  if (workspace) params.set("workspace", workspace);
+  return `/projects/${projectId}?${params.toString()}`;
 }
 
-function projectSuccessPath(projectId: string, message: string) {
-  return `/projects/${projectId}?success=${encodeURIComponent(message)}`;
+function projectSuccessPath(projectId: string, message: string, workspace?: string) {
+  const params = new URLSearchParams({ success: message });
+  if (workspace) params.set("workspace", workspace);
+  return `/projects/${projectId}?${params.toString()}`;
 }
 
 function projectAssignmentErrorPath(projectId: string, message: string) {
-  return `${projectErrorPath(projectId, message)}#assignments`;
+  return `${projectErrorPath(projectId, message, "roles")}#assignments`;
 }
 
 function projectAssignmentSuccessPath(projectId: string, message: string) {
-  return `${projectSuccessPath(projectId, message)}#assignments`;
+  return `${projectSuccessPath(projectId, message, "roles")}#assignments`;
 }
 
 function slugify(value: string) {
@@ -415,7 +419,7 @@ export async function createCalendarItemAction(formData: FormData) {
   const { error } = await supabase.from("calendar_items").insert(payload);
 
   if (error) {
-    redirect(projectErrorPath(input.projectId, error.message));
+    redirect(projectErrorPath(input.projectId, error.message, "calendar"));
   }
 
   revalidatePath(`/projects/${input.projectId}`);
@@ -490,7 +494,7 @@ export async function createProjectRoleAction(formData: FormData) {
     redirect(projectErrorPath(input.projectId, `Role created, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectSuccessPath(input.projectId, "Role created and synced to the linked draft Playbill show when available."));
+  redirect(projectSuccessPath(input.projectId, "Role created and synced to the linked draft Playbill show when available.", "roles"));
 }
 
 export async function bulkCreateProjectRolesAction(formData: FormData) {
@@ -536,7 +540,7 @@ export async function bulkCreateProjectRolesAction(formData: FormData) {
     }
   }
   revalidatePath(`/projects/${projectId.data}`);
-  redirect(projectSuccessPath(projectId.data, `${created?.length ?? 0} roles created${failed ? `; ${failed} need Playbill retry` : " and synced when linked"}.`));
+  redirect(projectSuccessPath(projectId.data, `${created?.length ?? 0} roles created${failed ? `; ${failed} need Playbill retry` : " and synced when linked"}.`, "roles"));
 }
 
 export async function copyProjectRolesAction(formData: FormData) {
@@ -569,7 +573,7 @@ export async function copyProjectRolesAction(formData: FormData) {
     }
   }
   revalidatePath(`/projects/${parsed.data.projectId}`);
-  redirect(projectSuccessPath(parsed.data.projectId, `${created?.length ?? 0} roles copied and queued for integration.`));
+  redirect(projectSuccessPath(parsed.data.projectId, `${created?.length ?? 0} roles copied and queued for integration.`, "roles"));
 }
 
 export async function updateProjectRoleAction(formData: FormData) {
@@ -620,7 +624,7 @@ export async function updateProjectRoleAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectSuccessPath(input.projectId, "Role saved."));
+  redirect(projectSuccessPath(input.projectId, "Role saved.", "roles"));
 }
 
 export async function createPersonAction(formData: FormData) {
@@ -1000,11 +1004,11 @@ export async function addPersonNoteAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(projectErrorPath(input.projectId, error.message));
+    redirect(projectErrorPath(input.projectId, error.message, "people"));
   }
 
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectSuccessPath(input.projectId, "Person note added."));
+  redirect(projectSuccessPath(input.projectId, "Person note added.", "people"));
 }
 
 export async function linkTheatreBudgetGuestArtistAction(formData: FormData) {
