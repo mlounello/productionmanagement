@@ -60,11 +60,11 @@ on app_production_management.project_publicity_submissions
 for all to authenticated
 using (
   app_production_management.has_app_role(array['admin', 'producer'])
-  or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff']))
+  or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff'])
 )
 with check (
   app_production_management.has_app_role(array['admin', 'producer'])
-  or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff']))
+  or app_production_management.has_project_role(project_id, array['project_manager', 'producer', 'department_head', 'staff'])
 );
 
 drop policy if exists "publicity owner approve" on app_production_management.project_publicity_submissions;
