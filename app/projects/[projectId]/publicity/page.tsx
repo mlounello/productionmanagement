@@ -42,7 +42,7 @@ type Publicity = {
   last_reminder_sent_at: string | null;
   reminder_count: number;
 };
-type PublicitySettings = { bio_due_on: string | null; headshot_due_on: string | null; reminders_enabled: boolean };
+type PublicitySettings = { bio_due_on: string | null; headshot_due_on: string | null; reminders_enabled: boolean; bio_character_limit: number };
 
 function label(value: string) {
   return value.split("_").map((part) => part.slice(0, 1).toUpperCase() + part.slice(1)).join(" ");
@@ -58,7 +58,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
     supabase.from("role_assignments").select("id, person_id, status, people(full_name, email, auth_user_id, publicity_profile_version), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)").order("created_at"),
     supabase.from("project_publicity_submissions").select("id, person_id, credited_name, bio, headshot_url, source_profile_version, status, person_approved_at, editorial_approved_at, playbill_sync_status, playbill_sync_error, playbill_synced_at, playbill_submission_status, playbill_locked_at, last_reminder_sent_at, reminder_count").eq("project_id", projectId),
     supabase.from("external_links").select("id").eq("local_entity_type", "project").eq("local_entity_id", projectId).eq("external_app", "playbill").eq("external_table", "shows").maybeSingle(),
-    supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled").eq("project_id", projectId).maybeSingle()
+    supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
   ]);
   if (!project) notFound();
 
@@ -111,6 +111,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
         <form action={savePublicitySettingsAction} className="stacked-form">
           <input type="hidden" name="projectId" value={projectId} />
           <div className="form-row"><label className="field"><span>Bio due</span><input type="date" name="bioDueOn" defaultValue={publicitySettings?.bio_due_on ?? ""} /></label><label className="field"><span>Headshot due</span><input type="date" name="headshotDueOn" defaultValue={publicitySettings?.headshot_due_on ?? ""} /></label></div>
+          <label className="field"><span>Show-specific bio character limit</span><input type="number" name="bioCharacterLimit" min={50} max={5000} step={1} defaultValue={publicitySettings?.bio_character_limit ?? 350} required /><small>Counts visible text only; formatting does not use the character allowance.</small></label>
           <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow publicity reminder emails</span></label>
           <button type="submit">Save publicity settings</button>
         </form>
@@ -147,7 +148,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
               {!isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">
                 <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} />
                 <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={item.credited_name} required /></label>
-                <PublicityBioField name="bio" label="Production bio" initialValue={item.bio} previewName={item.credited_name} previewRole={previewRole} compact />
+                <PublicityBioField name="bio" label="Production bio" initialValue={item.bio} previewName={item.credited_name} previewRole={previewRole} characterLimit={publicitySettings?.bio_character_limit ?? 350} compact />
                 <label className="field"><span>Production headshot URL</span><input name="headshotUrl" type="url" defaultValue={item.headshot_url} placeholder="https://…" /></label>
                 <button type="submit">Save production copy</button>
               </form> : <PublicityBioPreview bio={item.bio} name={item.credited_name} role={previewRole} />}

@@ -18,7 +18,7 @@ type Profile = {
   publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number;
 };
 type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; projects: { title: string } | null };
-type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null };
+type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null; bio_character_limit: number };
 type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { id: string; title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
 type Accomplishment = { id: string; title: string; accomplishment_type: string; issuer: string; awarded_on: string | null; description: string; projects: { title: string } | null };
 type VisibleNote = { id: string; note: string; created_at: string; projects: { title: string } | null };
@@ -54,7 +54,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
     supabase.from("role_assignments").select("id, status, is_guest_artist, projects(id, title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
     supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).order("awarded_on", { ascending: false }),
     supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
-    supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on")
+    supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on, bio_character_limit")
   ]);
   const submissionRows = (submissions ?? []) as unknown as Submission[];
   const assignmentRows = (assignments ?? []) as unknown as Assignment[];
@@ -146,7 +146,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             <p><strong>Credit:</strong> {submission.credited_name}</p>
             {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
               <input type="hidden" name="submissionId" value={submission.id} />
-              <PublicityBioField name="bio" label={`Bio for ${submission.projects?.title ?? "this production"}`} initialValue={submission.bio} previewName={submission.credited_name} previewRole={previewRole} compact />
+              <PublicityBioField name="bio" label={`Bio for ${submission.projects?.title ?? "this production"}`} initialValue={submission.bio} previewName={submission.credited_name} previewRole={previewRole} characterLimit={settings?.bio_character_limit ?? 350} compact />
               <button type="submit" className="secondary">Save show-specific bio</button>
             </form>}
             {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}

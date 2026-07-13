@@ -104,7 +104,7 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: submission, error: readError } = await supabase
     .from("project_publicity_submissions")
-    .select("id, project_id, person_id, status")
+    .select("id, project_id, person_id, status, bio")
     .eq("id", submissionId)
     .maybeSingle();
   if (readError || !submission) redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Submission not found.")}`);
@@ -113,6 +113,12 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   if (!person) redirect("/my-profile?error=That%20submission%20does%20not%20belong%20to%20you.");
   if (!['draft', 'awaiting_person_approval', 'changes_requested'].includes(String(submission.status))) {
     redirect("/my-profile?error=This%20production%20copy%20is%20not%20awaiting%20your%20approval.");
+  }
+  const { data: publicitySettings } = await supabase.from("project_publicity_settings")
+    .select("bio_character_limit").eq("project_id", submission.project_id).maybeSingle();
+  const bioLimit = Number(publicitySettings?.bio_character_limit ?? 350);
+  if (stripRichTextToPlain(String(submission.bio ?? "")).length > bioLimit) {
+    redirect(`/my-profile?error=${encodeURIComponent(`Shorten this show-specific bio to ${bioLimit} characters before approving it.`)}`);
   }
 
   const { error } = await supabase.rpc("approve_my_project_publicity", { target_submission_id: submissionId });
@@ -149,6 +155,12 @@ export async function updateMyProjectPublicityBioAction(formData: FormData) {
     .maybeSingle();
   if (readError || !before) redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Production publicity record not found.")}`);
   if (before.playbill_submission_status === "locked") redirect("/my-profile?error=This%20Playbill%20submission%20is%20locked.");
+  const { data: publicitySettings } = await supabase.from("project_publicity_settings")
+    .select("bio_character_limit").eq("project_id", before.project_id).maybeSingle();
+  const bioLimit = Number(publicitySettings?.bio_character_limit ?? 350);
+  if (stripRichTextToPlain(bio).length > bioLimit) {
+    redirect(`/my-profile?error=${encodeURIComponent(`This production limits bios to ${bioLimit} visible characters.`)}`);
+  }
 
   const { error } = await supabase.rpc("update_my_project_publicity_bio", {
     target_submission_id: submissionId,
