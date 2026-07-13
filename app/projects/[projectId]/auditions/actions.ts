@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { optionalMusicFields, standardAuditionFields, standardAuditionSections } from "@/lib/auditions";
+import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const uuid = z.string().uuid();
@@ -39,12 +40,12 @@ function path(projectId: string, message?: string, error?: boolean) {
 }
 
 async function context(projectId: string) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = uuid.parse(projectId);
   const supabase = await createSupabaseServerClient();
   const { data: allowed } = await supabase.rpc("can_manage_auditions", { target_project_id: parsed });
   if (!allowed) throw new Error("You do not have permission to manage auditions for this project.");
-  return { projectId: parsed, supabase };
+  return { projectId: parsed, supabase, user };
 }
 
 async function reviewContext(projectId: string) {
@@ -242,13 +243,20 @@ export async function castAuditionSubmissionAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId"));
   const submissionId = uuid.parse(formData.get("submissionId"));
   const roleId = uuid.parse(formData.get("roleId"));
-  const { supabase } = await context(projectId);
+  const { supabase, user } = await context(projectId);
   const { data: submission } = await supabase.from("audition_submissions").select("person_id").eq("id", submissionId).eq("project_id", projectId).single();
   if (!submission) redirect(path(projectId, "Submission not found.", true));
-  const { error } = await supabase.from("role_assignments").upsert({ project_id: projectId, role_id: roleId, person_id: submission.person_id, status: "draft", assignment_kind: String(formData.get("assignmentKind") ?? "primary") }, { onConflict: "role_id,person_id" });
+  const { data: assignment, error } = await supabase.from("role_assignments").upsert({ project_id: projectId, role_id: roleId, person_id: submission.person_id, status: "draft", assignment_kind: String(formData.get("assignmentKind") ?? "primary") }, { onConflict: "role_id,person_id" }).select("id").single();
   if (error) redirect(path(projectId, error.message, true));
+  let googleWarning = "";
+  try {
+    const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id);
+    googleWarning = result.warnings.join(" ");
+  } catch (automationError) {
+    googleWarning = automationError instanceof Error ? automationError.message : "Google Group automation could not run.";
+  }
   await supabase.from("audition_submissions").update({ casting_status: "cast" }).eq("id", submissionId);
-  redirect(path(projectId, "Applicant cast and linked to the project role."));
+  redirect(path(projectId, googleWarning ? `Applicant cast and linked to the project role. Google automation needs attention: ${googleWarning}` : "Applicant cast and linked to the project role."));
 }
 
 export async function setAuditionReviewerAction(formData: FormData) {

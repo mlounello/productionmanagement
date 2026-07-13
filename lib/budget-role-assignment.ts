@@ -1,4 +1,5 @@
 import { markAssignmentPlaybillSyncFailed, syncAssignmentToPlaybill } from "@/lib/playbill-sync";
+import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { fetchTheatreBudgetGuestArtistById } from "@/lib/theatre-budget";
 
@@ -145,6 +146,13 @@ export async function assignExistingBudgetGuestArtistToRole(input: BudgetRoleAss
   }
   await replaceBudgetLink("role_assignment", assignmentId, guestArtist, "theatre_budget_assignment_picker");
 
+  let googleWarnings: string[] = [];
+  try {
+    googleWarnings = (await syncAssignmentGoogleAutomation(input.projectId, assignmentId)).warnings;
+  } catch (error) {
+    googleWarnings = [error instanceof Error ? error.message : "Google Group automation could not run."];
+  }
+
   let playbillError = "";
   try {
     await syncAssignmentToPlaybill(input.projectId, assignmentId);
@@ -152,5 +160,5 @@ export async function assignExistingBudgetGuestArtistToRole(input: BudgetRoleAss
     playbillError = error instanceof Error ? error.message : "Playbill sync failed.";
     await markAssignmentPlaybillSyncFailed(input.projectId, assignmentId, error);
   }
-  return { assignmentId, personId, guestArtist, playbillError };
+  return { assignmentId, personId, guestArtist, playbillError, googleWarnings };
 }

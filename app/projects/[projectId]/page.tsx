@@ -584,6 +584,9 @@ export default async function ProjectPage({
           <Link className="button" href={`/projects/${typedProject.id}/auditions`}>
             Auditions
           </Link>
+          <Link className="button secondary" href={`/projects/${typedProject.id}/google-groups`}>
+            Google Groups
+          </Link>
           <Link className="button secondary" href="/projects">
             Projects
           </Link>
@@ -601,6 +604,7 @@ export default async function ProjectPage({
 
       <nav className="workspace-nav" aria-label="Project workspace sections">
         <Link href={`/projects/${typedProject.id}/auditions`}>Auditions</Link>
+        <Link href={`/projects/${typedProject.id}/google-groups`}>Google Groups</Link>
         <a href="#calendar">Calendar</a>
         <a href="#gantt">Gantt</a>
         <a href="#timeline-groups">Timeline Groups</a>

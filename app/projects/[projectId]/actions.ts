@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { assignExistingBudgetGuestArtistToRole } from "@/lib/budget-role-assignment";
+import { removeAssignmentGoogleAutomation, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { ENABLE_BUDGET_WRITES, ENABLE_PLAYBILL_WRITES } from "@/lib/config";
 import { fetchPlaybillShowById } from "@/lib/playbill";
 import {
@@ -665,7 +666,7 @@ export async function createPersonAction(formData: FormData) {
 }
 
 export async function createRoleAssignmentAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = roleAssignmentSchema.safeParse({
     projectId: requiredString(formData.get("projectId")),
     roleId: requiredString(formData.get("roleId")),
@@ -709,6 +710,14 @@ export async function createRoleAssignmentAction(formData: FormData) {
     redirect(projectAssignmentErrorPath(input.projectId, error.message));
   }
 
+  let googleWarning = "";
+  try {
+    const result = await syncAssignmentGoogleAutomation(input.projectId, String(createdAssignment.id), user.id);
+    googleWarning = result.warnings.join(" ");
+  } catch (automationError) {
+    googleWarning = automationError instanceof Error ? automationError.message : "Google Group automation could not run.";
+  }
+
   try {
     await syncAssignmentToPlaybill(input.projectId, String(createdAssignment.id));
   } catch (syncError) {
@@ -716,7 +725,9 @@ export async function createRoleAssignmentAction(formData: FormData) {
     redirect(projectAssignmentErrorPath(input.projectId, `Assignment saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
   }
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectAssignmentSuccessPath(input.projectId, "Assignment saved and synced to Playbill when linked."));
+  redirect(projectAssignmentSuccessPath(input.projectId, googleWarning
+    ? `Assignment saved and synced to Playbill when linked. Google automation needs attention: ${googleWarning}`
+    : "Assignment saved and synced to Playbill when linked."));
 }
 
 export async function assignTheatreBudgetGuestArtistToRoleAction(formData: FormData) {
@@ -732,9 +743,10 @@ export async function assignTheatreBudgetGuestArtistToRoleAction(formData: FormD
     const result = await assignExistingBudgetGuestArtistToRole(parsed.data);
     revalidatePath(`/projects/${parsed.data.projectId}`);
     revalidatePath("/people");
-    redirect(projectAssignmentSuccessPath(parsed.data.projectId, result.playbillError
+    const googleNote = result.googleWarnings.length ? " Google automation needs attention." : "";
+    redirect(projectAssignmentSuccessPath(parsed.data.projectId, (result.playbillError
       ? `${result.guestArtist.display_name} assigned and Budget-linked; Playbill needs retry.`
-      : `${result.guestArtist.display_name} assigned from Theatre Budget and synced to Playbill when linked.`));
+      : `${result.guestArtist.display_name} assigned from Theatre Budget and synced to Playbill when linked.`) + googleNote));
   } catch (error) {
     redirect(projectAssignmentErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not assign the Theatre Budget guest artist."));
   }
@@ -755,22 +767,24 @@ export async function bulkAssignTheatreBudgetGuestArtistsAction(formData: FormDa
   let assigned = 0;
   let failed = 0;
   let playbillRetries = 0;
+  let googleWarnings = 0;
   for (const row of rows.data) {
     try {
       const result = await assignExistingBudgetGuestArtistToRole({ projectId: projectId.data, ...row });
       assigned += 1;
       if (result.playbillError) playbillRetries += 1;
+      if (result.googleWarnings.length) googleWarnings += 1;
     } catch {
       failed += 1;
     }
   }
   revalidatePath(`/projects/${projectId.data}`);
   revalidatePath("/people");
-  redirect(projectAssignmentSuccessPath(projectId.data, `${assigned} Budget guest artist assignment${assigned === 1 ? "" : "s"} saved${failed ? `; ${failed} failed` : ""}${playbillRetries ? `; ${playbillRetries} need Playbill retry` : ""}.`));
+  redirect(projectAssignmentSuccessPath(projectId.data, `${assigned} Budget guest artist assignment${assigned === 1 ? "" : "s"} saved${failed ? `; ${failed} failed` : ""}${playbillRetries ? `; ${playbillRetries} need Playbill retry` : ""}${googleWarnings ? `; ${googleWarnings} need Google automation review` : ""}.`));
 }
 
 export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const projectId = projectIdSchema.safeParse(requiredString(formData.get("projectId")));
   if (!projectId.success) redirect(`/projects?error=${encodeURIComponent("Invalid project.")}`);
   let decoded: unknown;
@@ -786,6 +800,7 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
   let skipped = 0;
   let failed = 0;
   let playbillRetries = 0;
+  let googleWarnings = 0;
   const seen = new Set<string>();
   for (const row of rows.data) {
     const key = `${row.roleId}|${row.personId}`;
@@ -839,6 +854,12 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
     }
     created += 1;
     try {
+      const result = await syncAssignmentGoogleAutomation(projectId.data, assignmentId, user.id);
+      if (result.warnings.length) googleWarnings += 1;
+    } catch {
+      googleWarnings += 1;
+    }
+    try {
       await syncAssignmentToPlaybill(projectId.data, assignmentId);
     } catch (syncError) {
       playbillRetries += 1;
@@ -846,7 +867,7 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
     }
   }
   revalidatePath(`/projects/${projectId.data}`);
-  redirect(projectAssignmentSuccessPath(projectId.data, `${created} assignment${created === 1 ? "" : "s"} created${skipped ? `; ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : ""}${failed ? `; ${failed} failed` : ""}${playbillRetries ? `; ${playbillRetries} need Playbill retry` : ""}.`));
+  redirect(projectAssignmentSuccessPath(projectId.data, `${created} assignment${created === 1 ? "" : "s"} created${skipped ? `; ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : ""}${failed ? `; ${failed} failed` : ""}${playbillRetries ? `; ${playbillRetries} need Playbill retry` : ""}${googleWarnings ? `; ${googleWarnings} need Google automation review` : ""}.`));
 }
 
 export async function updateRoleAssignmentAction(formData: FormData) {
@@ -917,7 +938,7 @@ export async function updateRoleAssignmentAction(formData: FormData) {
 }
 
 export async function deleteRoleAssignmentAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = projectScopedRowSchema.safeParse({
     projectId: requiredString(formData.get("projectId")),
     id: requiredString(formData.get("id"))
@@ -929,6 +950,13 @@ export async function deleteRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  let googleWarning = "";
+  try {
+    const result = await removeAssignmentGoogleAutomation(input.projectId, input.id, user.id);
+    googleWarning = result.warnings.join(" ");
+  } catch (automationError) {
+    googleWarning = automationError instanceof Error ? automationError.message : "Google Group removal could not run.";
+  }
   try {
     await vacateAssignmentInPlaybill(input.projectId, input.id);
   } catch (syncError) {
@@ -941,7 +969,9 @@ export async function deleteRoleAssignmentAction(formData: FormData) {
   }
 
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectAssignmentSuccessPath(input.projectId, "Assignment removed and the linked Playbill role is vacant."));
+  redirect(projectAssignmentSuccessPath(input.projectId, googleWarning
+    ? `Assignment removed and the linked Playbill role is vacant. Google automation needs attention: ${googleWarning}`
+    : "Assignment removed and the linked Playbill role is vacant."));
 }
 
 export async function addPersonNoteAction(formData: FormData) {
@@ -1188,7 +1218,7 @@ export async function createAndLinkTheatreBudgetGuestArtistAction(formData: Form
 }
 
 export async function replaceRoleAssignmentPersonAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const parsed = replaceAssignmentSchema.safeParse({
     projectId: requiredString(formData.get("projectId")),
     assignmentId: requiredString(formData.get("assignmentId")),
@@ -1214,6 +1244,13 @@ export async function replaceRoleAssignmentPersonAction(formData: FormData) {
     .maybeSingle();
   if (duplicateError) redirect(projectErrorPath(parsed.data.projectId, duplicateError.message));
   if (duplicateAssignment) redirect(projectErrorPath(parsed.data.projectId, "That person already has an assignment for this role."));
+  let googleWarning = "";
+  try {
+    const result = await removeAssignmentGoogleAutomation(parsed.data.projectId, parsed.data.assignmentId, user.id);
+    googleWarning = result.warnings.join(" ");
+  } catch (automationError) {
+    googleWarning = automationError instanceof Error ? automationError.message : "The prior Google Group membership could not be checked.";
+  }
   try {
     await vacateAssignmentInPlaybill(parsed.data.projectId, parsed.data.assignmentId, true);
   } catch (error) {
@@ -1237,13 +1274,21 @@ export async function replaceRoleAssignmentPersonAction(formData: FormData) {
     .eq("id", parsed.data.assignmentId);
   if (updateError) redirect(projectErrorPath(parsed.data.projectId, updateError.message));
   try {
+    const result = await syncAssignmentGoogleAutomation(parsed.data.projectId, parsed.data.assignmentId, user.id);
+    googleWarning = [googleWarning, ...result.warnings].filter(Boolean).join(" ");
+  } catch (automationError) {
+    googleWarning = [googleWarning, automationError instanceof Error ? automationError.message : "Google Group automation could not run."].filter(Boolean).join(" ");
+  }
+  try {
     await syncAssignmentToPlaybill(parsed.data.projectId, parsed.data.assignmentId);
   } catch (error) {
     await markAssignmentPlaybillSyncFailed(parsed.data.projectId, parsed.data.assignmentId, error);
     redirect(projectErrorPath(parsed.data.projectId, `Replacement saved, but Playbill sync failed: ${error instanceof Error ? error.message : "Unknown error"}`));
   }
   revalidatePath(`/projects/${parsed.data.projectId}`);
-  redirect(projectAssignmentSuccessPath(parsed.data.projectId, "Replacement assigned to the existing Playbill role. Review the Budget link if this is a guest artist."));
+  redirect(projectAssignmentSuccessPath(parsed.data.projectId, googleWarning
+    ? `Replacement assigned to the existing Playbill role. Review the Budget link if this is a guest artist. Google automation needs attention: ${googleWarning}`
+    : "Replacement assigned to the existing Playbill role. Review the Budget link if this is a guest artist."));
 }
 
 export async function linkPlaybillShowAction(formData: FormData) {
