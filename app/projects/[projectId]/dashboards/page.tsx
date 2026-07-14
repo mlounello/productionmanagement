@@ -11,7 +11,6 @@ import { createDashboardViewAction, deleteDashboardViewAction, saveDashboardLayo
 export const dynamic = "force-dynamic";
 
 type DashboardView = { id: string; owner_user_id: string; name: string; is_default: boolean; visibility: string; layout: unknown; updated_at: string };
-type CalendarRow = { id: string; title: string; starts_at: string | null; due_at: string | null; status: string; is_run_of_show_relevant: boolean; cue_number: string };
 type RoleRow = { id: string; name: string; playbill_sync_status: string };
 type AssignmentRow = { id: string; role_id: string; person_id: string; status: string; playbill_sync_status: string; guest_artist_sync_status: string };
 type PublicityRow = { status: string; playbill_sync_status: string };
@@ -30,10 +29,9 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   const { projectId } = await params;
   const query = await searchParams;
   const supabase = await createSupabaseServerClient();
-  const [{ data: project }, viewsResult, { data: calendar }, { data: roles }, { data: assignments }, { data: publicity }, { data: notes }] = await Promise.all([
+  const [{ data: project }, viewsResult, { data: roles }, { data: assignments }, { data: publicity }, { data: notes }] = await Promise.all([
     supabase.from("projects").select("id, title, status, starts_on, ends_on").eq("id", projectId).maybeSingle(),
     supabase.from("project_dashboard_views").select("id, owner_user_id, name, is_default, visibility, layout, updated_at").eq("project_id", projectId).order("is_default", { ascending: false }).order("updated_at", { ascending: false }),
-    supabase.from("calendar_items").select("id, title, starts_at, due_at, status, is_run_of_show_relevant, cue_number").eq("project_id", projectId).order("starts_at", { ascending: true, nullsFirst: false }),
     supabase.from("project_roles").select("id, name, playbill_sync_status").eq("project_id", projectId),
     supabase.from("role_assignments").select("id, role_id, person_id, status, playbill_sync_status, guest_artist_sync_status").eq("project_id", projectId),
     supabase.from("project_publicity_submissions").select("status, playbill_sync_status").eq("project_id", projectId),
@@ -49,7 +47,6 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
     ?? views[0]
     ?? null;
   const layout = normalizeDashboardLayout(selected?.layout);
-  const calendarRows = (calendar ?? []) as CalendarRow[];
   const roleRows = (roles ?? []) as RoleRow[];
   const assignmentRows = (assignments ?? []) as AssignmentRow[];
   const publicityRows = (publicity ?? []) as PublicityRow[];
@@ -66,16 +63,14 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
     else if (item.key === "assignment_status") content = <div className="dashboard-kpis"><div><strong>{assignmentRows.length}</strong><span>Total</span></div><div><strong>{assignmentRows.filter((row) => row.status === "accepted").length}</strong><span>Accepted</span></div><div><strong>{assignmentRows.filter((row) => row.status === "offered").length}</strong><span>Offered</span></div></div>;
     else if (item.key === "publicity_status") content = <div className="dashboard-kpis"><div><strong>{publicityRows.length}</strong><span>Prepared</span></div><div><strong>{publicityRows.filter((row) => row.status === "awaiting_person_approval").length}</strong><span>Awaiting person</span></div><div><strong>{publicityRows.filter((row) => row.status === "approved").length}</strong><span>Approved</span></div></div>;
     else if (item.key === "integration_health") content = <div className="dashboard-kpis"><div><strong>{integrationWarnings}</strong><span>Warnings</span></div><div><strong>{publicityRows.filter((row) => row.playbill_sync_status === "synced").length}</strong><span>Publicity synced</span></div></div>;
-    else if (item.key === "people_notes") content = <div className="dashboard-kpis"><div><strong>{new Set(activeAssignments.map((row) => row.person_id)).size}</strong><span>Project people</span></div><div><strong>{notes?.length ?? 0}</strong><span>Recent notes</span></div></div>;
-    else content = <div className="compact-list">{calendarRows.filter((row) => row.is_run_of_show_relevant).slice(0, 6).map((row) => <div className="compact-row" key={row.id}><div><strong>{row.cue_number ? `${row.cue_number} · ` : ""}{row.title}</strong><span>{formatDate(row.starts_at)}</span></div></div>)}</div>;
+    else content = <div className="dashboard-kpis"><div><strong>{new Set(activeAssignments.map((row) => row.person_id)).size}</strong><span>Project people</span></div><div><strong>{notes?.length ?? 0}</strong><span>Recent notes</span></div></div>;
     const moduleHref: Record<DashboardLayoutItem["key"], string> = {
       project_summary: `/projects/${projectId}/overview`,
       role_status: `/projects/${projectId}/roles`,
       assignment_status: `/projects/${projectId}/roles`,
       publicity_status: `/projects/${projectId}/publicity`,
       integration_health: `/projects/${projectId}/integrations`,
-      people_notes: `/projects/${projectId}/people`,
-      run_of_show: `/projects/${projectId}/run-of-show`
+      people_notes: `/projects/${projectId}/people`
     };
     return <section className={`panel dashboard-module dashboard-module-${item.size}`} key={item.key}><div className="section-heading"><div><p className="eyebrow">Dashboard Module</p><h2>{moduleTitle(item.key)}</h2></div></div>{content}<Link className="dashboard-module-link" href={moduleHref[item.key]}>Open full workspace →</Link></section>;
   }

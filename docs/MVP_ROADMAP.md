@@ -71,7 +71,7 @@ New-assignment pickers hide roles that already have an active assignment. People
 
 ## Phase 6 Supporting Planning Module
 
-Calendar, Production Timeline, and Gantt are permanently on hold while Siena uses other planning software. Their existing code and data remain preserved, but their project navigation and dashboard modules are hidden and direct workspace URLs return to the project Overview. They are not prerequisites for any later phase. Run of Show remains preserved separately for possible production-event use.
+Calendar, Production Timeline, Gantt, and Run of Show are permanently on hold while Siena uses other planning software. Their existing code and data remain preserved, but their project navigation and dashboard modules are hidden and direct workspace URLs return to the project Overview. They are not prerequisites for any later phase.
 
 - Production calendar.
 - Google Calendar-style calendar UI foundation for creating and editing `calendar_items`.

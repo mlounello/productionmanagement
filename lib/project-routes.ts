@@ -1,6 +1,6 @@
 export const projectWorkspaceKeys = ["overview", "calendar", "timeline", "roles", "people", "integrations", "run-of-show"] as const;
 export type ProjectWorkspaceKey = (typeof projectWorkspaceKeys)[number];
-export const pausedProjectWorkspaces = ["calendar", "timeline"] as const;
+export const pausedProjectWorkspaces = ["calendar", "timeline", "run-of-show"] as const;
 
 export function isProjectWorkspace(value: string | null | undefined): value is ProjectWorkspaceKey {
   return projectWorkspaceKeys.includes(value as ProjectWorkspaceKey);

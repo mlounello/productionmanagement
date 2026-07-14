@@ -5,7 +5,6 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   addProjectLocationAction,
-  addPersonNoteAction,
   archiveTimelineGroupAction,
   bulkAssignTheatreBudgetGuestArtistsAction,
   bulkCreateRoleAssignmentsAction,
@@ -33,6 +32,7 @@ import {
   updateRoleAssignmentAction
 } from "@/app/projects/[projectId]/actions";
 import type { ProjectGanttSection } from "@/components/project-gantt";
+import { PeopleDirectory, type DirectoryPerson } from "@/components/people-directory";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
@@ -112,6 +112,7 @@ type Person = {
   id: string;
   full_name: string;
   first_name: string;
+  middle_name: string;
   last_name: string;
   preferred_name: string;
   email: string;
@@ -121,6 +122,7 @@ type Person = {
   affiliation: string;
   person_type: string;
   status: string;
+  publicity_headshot_url: string;
 };
 
 type RoleAssignment = {
@@ -405,7 +407,7 @@ export default async function ProjectWorkspacePage({
       .order("name", { ascending: true }) : Promise.resolve({ data: [] }),
     needsPeople ? supabase
       .from("people")
-      .select("id, full_name, first_name, last_name, preferred_name, email, vendor_number, phone, pronouns, affiliation, person_type, status")
+      .select("id, full_name, first_name, middle_name, last_name, preferred_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_headshot_url")
       .order("full_name", { ascending: true }) : Promise.resolve({ data: [] }),
     needsAssignments ? supabase
       .from("role_assignments")
@@ -448,6 +450,12 @@ export default async function ProjectWorkspacePage({
         .in("person_id", projectPersonIds)
         .order("is_pinned", { ascending: false })
         .order("created_at", { ascending: false })
+    : { data: [] };
+  const { data: personManagementDetails } = workspace === "people" && projectPersonIds.length
+    ? await supabase
+        .from("person_management_details")
+        .select("person_id, notes")
+        .in("person_id", projectPersonIds)
     : { data: [] };
   const { data: guestArtistLinks } = ["overview", "roles", "integrations"].includes(workspace) && assignmentRows.length
     ? await supabase
@@ -551,6 +559,51 @@ export default async function ProjectWorkspacePage({
   const sortedProjectPersonIds = [...projectPersonIds].sort((left, right) =>
     (peopleById.get(left)?.full_name ?? "").localeCompare(peopleById.get(right)?.full_name ?? "")
   );
+  const managementNotesByPersonId = new Map(
+    (personManagementDetails ?? []).map((detail) => [detail.person_id, String(detail.notes ?? "")])
+  );
+  const projectDirectoryPeople: DirectoryPerson[] = sortedProjectPersonIds.flatMap((personId) => {
+    const person = peopleById.get(personId);
+    if (!person) return [];
+    const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === personId);
+    const personNoteRows = notes.filter((note) => note.person_id === personId);
+    return [{
+      id: person.id,
+      fullName: person.full_name,
+      firstName: person.first_name ?? "",
+      middleName: person.middle_name ?? "",
+      lastName: person.last_name ?? "",
+      preferredName: person.preferred_name ?? "",
+      pronouns: person.pronouns ?? "",
+      email: person.email ?? "",
+      vendorNumber: person.vendor_number ?? "",
+      phone: person.phone ?? "",
+      affiliation: person.affiliation ?? "",
+      personType: person.person_type ?? "person",
+      status: person.status ?? "active",
+      headshotUrl: person.publicity_headshot_url ?? "",
+      managementNotes: managementNotesByPersonId.get(person.id) ?? "",
+      noteCount: personNoteRows.length,
+      projectCount: 1,
+      roles: personAssignments.map((assignment) => {
+        const role = rolesById.get(assignment.role_id);
+        return {
+          id: assignment.id,
+          name: role?.name ?? "Unknown role",
+          group: role?.role_group ?? "other",
+          status: assignment.status,
+          projectTitle: typedProject.title,
+          guestArtist: assignment.is_guest_artist
+        };
+      }),
+      notes: personNoteRows.map((note) => ({
+        id: note.id,
+        note: note.note,
+        visibility: note.visibility,
+        pinned: note.is_pinned
+      }))
+    }];
+  });
   const sortedBudgetGuestArtists = [...theatreBudgetGuestArtists.data].sort((left, right) =>
     left.display_name.localeCompare(right.display_name)
   );
@@ -1451,103 +1504,16 @@ export default async function ProjectWorkspacePage({
       <section className="panel workspace-section" hidden={workspace !== "people"}>
         <div className="section-heading">
           <div>
-            <p className="eyebrow">People Files</p>
-            <h2>Project People Notes</h2>
-            <p className="muted">Keep internal and client-visible notes attached to durable person files.</p>
+            <p className="eyebrow">Project Team</p>
+            <h2>{projectDirectoryPeople.length} People</h2>
+            <p className="muted">Search the team and select a row to edit contact details, review roles, or add project notes.</p>
           </div>
         </div>
-        <form action={addPersonNoteAction} className="person-note-form">
-          <input name="projectId" type="hidden" value={typedProject.id} />
-          <label className="field">
-            <span>Person</span>
-            <select name="personId" defaultValue="" required>
-              <option value="">Choose project person</option>
-              {sortedProjectPersonIds.map((personId) => {
-                const person = peopleById.get(personId);
-                return person ? (
-                  <option key={person.id} value={person.id}>
-                    {person.full_name}
-                  </option>
-                ) : null;
-              })}
-            </select>
-          </label>
-          <label className="field">
-            <span>Visibility</span>
-            <select name="visibility" defaultValue="internal">
-              <option value="internal">Internal</option>
-              <option value="client_visible">Client visible</option>
-            </select>
-          </label>
-          <label className="checkbox-card compact">
-            <input name="isPinned" type="checkbox" />
-            <span>
-              <strong>Pin</strong>
-            </span>
-          </label>
-          <label className="field person-note-text">
-            <span>Note</span>
-            <textarea name="note" rows={3} required />
-          </label>
-          <button type="submit">Add note</button>
-        </form>
-
-        <div className="people-file-grid">
-          {projectPersonIds.length ? (
-            sortedProjectPersonIds.map((personId) => {
-              const person = peopleById.get(personId);
-              const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === personId);
-              const personNoteRows = notes.filter((note) => note.person_id === personId);
-
-              if (!person) {
-                return null;
-              }
-
-              return (
-                <article className="person-file-card" key={person.id}>
-                  <header>
-                    <div>
-                      <h3>{person.full_name}</h3>
-                      <p className="muted">
-                        {titleCase(person.person_type)}
-                        {person.affiliation ? ` · ${person.affiliation}` : ""}
-                        {person.vendor_number ? ` · 90# ${person.vendor_number}` : ""}
-                        {person.email ? ` · ${person.email}` : ""}
-                      </p>
-                    </div>
-                  </header>
-                  <div className="mini-stack">
-                    <strong>Project roles</strong>
-                    {personAssignments.map((assignment) => {
-                      const role = rolesById.get(assignment.role_id);
-                      return (
-                        <span key={assignment.id}>
-                          {role?.name ?? "Unknown role"} · {titleCase(assignment.status)}
-                          {assignment.is_guest_artist ? " · Guest Artist" : ""}
-                        </span>
-                      );
-                    })}
-                  </div>
-                  <div className="mini-stack">
-                    <strong>Notes</strong>
-                    {personNoteRows.length ? (
-                      personNoteRows.map((note) => (
-                        <span key={note.id}>
-                          {note.is_pinned ? "Pinned · " : ""}
-                          {note.visibility === "client_visible" ? "Client visible" : "Internal"} · {note.note}
-                        </span>
-                      ))
-                    ) : (
-                      <span>No notes yet.</span>
-                    )}
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <p className="muted">No project people yet.</p>
-          )}
-        </div>
+        <PeopleDirectory
+          people={projectDirectoryPeople}
+          projectId={typedProject.id}
+          returnTo={`/projects/${typedProject.id}/people`}
+        />
       </section>
 
       <div className="grid two workspace-lower" hidden={workspace !== "run-of-show"}>

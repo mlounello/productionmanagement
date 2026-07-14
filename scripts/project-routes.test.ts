@@ -22,6 +22,6 @@ test("preserves action messages on the destination route", () => {
 test("marks paused planning workspaces for overview redirects", () => {
   assert.equal(isPausedProjectWorkspace("calendar"), true);
   assert.equal(isPausedProjectWorkspace("timeline"), true);
-  assert.equal(isPausedProjectWorkspace("run-of-show"), false);
+  assert.equal(isPausedProjectWorkspace("run-of-show"), true);
   assert.equal(isPausedProjectWorkspace("roles"), false);
 });

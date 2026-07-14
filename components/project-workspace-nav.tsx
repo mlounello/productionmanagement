@@ -5,8 +5,7 @@ const workspaceItems = [
   { key: "overview", label: "Overview" },
   { key: "roles", label: "Roles & Assignments" },
   { key: "people", label: "People" },
-  { key: "integrations", label: "Integrations" },
-  { key: "run-of-show", label: "Run of Show" }
+  { key: "integrations", label: "Integrations" }
 ] as const;
 
 export function ProjectWorkspaceNav({ projectId, active }: { projectId: string; active: string }) {

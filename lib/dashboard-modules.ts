@@ -4,8 +4,7 @@ export const dashboardModuleDefinitions = [
   { key: "assignment_status", label: "Assignment Status", description: "Offers, acceptances, and assignment progress." },
   { key: "publicity_status", label: "Publicity Approvals", description: "Profile, approval, and Playbill publicity status." },
   { key: "integration_health", label: "Integration Health", description: "Playbill, Budget, and sync warnings." },
-  { key: "people_notes", label: "People & Notes", description: "Project people and recent note activity." },
-  { key: "run_of_show", label: "Run of Show", description: "Upcoming cues and run items." }
+  { key: "people_notes", label: "People & Notes", description: "Project people and recent note activity." }
 ] as const;
 
 export type DashboardModuleKey = (typeof dashboardModuleDefinitions)[number]["key"];

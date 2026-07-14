@@ -1,153 +1,96 @@
 import Link from "next/link";
+import { PeopleDirectory, type DirectoryPerson } from "@/components/people-directory";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
 type PersonRow = {
-  id: string;
-  full_name: string;
-  preferred_name: string;
-  email: string;
-  vendor_number: string;
-  phone: string;
-  affiliation: string;
-  person_type: string;
-  status: string;
+  id: string; full_name: string; first_name: string; middle_name: string; last_name: string; preferred_name: string;
+  pronouns: string; email: string; vendor_number: string; phone: string; affiliation: string; person_type: string;
+  status: string; publicity_headshot_url: string;
 };
 
-function titleCase(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(" ");
-}
+type AssignmentRow = {
+  id: string; person_id: string; project_id: string; status: string; is_guest_artist: boolean;
+  projects: { title: string } | Array<{ title: string }> | null;
+  project_roles: { name: string; role_group: string } | Array<{ name: string; role_group: string }> | null;
+};
 
-function matchesSearch(person: PersonRow, query: string) {
-  if (!query) {
-    return true;
-  }
-
-  const haystack = [
-    person.full_name,
-    person.preferred_name,
-    person.email,
-    person.vendor_number,
-    person.phone,
-    person.affiliation,
-    person.person_type
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return haystack.includes(query.toLowerCase());
+function relation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
 }
 
 export default async function PeoplePage({
   searchParams
 }: {
-  searchParams?: Promise<{ q?: string; error?: string; success?: string }>;
+  searchParams?: Promise<{ error?: string; success?: string }>;
 }) {
   await requireUser();
   const params = await searchParams;
-  const query = params?.q?.trim() ?? "";
   const supabase = await createSupabaseServerClient();
-  const [{ data: people, error }, { data: assignments }, { data: notes }] = await Promise.all([
-    supabase
-      .from("people")
-      .select("id, full_name, preferred_name, email, vendor_number, phone, affiliation, person_type, status")
-      .order("full_name", { ascending: true }),
-    supabase.from("role_assignments").select("person_id, project_id"),
-    supabase.from("person_notes").select("person_id")
+  const [{ data: people, error }, { data: assignments }, { data: notes }, { data: managementDetails }] = await Promise.all([
+    supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, status, publicity_headshot_url").order("full_name", { ascending: true }),
+    supabase.from("role_assignments").select("id, person_id, project_id, status, is_guest_artist, projects(title), project_roles(name, role_group)"),
+    supabase.from("person_notes").select("person_id"),
+    supabase.from("person_management_details").select("person_id, notes")
   ]);
 
-  const rows = ((people ?? []) as PersonRow[]).filter((person) => matchesSearch(person, query));
-  const assignmentRows = (assignments ?? []) as Array<{ person_id: string; project_id: string }>;
-  const noteRows = (notes ?? []) as Array<{ person_id: string }>;
-  const assignmentsByPerson = new Map<string, Array<{ person_id: string; project_id: string }>>();
-  const notesByPerson = new Map<string, number>();
+  const assignmentRows = (assignments ?? []) as unknown as AssignmentRow[];
+  const noteCounts = new Map<string, number>();
+  (notes ?? []).forEach((note) => noteCounts.set(note.person_id, (noteCounts.get(note.person_id) ?? 0) + 1));
+  const managementNotes = new Map((managementDetails ?? []).map((row) => [row.person_id, String(row.notes ?? "")]));
 
-  assignmentRows.forEach((assignment) => {
-    const existing = assignmentsByPerson.get(assignment.person_id) ?? [];
-    existing.push(assignment);
-    assignmentsByPerson.set(assignment.person_id, existing);
-  });
-
-  noteRows.forEach((note) => {
-    notesByPerson.set(note.person_id, (notesByPerson.get(note.person_id) ?? 0) + 1);
+  const directoryPeople: DirectoryPerson[] = ((people ?? []) as PersonRow[]).map((person) => {
+    const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === person.id);
+    return {
+      id: person.id,
+      fullName: person.full_name,
+      firstName: person.first_name ?? "",
+      middleName: person.middle_name ?? "",
+      lastName: person.last_name ?? "",
+      preferredName: person.preferred_name ?? "",
+      pronouns: person.pronouns ?? "",
+      email: person.email ?? "",
+      vendorNumber: person.vendor_number ?? "",
+      phone: person.phone ?? "",
+      affiliation: person.affiliation ?? "",
+      personType: person.person_type ?? "person",
+      status: person.status ?? "active",
+      headshotUrl: person.publicity_headshot_url ?? "",
+      managementNotes: managementNotes.get(person.id) ?? "",
+      noteCount: noteCounts.get(person.id) ?? 0,
+      projectCount: new Set(personAssignments.map((assignment) => assignment.project_id)).size,
+      notes: [],
+      roles: personAssignments.map((assignment) => {
+        const role = relation(assignment.project_roles);
+        return {
+          id: assignment.id,
+          name: role?.name ?? "Unknown role",
+          group: role?.role_group ?? "other",
+          status: assignment.status,
+          projectTitle: relation(assignment.projects)?.title ?? "Unknown project",
+          guestArtist: assignment.is_guest_artist
+        };
+      })
+    };
   });
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <p className="eyebrow">People Files</p>
+          <p className="eyebrow">People Database</p>
           <h1>People</h1>
-          <p className="muted">Search durable profiles by name, email, role context, or Vendor / 90#.</p>
+          <p className="muted">Search the complete contact database, then select a row to view or edit the person.</p>
         </div>
-        <Link className="button secondary" href="/projects">
-          Projects
-        </Link>
+        <Link className="button secondary" href="/projects">Projects</Link>
       </div>
-
       {params?.error ? <p className="setup-warning">{params.error}</p> : null}
       {params?.success ? <p className="setup-success">{params.success}</p> : null}
-
-      <section className="panel">
-        <form className="people-search-form">
-          <label className="field">
-            <span>Search people</span>
-            <input defaultValue={query} name="q" placeholder="Name, email, 90#, affiliation..." />
-          </label>
-          <button type="submit">Search</button>
-          {query ? (
-            <Link className="button secondary" href="/people">
-              Clear
-            </Link>
-          ) : null}
-        </form>
-      </section>
-
-      <section className="panel workspace-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Directory</p>
-            <h2>{rows.length} People</h2>
-          </div>
-        </div>
-        {error ? <p className="setup-warning">{error.message}</p> : null}
-        <div className="table-list">
-          {rows.length ? (
-            rows.map((person) => {
-              const personAssignments = assignmentsByPerson.get(person.id) ?? [];
-              const projectCount = new Set(personAssignments.map((assignment) => assignment.project_id)).size;
-              const noteCount = notesByPerson.get(person.id) ?? 0;
-
-              return (
-                <div className="table-row" key={person.id}>
-                  <div>
-                    <strong>{person.full_name}</strong>
-                    <span>
-                      {titleCase(person.person_type)}
-                      {person.vendor_number ? ` · 90# ${person.vendor_number}` : ""}
-                      {person.email ? ` · ${person.email}` : ""}
-                      {person.affiliation ? ` · ${person.affiliation}` : ""}
-                    </span>
-                  </div>
-                  <span>
-                    {personAssignments.length} role{personAssignments.length === 1 ? "" : "s"} · {projectCount} project
-                    {projectCount === 1 ? "" : "s"} · {noteCount} note{noteCount === 1 ? "" : "s"}
-                  </span>
-                  <Link className="button secondary" href={`/people/${person.id}`}>
-                    Open
-                  </Link>
-                </div>
-              );
-            })
-          ) : (
-            <p className="muted">No matching people yet.</p>
-          )}
-        </div>
+      {error ? <p className="setup-warning">{error.message}</p> : null}
+      <section className="panel workspace-section people-directory-panel">
+        <PeopleDirectory people={directoryPeople} returnTo="/people" />
       </section>
     </div>
   );

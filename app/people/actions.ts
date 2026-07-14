@@ -144,3 +144,53 @@ export async function sendPersonProfileAccessLinkAction(formData: FormData) {
   }
   redirect(peopleSuccessPath(personId, `Secure profile access sent to ${email}.`));
 }
+
+const directoryProfileSchema = z.object({
+  id: personIdSchema,
+  fullName: z.string().trim().min(1, "Full name is required.").max(180),
+  firstName: z.string().trim().max(80), middleName: z.string().trim().max(80), lastName: z.string().trim().max(80),
+  preferredName: z.string().trim().max(120), pronouns: z.string().trim().max(80),
+  email: z.union([z.string().trim().email("Enter a valid email."), z.literal("")]),
+  vendorNumber: z.string().trim().max(40), phone: z.string().trim().max(40), affiliation: z.string().trim().max(160),
+  personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"]),
+  status: z.enum(["active", "inactive", "archived"]), managementNotes: z.string().trim().max(4000),
+  returnTo: z.string().trim().max(500)
+});
+
+function safeDirectoryReturn(value: string, personId: string) {
+  if (value === "/people" || /^\/projects\/[0-9a-f-]{36}\/people$/i.test(value)) return value;
+  return `/people/${personId}`;
+}
+
+function directoryResultPath(base: string, kind: "error" | "success", message: string) {
+  return `${base}${base.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`;
+}
+
+export async function updatePersonDirectoryAction(formData: FormData) {
+  await requireUser();
+  const parsed = directoryProfileSchema.safeParse({
+    id: requiredString(formData.get("id")), fullName: requiredString(formData.get("fullName")),
+    firstName: requiredString(formData.get("firstName")), middleName: requiredString(formData.get("middleName")), lastName: requiredString(formData.get("lastName")),
+    preferredName: requiredString(formData.get("preferredName")), pronouns: requiredString(formData.get("pronouns")), email: requiredString(formData.get("email")),
+    vendorNumber: requiredString(formData.get("vendorNumber")), phone: requiredString(formData.get("phone")), affiliation: requiredString(formData.get("affiliation")),
+    personType: requiredString(formData.get("personType")), status: requiredString(formData.get("status")), managementNotes: requiredString(formData.get("managementNotes")),
+    returnTo: requiredString(formData.get("returnTo"))
+  });
+  const fallbackId = requiredString(formData.get("id"));
+  const returnTo = safeDirectoryReturn(requiredString(formData.get("returnTo")), fallbackId);
+  if (!parsed.success) redirect(directoryResultPath(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid person profile."));
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("people").update({
+    full_name: input.fullName, first_name: input.firstName, middle_name: input.middleName, last_name: input.lastName,
+    preferred_name: input.preferredName, pronouns: input.pronouns, email: input.email.toLowerCase(), vendor_number: input.vendorNumber,
+    phone: input.phone, affiliation: input.affiliation, person_type: input.personType, status: input.status
+  }).eq("id", input.id);
+  if (error) redirect(directoryResultPath(returnTo, "error", error.message));
+  const { error: notesError } = await supabase.from("person_management_details").upsert({ person_id: input.id, notes: input.managementNotes }, { onConflict: "person_id" });
+  if (notesError) redirect(directoryResultPath(returnTo, "error", `Contact fields saved, but management notes failed: ${notesError.message}`));
+  try { await syncPersonAssignmentsToPlaybill(input.id); }
+  catch (syncError) { redirect(directoryResultPath(returnTo, "error", `Profile saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`)); }
+  revalidatePath("/people"); revalidatePath(`/people/${input.id}`); revalidatePath(returnTo);
+  redirect(directoryResultPath(returnTo, "success", `${input.fullName} saved.`));
+}
