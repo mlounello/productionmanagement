@@ -22,10 +22,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang="en">
       <body>
         <header className="site-header">
-          <Link className="brand" href={user && !hasInternalAccess ? "/my-profile" : "/projects"}>
+          <Link className="brand" href={user && !hasInternalAccess ? "/my-profile" : "/dashboard"}>
             Production Management
           </Link>
           <nav aria-label="Primary navigation">
+            {hasInternalAccess ? <Link href="/dashboard">Dashboard</Link> : null}
             {hasInternalAccess ? <Link href="/projects">Projects</Link> : null}
             {user ? <Link href="/my-profile">My Profile</Link> : null}
             {hasInternalAccess ? <Link href="/people">People</Link> : null}
