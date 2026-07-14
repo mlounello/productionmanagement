@@ -71,7 +71,7 @@ New-assignment pickers hide roles that already have an active assignment. People
 
 ## Phase 6 Supporting Planning Module
 
-Calendar, Gantt, and Run of Show are still useful, but they are no longer the primary MVP path while Siena evaluates other planning software. Preserve the existing work and avoid overbuilding planning features until the integration role is clearer.
+Calendar, Production Timeline, and Gantt are permanently on hold while Siena uses other planning software. Their existing code and data remain preserved, but their project navigation and dashboard modules are hidden and direct workspace URLs return to the project Overview. They are not prerequisites for any later phase. Run of Show remains preserved separately for possible production-event use.
 
 - Production calendar.
 - Google Calendar-style calendar UI foundation for creating and editing `calendar_items`.
@@ -84,6 +84,22 @@ Calendar, Gantt, and Run of Show are still useful, but they are no longer the pr
 - Recurring event rules and generated occurrences are deferred.
 
 Planning architecture rule: Calendar, Gantt, and Run of Show are synchronized projections over `calendar_items`. Do not create separate Gantt-only or run-of-show-only event records. The legacy `run_of_show_items` table remains available only for future extension detail linked back to a source calendar item.
+
+## Next After Active Integrations: Student Role Acceptance
+
+Begin this only after the active Playbill, Theatre Budget, Google Groups, publicity, audition, and communication integrations are complete. Calendar, Production Timeline, and Gantt are explicitly excluded from that prerequisite because they are permanently on hold.
+
+- A customizable project role-acceptance form sent to every student with an offered role.
+- Secure individualized links that do not require students to create an account.
+- Rehearsal etiquette, privacy expectations, production rules, and other acknowledgement sections supplied by the production manager.
+- Configurable questions including requested production credits and project-specific director/department questions.
+- Required acknowledgements, optional typed signature/attestation, submission timestamp, and retained version of the exact rules accepted.
+- Automatic connection to the existing person, project role, and role assignment without creating duplicates.
+- Draft, sent, opened, submitted, accepted, changes-needed, declined, and expired states with color-coded status and audit history.
+- Individual and bulk branded reminders through the Communication Center.
+- Production manager review, export, and completion dashboard.
+- Form templates that can be copied between productions and then customized.
+- Final field and policy design will be based on the recent Siena role-acceptance form supplied before implementation.
 
 ## Phase 2A Reference Data Foundation
 

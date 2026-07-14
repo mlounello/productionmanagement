@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { loadOperationsDashboard, type OperationsProject } from "@/lib/operations-dashboard";
 import { filterOperationItems, operationCategories, operationDueWindows, type OperationCategory, type OperationDueWindow, type OperationItem } from "@/lib/operations-dashboard-model";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ function OperationRow({ item }: { item: OperationItem }) {
   return (
     <article className={`operation-row operation-${item.severity}`}>
       <div className="operation-copy">
-        <div className="operation-meta"><span className="status-badge">{label(item.category)}</span><span>{item.projectTitle}</span>{item.dueAt ? <span>{formatDate(item.dueAt)}</span> : null}</div>
+        <div className="operation-meta"><StatusBadge status={item.severity === "urgent" ? "failed" : item.severity === "warning" ? "pending" : "scheduled"} label={label(item.category)} /><span>{item.projectTitle}</span>{item.dueAt ? <span>{formatDate(item.dueAt)}</span> : null}</div>
         <strong>{item.title}</strong>
         <p>{item.detail}</p>
       </div>

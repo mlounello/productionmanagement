@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 type RoleGroupOption = { slug: string; label: string };
 type ExistingRole = { name: string; role_group: string };
@@ -66,7 +67,7 @@ export function BulkRoleImport({
                   <strong>{role.name}</strong>
                   <span>{role.roleGroup.replace(/_/g, " ")}{role.department ? ` · ${role.department}` : ""}</span>
                 </div>
-                <span className={`status-badge${role.duplicate ? " gold" : ""}`}>{role.duplicate ? "Already exists" : "Ready"}</span>
+                <StatusBadge status={role.duplicate ? "needs_review" : "ready"} label={role.duplicate ? "Already exists" : "Ready"} />
               </div>
             ))}
           </div>

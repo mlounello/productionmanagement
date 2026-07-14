@@ -3,8 +3,6 @@ import { projectWorkspacePath } from "@/lib/project-routes";
 
 const workspaceItems = [
   { key: "overview", label: "Overview" },
-  { key: "calendar", label: "Calendar" },
-  { key: "timeline", label: "Timeline" },
   { key: "roles", label: "Roles & Assignments" },
   { key: "people", label: "People" },
   { key: "integrations", label: "Integrations" },

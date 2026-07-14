@@ -37,6 +37,7 @@ import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
 import { InlineHelp } from "@/components/ui/inline-help";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
@@ -370,7 +371,7 @@ export default async function ProjectWorkspacePage({
   }
 
   const typedProject = project as Project;
-  const needsCalendar = ["overview", "calendar", "timeline", "run-of-show"].includes(workspace);
+  const needsCalendar = ["calendar", "timeline", "run-of-show"].includes(workspace);
   const needsRoles = ["overview", "roles", "people", "integrations"].includes(workspace);
   const needsPeople = ["overview", "roles", "people"].includes(workspace);
   const needsAssignments = ["overview", "roles", "people", "integrations"].includes(workspace);
@@ -625,8 +626,8 @@ export default async function ProjectWorkspacePage({
 
       <section className="workspace-summary" aria-label="Project summary" hidden={workspace !== "overview"}>
         <div>
-          <span>{items.length}</span>
-          <p>Calendar Items</p>
+          <span>{roles.length}</span>
+          <p>Project Roles</p>
         </div>
         <div>
           <span>{assignmentRows.length}</span>
@@ -740,8 +741,8 @@ export default async function ProjectWorkspacePage({
                     <span>{titleCase(role.role_group)} · {roleAssignmentsForRole.length ? `${roleAssignmentsForRole.length} assigned` : "Vacant"}</span>
                   </div>
                   <div className="badge-row">
-                    <span className="status-badge">Playbill {link ? (link.metadata.vacant ? "Vacant" : "Linked") : titleCase(role.playbill_sync_status)}</span>
-                    {role.sync_notes ? <span className="status-badge gold">Needs review</span> : null}
+                    <StatusBadge status={link ? (link.metadata.vacant ? "vacant" : "linked") : role.playbill_sync_status} label={`Playbill ${link ? (link.metadata.vacant ? "Vacant" : "Linked") : titleCase(role.playbill_sync_status)}`} />
+                    {role.sync_notes ? <StatusBadge status="needs_review" label="Needs review" /> : null}
                   </div>
                 </div>
               );
@@ -754,7 +755,7 @@ export default async function ProjectWorkspacePage({
                 {playbillOnlyRoles.map((role) => (
                   <div className="table-row" key={`external-${role.id}`}>
                     <div><strong>{role.role_name}</strong><span>{titleCase(role.category)} · {role.person_id ? "Filled" : "Vacant"}</span></div>
-                    <span className="status-badge gold">Playbill only</span>
+                    <StatusBadge status="needs_review" label="Playbill only" />
                   </div>
                 ))}
               </div>
@@ -1247,18 +1248,15 @@ export default async function ProjectWorkspacePage({
                     <div>
                       <strong>{person?.full_name ?? "Unknown person"}</strong>
                       <span>
-                        {role?.name ?? "Unknown role"} · {titleCase(assignment.assignment_kind)} · {titleCase(assignment.status)} · Confirmation{" "}
-                        {titleCase(assignment.confirmation_status)}
+                        {role?.name ?? "Unknown role"} · {titleCase(assignment.assignment_kind)}
                       </span>
                     </div>
                     <div className="badge-row">
-                      {assignment.is_guest_artist ? <span className="status-badge gold">Guest Artist</span> : null}
-                      <span className="status-badge">
-                        Playbill {playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}
-                      </span>
-                      <span className="status-badge">
-                        Budget {budgetLink ? "Linked" : titleCase(assignment.guest_artist_sync_status)}
-                      </span>
+                      <StatusBadge status={assignment.status} label={titleCase(assignment.status)} />
+                      <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
+                      {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
+                      <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
+                      {assignment.is_guest_artist ? <StatusBadge status={budgetLink ? "linked" : assignment.guest_artist_sync_status} label={`Budget ${budgetLink ? "Linked" : titleCase(assignment.guest_artist_sync_status)}`} /> : null}
                     </div>
                   </summary>
                   <div className="integration-panel">

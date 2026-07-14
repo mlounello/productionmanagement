@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   approveMyPublicitySubmissionAction,
   connectMyProfileAction,
@@ -141,7 +142,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
           const locked = submission.playbill_submission_status === "locked";
           const previewRole = rolesByProject.get(submission.project_id)?.join(", ") || "Production role";
           return <article className="panel" key={submission.id}>
-            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><p className="muted">Your approval: {formatStatus(submission.status)} · Playbill: {formatStatus(submission.playbill_submission_status)}</p></div><span className={`status-badge${locked ? " gold" : ""}`}>{locked ? "Final & locked" : `v${submission.source_profile_version}`}</span></div>
+            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><div className="badge-row"><StatusBadge status={submission.status} label={`Your approval: ${formatStatus(submission.status)}`} /><StatusBadge status={submission.playbill_submission_status} context="playbill" label={`Playbill: ${formatStatus(submission.playbill_submission_status)}`} /></div></div><StatusBadge status={locked ? "locked" : "draft"} context="playbill" label={locked ? "Final & locked" : `v${submission.source_profile_version}`} /></div>
             <p className="muted">Bio due: {formatDate(settings?.bio_due_on ?? null)} · Headshot due: {formatDate(settings?.headshot_due_on ?? null)}</p>
             <p><strong>Credit:</strong> {submission.credited_name}</p>
             {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">

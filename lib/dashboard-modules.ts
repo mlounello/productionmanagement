@@ -1,6 +1,5 @@
 export const dashboardModuleDefinitions = [
   { key: "project_summary", label: "Project Summary", description: "Dates, status, and core project totals." },
-  { key: "upcoming_calendar", label: "Upcoming Calendar", description: "The next scheduled events and deadlines." },
   { key: "role_status", label: "Role Status", description: "Filled and vacant role counts." },
   { key: "assignment_status", label: "Assignment Status", description: "Offers, acceptances, and assignment progress." },
   { key: "publicity_status", label: "Publicity Approvals", description: "Profile, approval, and Playbill publicity status." },
@@ -15,7 +14,6 @@ export type DashboardLayoutItem = { key: DashboardModuleKey; size: DashboardModu
 
 export const defaultDashboardLayout: DashboardLayoutItem[] = [
   { key: "project_summary", size: "full" },
-  { key: "upcoming_calendar", size: "half" },
   { key: "role_status", size: "half" },
   { key: "publicity_status", size: "half" },
   { key: "integration_health", size: "half" }

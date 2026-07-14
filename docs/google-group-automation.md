@@ -364,7 +364,7 @@ Never use the JSON `private_key_id`, numeric delegation Client ID, or Cloud proj
 
 - `GOOGLE_GROUP_DOMAIN=siena.edu`
 - `GOOGLE_GROUP_EMAIL_SUFFIX=-group`
-  - Produces `rent-production-stage-crew-group@siena.edu`.
+  - Produces `rent-stage-crew-group@siena.edu`.
   - Use an empty value if Siena confirms that the suffix is unnecessary.
 
 Google's Directory API expects the complete group email supplied by the app; the app does not rely on Google to append `-group`.

@@ -9,6 +9,10 @@
   --danger: #b42318;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
 }

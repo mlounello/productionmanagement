@@ -24,9 +24,9 @@ async function context(projectId: string) {
 export async function saveRoleGroupGoogleSettingsAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { supabase } = await context(projectId);
   const mode = z.enum(["auto", "manual", "disabled"]).parse(formData.get("googleGroupMode"));
-  const { data: project } = await supabase.from("projects").select("slug").eq("id", projectId).single();
+  const { data: project } = await supabase.from("projects").select("title").eq("id", projectId).single();
   if (!project) redirect(route(projectId, "Project not found.", true));
-  const proposed = generateGoogleGroupEmail(String(project.slug), roleGroupSlug);
+  const proposed = generateGoogleGroupEmail(String(project.title), roleGroupSlug);
   const manualEmail = z.string().trim().email().or(z.literal("")).parse(formData.get("manualGoogleGroupEmail"));
   const { data: existing } = await supabase.from("project_role_group_google_settings").select("active_google_group_email, google_group_creation_status").eq("project_id", projectId).eq("role_group", roleGroupSlug).maybeSingle();
   const activeEmail = mode === "manual" ? manualEmail.toLowerCase() : mode === "auto" ? String(existing?.active_google_group_email ?? "") : String(existing?.active_google_group_email ?? "");
@@ -46,12 +46,9 @@ export async function saveRoleGroupGoogleSettingsAction(formData: FormData) {
 
 export async function createRoleGroupGoogleGroupAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
-  const [{ data: project }, { data: settings }] = await Promise.all([
-    supabase.from("projects").select("title, slug").eq("id", projectId).single(),
-    supabase.from("project_role_group_google_settings").select("id, proposed_google_group_email").eq("project_id", projectId).eq("role_group", roleGroupSlug).maybeSingle()
-  ]);
+  const { data: project } = await supabase.from("projects").select("title").eq("id", projectId).single();
   if (!project) redirect(route(projectId, "Project not found.", true));
-  const proposed = settings?.proposed_google_group_email || generateGoogleGroupEmail(String(project.slug), roleGroupSlug);
+  const proposed = generateGoogleGroupEmail(String(project.title), roleGroupSlug);
   let actionType = "group_created"; let status = "success"; let errorMessage = ""; let providerResponse: Record<string, unknown> = {};
   try {
     const result = await createOrAdoptGoogleGroup({ email: proposed, name: `${project.title} · ${roleGroupSlug.replace(/_/g, " ")}`, description: `Production communication group for ${project.title}: ${roleGroupSlug.replace(/_/g, " ")}.` });

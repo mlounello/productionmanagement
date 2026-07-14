@@ -55,10 +55,6 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   const publicityRows = (publicity ?? []) as PublicityRow[];
   const activeAssignments = assignmentRows.filter((item) => !["declined", "withdrawn"].includes(item.status));
   const filledRoleIds = new Set(activeAssignments.map((item) => item.role_id));
-  const upcoming = calendarRows.filter((item) => {
-    const value = item.starts_at ?? item.due_at;
-    return value && new Date(value).getTime() >= Date.now() - 86400000;
-  }).slice(0, 6);
   const integrationWarnings = roleRows.filter((item) => item.playbill_sync_status === "failed").length
     + assignmentRows.filter((item) => item.playbill_sync_status === "failed" || item.guest_artist_sync_status === "failed").length
     + publicityRows.filter((item) => item.playbill_sync_status === "failed").length;
@@ -66,7 +62,6 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   function renderModule(item: DashboardLayoutItem) {
     let content: React.ReactNode;
     if (item.key === "project_summary") content = <div className="dashboard-kpis"><div><strong>{projectRow.status}</strong><span>Status</span></div><div><strong>{formatDate(projectRow.starts_on)}</strong><span>Starts</span></div><div><strong>{formatDate(projectRow.ends_on)}</strong><span>Ends</span></div><div><strong>{new Set(activeAssignments.map((row) => row.person_id)).size}</strong><span>People</span></div></div>;
-    else if (item.key === "upcoming_calendar") content = upcoming.length ? <div className="compact-list">{upcoming.map((row) => <div className="compact-row" key={row.id}><div><strong>{row.title}</strong><span>{formatDate(row.starts_at ?? row.due_at)} · {row.status}</span></div></div>)}</div> : <p className="muted">No upcoming items.</p>;
     else if (item.key === "role_status") content = <div className="dashboard-kpis"><div><strong>{roleRows.length}</strong><span>Total roles</span></div><div><strong>{filledRoleIds.size}</strong><span>Filled</span></div><div><strong>{Math.max(0, roleRows.length - filledRoleIds.size)}</strong><span>Vacant</span></div></div>;
     else if (item.key === "assignment_status") content = <div className="dashboard-kpis"><div><strong>{assignmentRows.length}</strong><span>Total</span></div><div><strong>{assignmentRows.filter((row) => row.status === "accepted").length}</strong><span>Accepted</span></div><div><strong>{assignmentRows.filter((row) => row.status === "offered").length}</strong><span>Offered</span></div></div>;
     else if (item.key === "publicity_status") content = <div className="dashboard-kpis"><div><strong>{publicityRows.length}</strong><span>Prepared</span></div><div><strong>{publicityRows.filter((row) => row.status === "awaiting_person_approval").length}</strong><span>Awaiting person</span></div><div><strong>{publicityRows.filter((row) => row.status === "approved").length}</strong><span>Approved</span></div></div>;
@@ -75,7 +70,6 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
     else content = <div className="compact-list">{calendarRows.filter((row) => row.is_run_of_show_relevant).slice(0, 6).map((row) => <div className="compact-row" key={row.id}><div><strong>{row.cue_number ? `${row.cue_number} · ` : ""}{row.title}</strong><span>{formatDate(row.starts_at)}</span></div></div>)}</div>;
     const moduleHref: Record<DashboardLayoutItem["key"], string> = {
       project_summary: `/projects/${projectId}/overview`,
-      upcoming_calendar: `/projects/${projectId}/calendar`,
       role_status: `/projects/${projectId}/roles`,
       assignment_status: `/projects/${projectId}/roles`,
       publicity_status: `/projects/${projectId}/publicity`,
