@@ -75,7 +75,7 @@ export async function testRoleGroupGoogleGroupAction(formData: FormData) {
 export async function createRoleGroupWelcomeTemplateAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { supabase } = await context(projectId);
   const subject = z.string().trim().min(1).max(300).parse(formData.get("subject")); const body = sanitizeRichText(z.string().trim().min(1).max(50000).parse(formData.get("bodyHtml")));
-  const { data: template, error } = await supabase.from("email_templates").insert({ project_id: projectId, template_type: "role_group_welcome", name: `${roleGroupSlug.replace(/_/g, " ")} welcome`, subject_template: subject, body_template: body }).select("id").single();
+  const { data: template, error } = await supabase.from("email_templates").insert({ project_id: projectId, template_type: "role_group_welcome", usage_tags:["role_group_welcome"], name: `${roleGroupSlug.replace(/_/g, " ")} welcome`, subject_template: subject, body_template: body }).select("id").single();
   if (error || !template) redirect(route(projectId, error?.message ?? "Could not create template.", true));
   await supabase.from("project_role_group_google_settings").upsert({ project_id: projectId, role_group: roleGroupSlug, welcome_email_template_id: template.id }, { onConflict: "project_id,role_group" });
   redirect(route(projectId, "HTML welcome template created and selected."));

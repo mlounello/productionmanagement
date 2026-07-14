@@ -22,7 +22,7 @@ export default async function ProjectGoogleGroupsPage({ params, searchParams }: 
     supabase.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
     supabase.from("project_roles").select("id, name, role_group").eq("project_id", projectId).order("role_group").order("name"),
     supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId),
-    supabase.from("email_templates").select("id, name, subject_template").or(`project_id.eq.${projectId},project_id.is.null`).eq("template_type", "role_group_welcome").eq("active", true).order("name"),
+    supabase.from("email_templates").select("id, name, subject_template").or(`project_id.eq.${projectId},project_id.is.null`).contains("usage_tags", ["role_group_welcome"]).eq("active", true).order("name"),
     supabase.from("role_assignments").select("id, role_id, person_id, google_group_sync_status, google_group_sync_error, google_group_membership_checked_at, google_automation_skipped, google_automation_skip_reason, welcome_email_status, welcome_email_error, project_roles(name, role_group), people(full_name, preferred_name, email)").eq("project_id", projectId).order("created_at"),
     supabase.from("google_group_action_log").select("id, role_group, action_type, status, email_address, active_google_group_email, error_message, created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(100)
   ]);

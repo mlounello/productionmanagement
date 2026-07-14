@@ -62,7 +62,7 @@ export async function createCommunicationTemplateAction(formData: FormData) {
   const body = sanitizeRichText(String(formData.get("bodyHtml") ?? ""));
   if (!stripRichTextToPlain(body)) redirect(route(projectId, "error", "Template message is required."));
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("email_templates").insert({ project_id: projectId, template_type: templateType, name, subject_template: subject, body_template: body, active: true });
+  const { error } = await supabase.from("email_templates").insert({ project_id: projectId, template_type: templateType, usage_tags:[templateType], name, subject_template: subject, body_template: body, active: true });
   if (error) redirect(route(projectId, "error", error.message));
   revalidatePath(`/projects/${projectId}/communications`);
   redirect(route(projectId, "success", "Reusable email template created."));

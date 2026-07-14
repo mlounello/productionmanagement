@@ -1,6 +1,7 @@
 import { SITE_URL } from "@/lib/config";
+import { activeEmailTemplate } from "@/lib/email-template-catalog";
 import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
-import { sendHtmlEmail } from "@/lib/outbound-email";
+import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 
@@ -24,7 +25,8 @@ export async function ensureRoleAcceptanceRequest(projectId:string, assignmentId
   const renewedExpiry=new Date(Date.now()+days*24*60*60*1000).toISOString();
   await admin.from("role_acceptance_requests").update({expires_at:renewedExpiry}).eq("id",request.id);
   const url=`${SITE_URL.replace(/\/+$/,"")}/role-acceptance/${request.public_token}`;
-  try{await sendHtmlEmail({to:person.email,subject:`Role acceptance required: ${project?.title??"Siena Theatre production"}`,html:`<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#24352e"><h1 style="color:#006b54">${project?.title??"Siena Theatre"}</h1><p>Hello ${person.preferred_name||person.full_name},</p><p>You have been selected as <strong>${role?.name??"a production participant"}</strong>. Please review and complete the required ${type} agreement before production onboarding begins.</p><p style="margin:32px 0"><a href="${url}" style="background:#006b54;color:#fff;padding:14px 22px;border-radius:6px;text-decoration:none;font-weight:bold">Review and Accept My Role</a></p><p>This individualized form expires in ${days} day${days===1?"":"s"}. Contact the production manager if you have questions or need changes.</p></div>`});await admin.from("role_acceptance_requests").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",request.id);await admin.from("role_assignments").update({confirmation_status:"sent"}).eq("id",assignmentId);return {status:"sent",warnings:[] as string[]};}catch(e){return {status:"draft",warnings:[e instanceof Error?e.message:"Acceptance email failed."]};}
+  const variables={person_name:person.preferred_name||person.full_name,project_title:project?.title??"Siena Theatre",role_name:role?.name??"a production participant",agreement_type:type,role_acceptance_url:url,expires_in:`${days} day${days===1?"":"s"}`};const mailTemplate=await activeEmailTemplate("role_acceptance",projectId);const subject=mailTemplate?renderTemplate(mailTemplate.subject_template,variables):`Role acceptance required: ${variables.project_title}`;const html=mailTemplate?renderTemplate(mailTemplate.body_template,variables,true):`<h1>${variables.project_title}</h1><p>Hello ${variables.person_name},</p><p>You have been selected as <strong>${variables.role_name}</strong>. Please complete the required ${type} agreement.</p><p><a href="${url}">Review and Accept My Role</a></p>`;
+  try{await sendHtmlEmail({to:person.email,subject,html});await admin.from("role_acceptance_requests").update({status:"sent",sent_at:new Date().toISOString()}).eq("id",request.id);await admin.from("role_assignments").update({confirmation_status:"sent"}).eq("id",assignmentId);return {status:"sent",warnings:[] as string[]};}catch(e){return {status:"draft",warnings:[e instanceof Error?e.message:"Acceptance email failed."]};}
 }
 
 export async function beginAssignmentOnboarding(projectId:string, assignmentId:string, actorUserId:string|null){

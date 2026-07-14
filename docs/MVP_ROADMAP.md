@@ -95,6 +95,7 @@ Planning architecture rule: Calendar, Gantt, and Run of Show are synchronized pr
 - Implemented: students pause at role acceptance. Acceptance then releases Playbill role sync, Google membership checking, the Propared welcome, secure profile/headshot/show-bio instructions, and publicity preparation. Non-students continue through existing onboarding immediately.
 - Implemented: reusable profile and intake details remain separate from restricted project-specific agreement answers such as allergy information.
 - Implemented: agreement sections and reusable email bodies use visual rich-text editors by default, with optional source view/edit mode that returns to the visual editor after validating and applying source changes.
+- Implemented: a central Email Templates module with multi-use tags, global or project scope, visual/source editing, active/inactive control, workflow-specific filtering, and migrated Siena starters. Profile access, publicity/profile reminders, Google/Propared welcome, student role acceptance, intake verification, announcements, audition messages, recognition, and custom campaigns all use the shared catalog.
 - Next refinement: add scheduled acceptance reminders, printable agreement exports, and richer audit/history views. The structured/versioned data model already supports these additions.
 
 ## Phase 2A Reference Data Foundation

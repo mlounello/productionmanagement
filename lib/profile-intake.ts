@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomInt, randomUUID } from "node:crypto";
-import { sendHtmlEmail } from "@/lib/outbound-email";
+import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
+import { activeEmailTemplate } from "@/lib/email-template-catalog";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export type IntakeContext = "audition" | "technical_interest";
@@ -47,10 +48,11 @@ export async function requestProfileVerificationCode(input: { contextType: Intak
   const { error } = await admin.from("profile_verification_codes").insert({ id: challengeId, person_id: person.id, context_type: input.contextType, context_id: input.contextId, email, code_hash: codeHash(challengeId, code), expires_at: expiresAt });
   if (error) throw new Error(error.message);
   try {
+    const template=await activeEmailTemplate("profile_verification_code");const variables={person_name:String(person.preferred_name||person.full_name),verification_code:code,expires_in:`${CODE_MINUTES} minutes`};
     await sendHtmlEmail({
       to: email,
-      subject: "Your Siena Theatre profile verification code",
-      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#24352e"><h1 style="color:#006b54">Siena Theatre Production Management</h1><p>Hello ${String(person.preferred_name || person.full_name)},</p><p>Enter this code to load your saved profile information:</p><p style="font-size:32px;font-weight:800;letter-spacing:8px;color:#006b54">${code}</p><p>The code expires in ${CODE_MINUTES} minutes. Do not share it with anyone.</p></div>`
+      subject: template?renderTemplate(template.subject_template,variables):"Your Siena Theatre profile verification code",
+      html: template?renderTemplate(template.body_template,variables,true):`<h1>Siena Theatre Production Management</h1><p>Hello ${variables.person_name},</p><p>Enter this code to load your saved profile information:</p><h2>${code}</h2><p>The code expires in ${CODE_MINUTES} minutes.</p>`
     });
   } catch (sendError) {
     await admin.from("profile_verification_codes").delete().eq("id", challengeId);

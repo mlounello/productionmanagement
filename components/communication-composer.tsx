@@ -5,7 +5,7 @@ import { createCommunicationDraftAction } from "@/app/projects/[projectId]/commu
 import { HtmlMessageEditor } from "@/components/html-message-editor";
 import { communicationTypeLabel } from "@/lib/communications";
 
-type Template = { id: string; name: string; template_type: string; subject_template: string; body_template: string };
+type Template = { id: string; name: string; template_type: string; usage_tags?: string[]; subject_template: string; body_template: string };
 type Person = { id: string; name: string; email: string };
 
 const defaults: Record<string, { subject: string; body: string }> = {
@@ -36,7 +36,7 @@ export function CommunicationComposer({ projectId, templates, roleGroups, assign
   function applyTemplate(id: string) {
     setTemplateId(id);
     const template = templates.find((item) => item.id === id);
-    if (template) { setMessageType(template.template_type); setSubject(template.subject_template); setBody(template.body_template); setEditorKey((value) => value + 1); }
+    if (template) { const use=template.usage_tags?.find((tag)=>tag in defaults)??template.template_type;setMessageType(use); setSubject(template.subject_template); setBody(template.body_template); setEditorKey((value) => value + 1); }
   }
   function applyAudience(mode: string) {
     setAudienceMode(mode); setAudienceValue("");

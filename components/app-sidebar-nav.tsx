@@ -8,7 +8,8 @@ const items = [
   { href: "/projects", label: "Projects" },
   { href: "/people", label: "People" },
   { href: "/settings/reference-data", label: "Settings" },
-  { href: "/settings/intake", label: "Intake Forms" }
+  { href: "/settings/intake", label: "Intake Forms" },
+  { href: "/settings/email-templates", label: "Email Templates" }
 ];
 
 export function AppSidebarNav() {

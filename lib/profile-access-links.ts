@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { SITE_URL } from "@/lib/config";
 import { sendHtmlEmail, renderTemplate } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { activeEmailTemplate } from "@/lib/email-template-catalog";
 
 const LINK_LIFETIME_DAYS = 7;
 const DEFAULT_SUBJECT = "Your secure Siena Theatre production profile link";
@@ -31,15 +32,7 @@ export function hashProfileAccessToken(token: string) {
 }
 
 async function activeTemplate(templateType = "profile_access", projectId: string | null = null) {
-  const admin = createSupabaseAdminClient();
-  let query = admin.from("email_templates")
-    .select("subject_template, body_template")
-    .eq("template_type", templateType)
-    .eq("active", true)
-    .order("updated_at", { ascending: false })
-    .limit(1);
-  query = projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
-  const { data } = await query.maybeSingle();
+  const data = await activeEmailTemplate(templateType === "publicity_reminder" ? "publicity_reminder" : "profile_access",projectId);
   if (data) return { subject: data.subject_template, body: data.body_template };
   if (projectId) return activeTemplate(templateType, null);
   return templateType === "publicity_reminder"
