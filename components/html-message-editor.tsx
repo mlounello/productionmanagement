@@ -7,7 +7,7 @@ export function HtmlMessageEditor({ name, initialValue, label = "Message" }: { n
   const editorRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(() => sanitizeRichText(initialValue));
   const [sourceMode, setSourceMode] = useState(false);
-  useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value; }, [value]);
+  useEffect(() => { if (!sourceMode && editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value; }, [value,sourceMode]);
   function run(command: string, argument?: string) {
     editorRef.current?.focus();
     document.execCommand(command, false, argument);

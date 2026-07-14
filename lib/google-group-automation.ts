@@ -23,8 +23,9 @@ async function log(supabase: Client, context: Context, settings: { active_google
   await supabase.from("google_group_action_log").insert({ project_id: context.projectId, role_group: context.roleGroup, role_assignment_id: context.assignmentId, person_id: context.personId, actor_user_id: actorUserId, email_address: context.personEmail, active_google_group_email: settings.active_google_group_email ?? "", action_type: actionType, status, error_message: errorMessage, provider_response: providerResponse });
 }
 
-async function sendWelcome(supabase: Client, context: Context, settings: Record<string, unknown>, actorUserId: string | null, forceResend = false) {
-  if (!settings.welcome_email_enabled || !settings.welcome_email_template_id) return { status: "skipped", warning: "" };
+async function sendWelcome(supabase: Client, context: Context, settings: Record<string, unknown>, actorUserId: string | null, forceResend = false, manualSend = false) {
+  if (!settings.welcome_email_template_id) return { status: "skipped", warning: "Select and save a welcome email template first." };
+  if (!manualSend && !settings.welcome_email_enabled) return { status: "skipped", warning: "" };
   if (!context.personEmail) {
     const message = "Person does not have an email address."; await log(supabase, context, settings, "welcome_email_failed", "failed", actorUserId, message); return { status: "failed", warning: message };
   }
@@ -102,5 +103,5 @@ export async function resendAssignmentWelcome(projectId: string, assignmentId: s
   const supabase = await createSupabaseServerClient(); const context = await assignmentContext(supabase, projectId, assignmentId);
   if (context.automationSkipped) return { warnings: [context.automationSkipReason || "Communications are skipped for this assignment."] };
   const { data: settings } = await supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId).eq("role_group", context.roleGroup).single();
-  const result = await sendWelcome(supabase, context, settings ?? {}, actorUserId, true); return { warnings: result.warning ? [result.warning] : [] };
+  const result = await sendWelcome(supabase, context, settings ?? {}, actorUserId, true, true); return { warnings: result.warning ? [result.warning] : [] };
 }

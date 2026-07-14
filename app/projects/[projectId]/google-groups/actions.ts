@@ -128,6 +128,25 @@ export async function recheckRoleGroupMembershipsAction(formData: FormData) {
   redirect(route(projectId, `${roleGroupSlug.replace(/_/g, " ")}: ${verified} verified; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
 }
 
+export async function sendRoleGroupWelcomesAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId")); const roleGroupSlug = roleGroup.parse(formData.get("roleGroup")); const { user, supabase } = await context(projectId);
+  const { data: settings } = await supabase.from("project_role_group_google_settings").select("welcome_email_template_id").eq("project_id", projectId).eq("role_group", roleGroupSlug).maybeSingle();
+  if (!settings?.welcome_email_template_id) redirect(route(projectId, `Select and save a welcome template for ${roleGroupSlug.replace(/_/g, " ")} first.`, true));
+  const { data: roles, error: roleError } = await supabase.from("project_roles").select("id").eq("project_id", projectId).eq("role_group", roleGroupSlug);
+  if (roleError) redirect(route(projectId, roleError.message, true));
+  const roleIds = (roles ?? []).map((item) => String(item.id));
+  const { data: assignments, error } = roleIds.length ? await supabase.from("role_assignments").select("id").eq("project_id", projectId).in("role_id", roleIds) : { data: [], error: null };
+  if (error) redirect(route(projectId, error.message, true));
+  let sent = 0; const warnings: string[] = [];
+  for (const assignment of assignments ?? []) {
+    try { const result = await resendAssignmentWelcome(projectId, String(assignment.id), user.id); if (result.warnings.length) warnings.push(...result.warnings); else sent += 1; }
+    catch (sendError) { warnings.push(sendError instanceof Error ? sendError.message : "Welcome email failed."); }
+  }
+  revalidatePath(route(projectId));
+  const summary = `${roleGroupSlug.replace(/_/g, " ")}: ${sent} welcome email${sent === 1 ? "" : "s"} sent${warnings.length ? `; ${warnings.length} skipped or failed. ${warnings[0]}` : "."}`;
+  redirect(route(projectId, summary, sent === 0 && warnings.length > 0));
+}
+
 export async function recheckAllGoogleMembershipsAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const { user, supabase } = await context(projectId);
   const { data: assignments, error } = await supabase.from("role_assignments").select("id").eq("project_id", projectId);
@@ -156,5 +175,5 @@ export async function setAssignmentGoogleAutomationSkippedAction(formData: FormD
 
 export async function resendAssignmentWelcomeAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const assignmentId = uuid.parse(formData.get("assignmentId")); const { user } = await context(projectId);
-  const result = await resendAssignmentWelcome(projectId, assignmentId, user.id); redirect(route(projectId, result.warnings.length ? result.warnings.join(" ") : "Welcome email resent.", result.warnings.length > 0));
+  const result = await resendAssignmentWelcome(projectId, assignmentId, user.id); redirect(route(projectId, result.warnings.length ? result.warnings.join(" ") : "Welcome email sent.", result.warnings.length > 0));
 }
