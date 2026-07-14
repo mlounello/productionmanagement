@@ -1258,6 +1258,24 @@ legend {
   white-space: pre-wrap;
 }
 
+.schedule-block {
+  background: var(--green-soft);
+  border-left: 4px solid var(--green);
+  border-radius: 0 8px 8px 0;
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+}
+
+.schedule-block h3 {
+  margin: 0 0 .4rem;
+}
+
+.schedule-block p {
+  line-height: 1.65;
+  margin: 0;
+  white-space: pre-line;
+}
+
 .integration-panel {
   background: #fbfcfb;
   border: 1px solid var(--line);
