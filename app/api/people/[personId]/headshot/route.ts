@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 3 * 1024 * 1024;
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         try { await syncApprovedPublicityToPlaybill(String(submission.id)); }
         catch (syncError) {
           await admin.from("project_publicity_submissions").update({
-            playbill_sync_status: "failed",
+            playbill_sync_status: publicitySyncFailureStatus(syncError),
             playbill_sync_error: syncError instanceof Error ? syncError.message : "Unknown Playbill sync error."
           }).eq("id", submission.id);
         }

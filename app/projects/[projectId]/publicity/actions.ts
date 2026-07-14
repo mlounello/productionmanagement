@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 import { sendPublicityReminder } from "@/lib/profile-access-links";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
@@ -171,7 +171,7 @@ export async function approveAndSyncPublicityAction(formData: FormData) {
     await syncApprovedPublicityToPlaybill(submissionId);
   } catch (syncError) {
     const message = syncError instanceof Error ? syncError.message : "Unknown Playbill error.";
-    await supabase.from("project_publicity_submissions").update({ playbill_sync_status: "failed", playbill_sync_error: message }).eq("id", submissionId);
+    await supabase.from("project_publicity_submissions").update({ playbill_sync_status: publicitySyncFailureStatus(syncError), playbill_sync_error: message }).eq("id", submissionId);
     revalidatePath(`/projects/${projectId}/publicity`);
     redirect(path(projectId, "error", `Production copy approved, but Playbill sync failed: ${message}`));
   }
@@ -188,7 +188,7 @@ export async function retryPublicitySyncAction(formData: FormData) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Playbill error.";
     const supabase = await createSupabaseServerClient();
-    await supabase.from("project_publicity_submissions").update({ playbill_sync_status: "failed", playbill_sync_error: message }).eq("id", submissionId);
+    await supabase.from("project_publicity_submissions").update({ playbill_sync_status: publicitySyncFailureStatus(error), playbill_sync_error: message }).eq("id", submissionId);
     redirect(path(projectId, "error", message));
   }
   revalidatePath(`/projects/${projectId}/publicity`);

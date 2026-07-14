@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:google-groups": "node --test scripts/google-group-naming.test.mjs"
+    "test:google-groups": "node --test scripts/google-group-naming.test.mjs",
+    "test:publicity-safety": "node --experimental-strip-types --test scripts/publicity-sync-policy.test.ts"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",

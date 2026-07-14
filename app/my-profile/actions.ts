@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SITE_URL } from "@/lib/config";
-import { syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
 const profileSchema = z.object({
@@ -130,7 +130,7 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   } catch (syncError) {
     syncWarning = syncError instanceof Error ? syncError.message : "Unknown Playbill sync error.";
     await supabase.from("project_publicity_submissions").update({
-      playbill_sync_status: "failed", playbill_sync_error: syncWarning
+      playbill_sync_status: publicitySyncFailureStatus(syncError), playbill_sync_error: syncWarning
     }).eq("id", submissionId);
   }
 
@@ -175,7 +175,7 @@ export async function updateMyProjectPublicityBioAction(formData: FormData) {
       message = "Show-specific bio saved and resubmitted to Playbill.";
     } catch (syncError) {
       const warning = syncError instanceof Error ? syncError.message : "Unknown Playbill sync error.";
-      await supabase.from("project_publicity_submissions").update({ playbill_sync_status: "failed", playbill_sync_error: warning }).eq("id", submissionId);
+      await supabase.from("project_publicity_submissions").update({ playbill_sync_status: publicitySyncFailureStatus(syncError), playbill_sync_error: warning }).eq("id", submissionId);
       redirect(`/my-profile?error=${encodeURIComponent(`Bio saved, but Playbill sync failed: ${warning}`)}`);
     }
   }

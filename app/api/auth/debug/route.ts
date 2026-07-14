@@ -23,6 +23,10 @@ function decodeBase64Url(value: string) {
 }
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const cookieStore = await cookies();
   const allCookies = cookieStore.getAll();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -52,7 +56,6 @@ export async function GET() {
       return {
         name: cookie.name,
         length: cookie.value.length,
-        preview: cookie.value.slice(0, 24),
         parsed_raw_json: Boolean(safeJsonParse(cookie.value)),
         decoded_length: decoded?.length ?? 0,
         parsed_decoded_json: Boolean(decoded ? safeJsonParse(decoded) : null)
