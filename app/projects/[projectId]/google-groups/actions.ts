@@ -9,6 +9,7 @@ import { testGoogleGroupMembershipAccess } from "@/lib/google-group-membership";
 import { checkAssignmentGoogleMembership, resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { renderTemplate, sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { SITE_URL } from "@/lib/config";
 
 const uuid = z.string().uuid();
 const roleGroup = z.string().trim().min(1).max(100).regex(/^[a-z0-9_]+$/);
@@ -91,7 +92,7 @@ export async function sendRoleGroupWelcomeTestAction(formData: FormData) {
   if (!project || !settings?.welcome_email_template_id) redirect(route(projectId, "Select and save a welcome template before sending a test.", true));
   const { data: template, error: templateError } = await supabase.from("email_templates").select("subject_template, body_template").eq("id", settings.welcome_email_template_id).eq("active", true).single();
   if (templateError || !template) redirect(route(projectId, templateError?.message ?? "Welcome template not found.", true));
-  const variables = { person_name: previewName, project_title: String(project.title), role_name: previewRole, role_group: roleGroupSlug.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? ""), propared_rolegroup_link: String(settings.propared_role_group_link ?? "") };
+  const variables = { person_name: previewName, project_title: String(project.title), role_name: previewRole, role_group: roleGroupSlug.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? ""), propared_rolegroup_link: String(settings.propared_role_group_link ?? ""), profile_access_url: `${SITE_URL.replace(/\/+$/,"")}/profile-access` };
   const subject = `[TEST] ${renderTemplate(String(template.subject_template), variables)}`;
   const html = `<p style="padding:10px;background:#fff3cd;border:1px solid #e6cc75;"><strong>Test email:</strong> This preview was sent only to ${toEmail}. It did not contact the Google Group or mark a welcome email as delivered.</p>${renderTemplate(String(template.body_template), variables, true)}`;
   try {

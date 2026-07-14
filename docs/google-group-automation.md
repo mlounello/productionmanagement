@@ -135,6 +135,7 @@ Each role group has a **Propared Production Book link** field on the Google Grou
 1. Paste the Propared URL intended for that role group.
 2. Save the manual group connection.
 3. Use `{{propared_rolegroup_link}}` anywhere in the welcome subject or HTML body.
+4. Use `{{profile_access_url}}` for the person’s private Production Management profile link. If an older template does not include it, the app automatically appends profile, headshot, and show-bio instructions after the agreement is accepted.
 
 The same template can be selected for multiple role groups. At delivery time, Production Management substitutes the Propared link stored on the recipient's role group.
 

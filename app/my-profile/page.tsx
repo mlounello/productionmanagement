@@ -17,6 +17,7 @@ type Profile = {
   id: string; full_name: string; first_name: string; middle_name: string; last_name: string;
   preferred_name: string; email: string; vendor_number: string; phone: string; pronouns: string;
   publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number;
+  performance_interests:string[];technical_interests:string[];vocal_range:string;instruments:string;special_skills:string;performance_experience:string;technical_experience:string;certifications_training:string;dance_styles:string[];dance_experience:string;
 };
 type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; projects: { title: string } | null };
 type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null; bio_character_limit: number };
@@ -36,7 +37,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   const supabase = await createSupabaseServerClient();
   const { data: profile } = await supabase
     .from("people")
-    .select("id, full_name, first_name, middle_name, last_name, preferred_name, email, vendor_number, phone, pronouns, publicity_bio, publicity_headshot_url, publicity_profile_version")
+    .select("id, full_name, first_name, middle_name, last_name, preferred_name, email, vendor_number, phone, pronouns, publicity_bio, publicity_headshot_url, publicity_profile_version, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -97,6 +98,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
               <label className="field"><span>90#</span><input name="vendorNumber" defaultValue={typedProfile.vendor_number} /></label>
             </div>
             <label className="field"><span>Phone number</span><input name="phone" type="tel" defaultValue={typedProfile.phone} /></label>
+            <details className="drawer-section"><summary>Interests, skills, and experience</summary><label className="field"><span>Technical interests (comma separated)</span><textarea name="technicalInterests" rows={3} defaultValue={typedProfile.technical_interests.join(", ")}/></label><label className="field"><span>Performance interests (comma separated)</span><textarea name="performanceInterests" rows={3} defaultValue={typedProfile.performance_interests.join(", ")}/></label><div className="form-row"><label className="field"><span>Vocal range</span><input name="vocalRange" defaultValue={typedProfile.vocal_range}/></label><label className="field"><span>Dance styles (comma separated)</span><input name="danceStyles" defaultValue={typedProfile.dance_styles.join(", ")}/></label></div><label className="field"><span>Instruments and proficiency</span><textarea name="instruments" rows={3} defaultValue={typedProfile.instruments}/></label><label className="field"><span>Special skills</span><textarea name="specialSkills" rows={3} defaultValue={typedProfile.special_skills}/></label><label className="field"><span>Performance experience</span><textarea name="performanceExperience" rows={4} defaultValue={typedProfile.performance_experience}/></label><label className="field"><span>Technical experience</span><textarea name="technicalExperience" rows={4} defaultValue={typedProfile.technical_experience}/></label><label className="field"><span>Dance and movement experience</span><textarea name="danceExperience" rows={3} defaultValue={typedProfile.dance_experience}/></label><label className="field"><span>Certifications and training</span><textarea name="certificationsTraining" rows={3} defaultValue={typedProfile.certifications_training}/></label></details>
             <PublicityBioField name="bio" label="Overall publicity bio" initialValue={typedProfile.publicity_bio} previewName={typedProfile.preferred_name || typedProfile.full_name} previewRole="Role supplied by each production" characterLimit={350} />
             <p className="muted">Profile version {typedProfile.publicity_profile_version}. New productions begin with this reusable 350-character bio; each show then keeps its own editable copy.</p>
             <button type="submit">Save my profile</button>

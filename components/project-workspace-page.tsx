@@ -123,6 +123,7 @@ type Person = {
   person_type: string;
   status: string;
   publicity_headshot_url: string;
+  performance_interests:string[];technical_interests:string[];vocal_range:string;instruments:string;special_skills:string;performance_experience:string;technical_experience:string;certifications_training:string;dance_styles:string[];dance_experience:string;
 };
 
 type RoleAssignment = {
@@ -407,7 +408,7 @@ export default async function ProjectWorkspacePage({
       .order("name", { ascending: true }) : Promise.resolve({ data: [] }),
     needsPeople ? supabase
       .from("people")
-      .select("id, full_name, first_name, middle_name, last_name, preferred_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_headshot_url")
+      .select("id, full_name, first_name, middle_name, last_name, preferred_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_headshot_url, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience")
       .order("full_name", { ascending: true }) : Promise.resolve({ data: [] }),
     needsAssignments ? supabase
       .from("role_assignments")
@@ -583,6 +584,7 @@ export default async function ProjectWorkspacePage({
       status: person.status ?? "active",
       headshotUrl: person.publicity_headshot_url ?? "",
       managementNotes: managementNotesByPersonId.get(person.id) ?? "",
+      performanceInterests:person.performance_interests??[],technicalInterests:person.technical_interests??[],vocalRange:person.vocal_range??"",instruments:person.instruments??"",specialSkills:person.special_skills??"",performanceExperience:person.performance_experience??"",technicalExperience:person.technical_experience??"",certificationsTraining:person.certifications_training??"",danceStyles:person.dance_styles??[],danceExperience:person.dance_experience??"",
       noteCount: personNoteRows.length,
       projectCount: 1,
       roles: personAssignments.map((assignment) => {

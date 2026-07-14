@@ -85,21 +85,16 @@ Calendar, Production Timeline, Gantt, and Run of Show are permanently on hold wh
 
 Planning architecture rule: Calendar, Gantt, and Run of Show are synchronized projections over `calendar_items`. Do not create separate Gantt-only or run-of-show-only event records. The legacy `run_of_show_items` table remains available only for future extension detail linked back to a source calendar item.
 
-## Next After Active Integrations: Student Role Acceptance
+## Phase 7 Intake-To-Onboarding Lifecycle
 
-Begin this only after the active Playbill, Theatre Budget, Google Groups, publicity, audition, and communication integrations are complete. Calendar, Production Timeline, and Gantt are explicitly excluded from that prerequisite because they are permanently on hold.
-
-- A customizable project role-acceptance form sent to every student with an offered role.
-- Secure individualized links that do not require students to create an account.
-- Rehearsal etiquette, privacy expectations, production rules, and other acknowledgement sections supplied by the production manager.
-- Configurable questions including requested production credits and project-specific director/department questions.
-- Required acknowledgements, optional typed signature/attestation, submission timestamp, and retained version of the exact rules accepted.
-- Automatic connection to the existing person, project role, and role assignment without creating duplicates.
-- Draft, sent, opened, submitted, accepted, changes-needed, declined, and expired states with color-coded status and audit history.
-- Individual and bulk branded reminders through the Communication Center.
-- Production manager review, export, and completion dashboard.
-- Form templates that can be copied between productions and then customized.
-- Final field and policy design will be based on the recent Siena role-acceptance form supplied before implementation.
+- Implemented: auditions create or safely connect durable person records and add reusable vocal range, dance, instrument, skill, experience, technical-interest, and training details to the person profile.
+- Implemented: existing people can load their saved details into a public intake form with a short-lived email verification code; 90# may narrow the match but is never exposed as a searchable list or used alone as authentication.
+- Implemented: a reusable public Technical Theatre Interest Form creates or enriches profiles and supports configurable technical-role, vocal-range, and dance-style choices plus open-ended instruments, skills, experience, and training.
+- Implemented: separate cast and technical-crew student agreements based on Siena's recent forms, with exact version snapshots, required acknowledgements, typed attestation, credits, conflicts, cast allergy information, acceptance/decline, and expiration.
+- Implemented: per-project agreement wording and automatic-send behavior, individual and bulk sending, secure individualized links that require no account, and a project Onboarding checklist.
+- Implemented: students pause at role acceptance. Acceptance then releases Playbill role sync, Google membership checking, the Propared welcome, secure profile/headshot/show-bio instructions, and publicity preparation. Non-students continue through existing onboarding immediately.
+- Implemented: reusable profile and intake details remain separate from restricted project-specific agreement answers such as allergy information.
+- Next refinement: add friendly visual agreement-section builders, scheduled acceptance reminders, printable agreement exports, and richer audit/history views. The structured/versioned data model already supports these additions.
 
 ## Phase 2A Reference Data Foundation
 
@@ -122,7 +117,7 @@ Create the reference-data foundation in one coherent, reversible pass:
 - Convert one or two existing forms to the selector pattern, preferably project creation and/or calendar item creation.
 - Keep the app deployable and verify with typecheck, lint, build, migration/seed checks, and live form tests.
 
-## Phase 7 Operations
+## Phase 8 Operations
 
 - Employee scheduling.
 - Time tracking.
@@ -130,7 +125,7 @@ Create the reference-data foundation in one coherent, reversible pass:
 - Truck/load tracking.
 - Quotes, invoices, and payments.
 
-## Phase 8 Later Integrations
+## Phase 9 Later Integrations
 
 - Google Calendar feed/sync options.
 - Advanced Theatre Budget contract/payment workflows beyond guest artist profile sync.

@@ -47,7 +47,7 @@ async function activeTemplate(templateType = "profile_access", projectId: string
     : { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY };
 }
 
-async function createProfileAccessUrl(person: { id: string; email: string }, actorUserId: string | null) {
+export async function createProfileAccessUrl(person: { id: string; email: string }, actorUserId: string | null) {
   const admin = createSupabaseAdminClient();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + LINK_LIFETIME_DAYS * 24 * 60 * 60 * 1000).toISOString();

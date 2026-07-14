@@ -19,7 +19,7 @@ const profileSchema = z.object({
   pronouns: z.string().trim().max(80).optional(),
   vendorNumber: z.string().trim().max(40).optional(),
   phone: z.string().trim().max(40).optional(),
-  bio: z.string().trim().max(5000).optional()
+  bio: z.string().trim().max(5000).optional(), vocalRange:z.string().trim().max(120),instruments:z.string().trim().max(4000),specialSkills:z.string().trim().max(4000),performanceExperience:z.string().trim().max(8000),technicalExperience:z.string().trim().max(8000),certificationsTraining:z.string().trim().max(4000),danceExperience:z.string().trim().max(4000),performanceInterests:z.string().max(4000),technicalInterests:z.string().max(4000),danceStyles:z.string().max(4000)
 });
 
 function optional(formData: FormData, name: string) {
@@ -48,7 +48,7 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
     pronouns: optional(formData, "pronouns"),
     vendorNumber: optional(formData, "vendorNumber"),
     phone: optional(formData, "phone"),
-    bio: optional(formData, "bio")
+    bio: optional(formData, "bio"),vocalRange:String(formData.get("vocalRange")??""),instruments:String(formData.get("instruments")??""),specialSkills:String(formData.get("specialSkills")??""),performanceExperience:String(formData.get("performanceExperience")??""),technicalExperience:String(formData.get("technicalExperience")??""),certificationsTraining:String(formData.get("certificationsTraining")??""),danceExperience:String(formData.get("danceExperience")??""),performanceInterests:String(formData.get("performanceInterests")??""),technicalInterests:String(formData.get("technicalInterests")??""),danceStyles:String(formData.get("danceStyles")??"")
   });
   if (!parsed.success) redirect(`/my-profile?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid profile.")}`);
   const cleanBio = sanitizeRichText(parsed.data.bio ?? "");
@@ -77,6 +77,9 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
     new_publicity_bio: cleanBio
   });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
+  const list=(value:string)=>value.split(",").map((item)=>item.trim()).filter(Boolean);
+  const {error:enrichmentError}=await supabase.rpc("update_my_profile_enrichment",{new_performance_interests:list(parsed.data.performanceInterests),new_technical_interests:list(parsed.data.technicalInterests),new_vocal_range:parsed.data.vocalRange,new_instruments:parsed.data.instruments,new_special_skills:parsed.data.specialSkills,new_performance_experience:parsed.data.performanceExperience,new_technical_experience:parsed.data.technicalExperience,new_certifications_training:parsed.data.certificationsTraining,new_dance_styles:list(parsed.data.danceStyles),new_dance_experience:parsed.data.danceExperience});
+  if(enrichmentError)redirect(`/my-profile?error=${encodeURIComponent(`Basic profile saved, but interests and experience failed: ${enrichmentError.message}`)}`);
 
   revalidatePath("/my-profile");
   revalidatePath(`/people/${parsed.data.personId}`);

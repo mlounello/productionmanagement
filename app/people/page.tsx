@@ -9,6 +9,7 @@ type PersonRow = {
   id: string; full_name: string; first_name: string; middle_name: string; last_name: string; preferred_name: string;
   pronouns: string; email: string; vendor_number: string; phone: string; affiliation: string; person_type: string;
   status: string; publicity_headshot_url: string;
+  performance_interests:string[];technical_interests:string[];vocal_range:string;instruments:string;special_skills:string;performance_experience:string;technical_experience:string;certifications_training:string;dance_styles:string[];dance_experience:string;
 };
 
 type AssignmentRow = {
@@ -30,7 +31,7 @@ export default async function PeoplePage({
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
   const [{ data: people, error }, { data: assignments }, { data: notes }, { data: managementDetails }] = await Promise.all([
-    supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, status, publicity_headshot_url").order("full_name", { ascending: true }),
+    supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, status, publicity_headshot_url, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience").order("full_name", { ascending: true }),
     supabase.from("role_assignments").select("id, person_id, project_id, status, is_guest_artist, projects(title), project_roles(name, role_group)"),
     supabase.from("person_notes").select("person_id"),
     supabase.from("person_management_details").select("person_id, notes")
@@ -59,6 +60,7 @@ export default async function PeoplePage({
       status: person.status ?? "active",
       headshotUrl: person.publicity_headshot_url ?? "",
       managementNotes: managementNotes.get(person.id) ?? "",
+      performanceInterests:person.performance_interests??[],technicalInterests:person.technical_interests??[],vocalRange:person.vocal_range??"",instruments:person.instruments??"",specialSkills:person.special_skills??"",performanceExperience:person.performance_experience??"",technicalExperience:person.technical_experience??"",certificationsTraining:person.certifications_training??"",danceStyles:person.dance_styles??[],danceExperience:person.dance_experience??"",
       noteCount: noteCounts.get(person.id) ?? 0,
       projectCount: new Set(personAssignments.map((assignment) => assignment.project_id)).size,
       notes: [],

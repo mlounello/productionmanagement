@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { applyProfileEnrichment, getVerifiedProfile } from "@/lib/profile-intake";
 
 const uuid = z.string().uuid();
 
@@ -25,10 +27,33 @@ export async function submitAuditionAction(formData: FormData) {
   }
   const slotRaw = String(formData.get("audition_slot") ?? "");
   const slotId = slotRaw ? uuid.parse(slotRaw) : null;
+  const admin = createSupabaseAdminClient();
+  const { data: form } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();
+  if (!form) redirect(`/auditions/${token}?error=${encodeURIComponent("Audition form is unavailable.")}`);
+  const submittedEmail = String(answers.email ?? "").trim().toLowerCase();
+  const { data: existingBefore } = submittedEmail ? await admin.from("people").select("id").ilike("email", submittedEmail).limit(1).maybeSingle() : { data: null };
+  const verified = await getVerifiedProfile(String(formData.get("profileSession") ?? ""), "audition", String(form.id));
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("submit_public_audition", { form_token: token, answer_payload: answers, selected_slot_id: slotId });
   if (error || !data) redirect(`/auditions/${token}?error=${encodeURIComponent(error?.message ?? "Could not submit audition form.")}`);
   const result = data as { submission_id: string; access_token: string };
+  const { data: submission } = await admin.from("audition_submissions").select("person_id").eq("id", result.submission_id).maybeSingle();
+  let personId = String(submission?.person_id ?? "");
+  if (verified && personId && verified.id !== personId) {
+    personId = verified.id;
+    await admin.from("audition_submissions").update({ person_id: verified.id, duplicate_status: "resolved", duplicate_candidates: [] }).eq("id", result.submission_id);
+  }
+  if (personId && (verified || !existingBefore)) {
+    const roleIds = Array.isArray(answers.role_interests) ? answers.role_interests.map(String) : [];
+    const { data: interestRoles } = roleIds.length ? await admin.from("project_roles").select("name").in("id", roleIds) : { data: [] };
+    await applyProfileEnrichment({ personId, sourceType: "audition", sourceId: result.submission_id, values: {
+      full_name: String(answers.full_name ?? ""), preferred_name: String(answers.preferred_name ?? ""), email: submittedEmail,
+      phone: String(answers.phone ?? ""), pronouns: String(answers.pronouns ?? ""), affiliation: answers.graduation_year ? `Siena ${String(answers.graduation_year)}` : "",
+      performance_interests: (interestRoles ?? []).map((row) => String(row.name)), technical_interests: Array.isArray(answers.production_interests) ? answers.production_interests.map(String) : [],
+      vocal_range: String(answers.vocal_range ?? ""), instruments: String(answers.instruments ?? ""), special_skills: String(answers.special_skills ?? ""),
+      performance_experience: String(answers.performance_experience ?? ""), dance_styles: Array.isArray(answers.dance_styles) ? answers.dance_styles.map(String) : [], dance_experience: String(answers.dance_movement ?? "")
+    }});
+  }
   for (const upload of uploads) {
     if (upload.file.size > 5 * 1024 * 1024) redirect(`/auditions/${token}/confirmation?access=${result.access_token}&warning=${encodeURIComponent(`${upload.file.name} exceeded 5 MB and was not uploaded.`)}`);
     const bytes = Buffer.from(await upload.file.arrayBuffer());

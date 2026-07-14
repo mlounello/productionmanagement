@@ -1233,6 +1233,31 @@ legend {
   text-align: center;
 }
 
+.onboarding-checklist {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 12px 0;
+}
+
+.onboarding-checklist > div {
+  align-items: center;
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.agreement-copy {
+  color: var(--ink);
+  line-height: 1.65;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+}
+
 .integration-panel {
   background: #fbfcfb;
   border: 1px solid var(--line);

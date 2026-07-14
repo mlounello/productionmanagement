@@ -154,6 +154,7 @@ const directoryProfileSchema = z.object({
   vendorNumber: z.string().trim().max(40), phone: z.string().trim().max(40), affiliation: z.string().trim().max(160),
   personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"]),
   status: z.enum(["active", "inactive", "archived"]), managementNotes: z.string().trim().max(4000),
+  performanceInterests: z.string().max(4000), technicalInterests: z.string().max(4000), vocalRange: z.string().trim().max(120), instruments: z.string().trim().max(4000), specialSkills: z.string().trim().max(4000), performanceExperience: z.string().trim().max(8000), technicalExperience: z.string().trim().max(8000), certificationsTraining: z.string().trim().max(4000), danceStyles: z.string().max(4000), danceExperience: z.string().trim().max(4000),
   returnTo: z.string().trim().max(500)
 });
 
@@ -174,6 +175,7 @@ export async function updatePersonDirectoryAction(formData: FormData) {
     preferredName: requiredString(formData.get("preferredName")), pronouns: requiredString(formData.get("pronouns")), email: requiredString(formData.get("email")),
     vendorNumber: requiredString(formData.get("vendorNumber")), phone: requiredString(formData.get("phone")), affiliation: requiredString(formData.get("affiliation")),
     personType: requiredString(formData.get("personType")), status: requiredString(formData.get("status")), managementNotes: requiredString(formData.get("managementNotes")),
+    performanceInterests: requiredString(formData.get("performanceInterests")), technicalInterests: requiredString(formData.get("technicalInterests")), vocalRange: requiredString(formData.get("vocalRange")), instruments: requiredString(formData.get("instruments")), specialSkills: requiredString(formData.get("specialSkills")), performanceExperience: requiredString(formData.get("performanceExperience")), technicalExperience: requiredString(formData.get("technicalExperience")), certificationsTraining: requiredString(formData.get("certificationsTraining")), danceStyles: requiredString(formData.get("danceStyles")), danceExperience: requiredString(formData.get("danceExperience")),
     returnTo: requiredString(formData.get("returnTo"))
   });
   const fallbackId = requiredString(formData.get("id"));
@@ -184,7 +186,8 @@ export async function updatePersonDirectoryAction(formData: FormData) {
   const { error } = await supabase.from("people").update({
     full_name: input.fullName, first_name: input.firstName, middle_name: input.middleName, last_name: input.lastName,
     preferred_name: input.preferredName, pronouns: input.pronouns, email: input.email.toLowerCase(), vendor_number: input.vendorNumber,
-    phone: input.phone, affiliation: input.affiliation, person_type: input.personType, status: input.status
+    phone: input.phone, affiliation: input.affiliation, person_type: input.personType, status: input.status,
+    performance_interests: input.performanceInterests.split(",").map((value)=>value.trim()).filter(Boolean), technical_interests: input.technicalInterests.split(",").map((value)=>value.trim()).filter(Boolean), vocal_range: input.vocalRange, instruments: input.instruments, special_skills: input.specialSkills, performance_experience: input.performanceExperience, technical_experience: input.technicalExperience, certifications_training: input.certificationsTraining, dance_styles: input.danceStyles.split(",").map((value)=>value.trim()).filter(Boolean), dance_experience: input.danceExperience
   }).eq("id", input.id);
   if (error) redirect(directoryResultPath(returnTo, "error", error.message));
   const { error: notesError } = await supabase.from("person_management_details").upsert({ person_id: input.id, notes: input.managementNotes }, { onConflict: "person_id" });

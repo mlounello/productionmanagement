@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { optionalMusicFields, standardAuditionFields, standardAuditionSections } from "@/lib/auditions";
-import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
+import { beginAssignmentOnboarding } from "@/lib/role-acceptance";
+import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const uuid = z.string().uuid();
@@ -249,14 +250,17 @@ export async function castAuditionSubmissionAction(formData: FormData) {
   const { data: assignment, error } = await supabase.from("role_assignments").upsert({ project_id: projectId, role_id: roleId, person_id: submission.person_id, status: "draft", assignment_kind: String(formData.get("assignmentKind") ?? "primary") }, { onConflict: "role_id,person_id" }).select("id").single();
   if (error) redirect(path(projectId, error.message, true));
   let googleWarning = "";
+  let deferPlaybill = false;
   try {
-    const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id);
+    const result = await beginAssignmentOnboarding(projectId, String(assignment.id), user.id);
     googleWarning = result.warnings.join(" ");
+    deferPlaybill = result.deferPlaybill;
   } catch (automationError) {
     googleWarning = automationError instanceof Error ? automationError.message : "Google Group automation could not run.";
   }
+  if(!deferPlaybill){try{await syncAssignmentToPlaybill(projectId,String(assignment.id));}catch(syncError){googleWarning=[googleWarning,`Playbill: ${syncError instanceof Error?syncError.message:"sync failed"}`].filter(Boolean).join(" ");}}
   await supabase.from("audition_submissions").update({ casting_status: "cast" }).eq("id", submissionId);
-  redirect(path(projectId, googleWarning ? `Applicant cast and linked to the project role. Google automation needs attention: ${googleWarning}` : "Applicant cast and linked to the project role."));
+  redirect(path(projectId, googleWarning ? `Applicant selected and linked to the project role. Onboarding needs attention: ${googleWarning}` : deferPlaybill ? "Applicant selected. Their role acceptance was sent; Playbill and production onboarding will begin after acceptance." : "Applicant selected and linked to the project role."));
 }
 
 export async function setAuditionReviewerAction(formData: FormData) {
