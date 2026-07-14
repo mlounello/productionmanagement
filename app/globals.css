@@ -520,6 +520,64 @@ button {
   padding: 12px 14px;
 }
 
+.feedback-banner {
+  align-items: flex-start;
+  border: 1px solid;
+  border-radius: 10px;
+  display: grid;
+  gap: 2px;
+  margin: 0 0 18px;
+  padding: 13px 15px;
+  scroll-margin-top: 20px;
+}
+
+.feedback-banner:focus-visible {
+  outline: 3px solid rgba(0, 90, 60, .22);
+  outline-offset: 2px;
+}
+
+.feedback-banner span { font-size: 14px; }
+.feedback-success { background: #edf7f1; border-color: #b9dbc9; color: var(--siena-green); }
+.feedback-error { background: #fff5f4; border-color: #f5c2c0; color: var(--danger); }
+
+.inline-help {
+  background: #f5f8f6;
+  border: 1px solid #cadbd2;
+  border-radius: 10px;
+  margin: 0 0 18px;
+  padding: 0 14px;
+}
+
+.inline-help summary {
+  color: var(--siena-green);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 12px 0;
+}
+
+.inline-help-content {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 0 0 14px;
+}
+
+.inline-help-content > :first-child { margin-top: 0; }
+.inline-help-content > :last-child { margin-bottom: 0; }
+
+.empty-state-card {
+  background: #fafcfa;
+  border: 1px dashed #b9cbc1;
+  border-radius: 10px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  text-align: center;
+}
+
+.empty-state-card strong { color: var(--ink); }
+.empty-state-action { margin-top: 6px; }
+
 .gantt {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -992,6 +1050,25 @@ legend {
   padding: 12px;
 }
 
+.integration-panel > summary {
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  list-style-position: outside;
+  padding: 2px;
+}
+
+.integration-panel > summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.integration-panel[open] > summary {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+}
+
 .integration-panel strong {
   display: block;
 }
@@ -1075,6 +1152,12 @@ legend {
   background: #fff5d6;
   color: #73520a;
 }
+
+.status-badge.success { background: #e6f5ec; color: #17633d; }
+.status-badge.warning { background: #fff5d6; color: #73520a; }
+.status-badge.danger { background: #fdeceb; color: #a22924; }
+.status-badge.info { background: #eaf1f8; color: #285a7a; }
+.status-badge.neutral { background: #edf2ef; color: #33443d; }
 
 .people-file-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -5,6 +5,10 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
+import { FeedbackBanner } from "@/components/ui/feedback-banner";
+import { InlineHelp } from "@/components/ui/inline-help";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   prepareProjectPublicityAction,
   refreshPublicityFromProfileAction,
@@ -85,8 +89,8 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
         <div className="top-actions"><ProjectContextSwitcher projectId={projectId} workspace="publicity"/><Link className="button secondary" href={`/projects/${projectId}/overview`}>Project</Link><Link className="button secondary" href="/my-profile">My Profile</Link></div>
       </div>
       <ProjectWorkspaceNav projectId={projectId} active="publicity" />
-      {query?.error ? <p className="setup-warning">{query.error}</p> : null}
-      {query?.success ? <p className="setup-success">{query.success}</p> : null}
+      <FeedbackBanner error={query?.error} success={query?.success} />
+      <InlineHelp title="How profiles, approvals, and Playbill stay in sync"><p>A person’s profile holds their reusable headshot and overall bio. Each production receives its own editable copy, so someone working on several shows can approve a different bio for each one.</p><p>Person approval automatically sends eligible copy to a linked Playbill show as <strong>Submitted</strong>. Final editorial approval and locking happen in Playbill. A locked copy remains visible here for history and is no longer overwritten.</p></InlineHelp>
 
       <section className="workspace-summary" aria-label="Publicity summary">
         <div><span>{outstanding.length}</span><p>Outstanding</p></div>
@@ -96,7 +100,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
       </section>
       <div className="top-actions" aria-label="Playbill status breakdown" style={{ marginBottom: 20 }}>
         {["pending", "draft", "submitted", "returned", "approved", "locked"].map((status) => (
-          <span className="status-badge" key={status}>{label(status)}: {publicityRows.filter((item) => item.playbill_submission_status === status).length}</span>
+          <StatusBadge status={status} context="playbill" label={`${label(status)}: ${publicityRows.filter((item) => item.playbill_submission_status === status).length}`} key={status} />
         ))}
       </div>
 
@@ -127,7 +131,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
             return <label className="check-row" key={item.id}><input type="checkbox" name="personId" value={item.person_id} defaultChecked /><span><strong>{assignment?.people?.full_name ?? "Unknown person"}</strong> · {!item.bio.trim() ? "Bio missing · " : ""}{!item.headshot_url.trim() ? "Headshot missing · " : ""}{label(item.status)}</span></label>;
           })}</div>
           <button type="submit">Send selected reminders</button>
-        </form> : <p className="setup-success">No publicity reminders are currently needed.</p>}
+        </form> : <EmptyState title="Everyone is current">No publicity reminders are needed right now.</EmptyState>}
       </section>
 
       <div className="compact-list">
@@ -143,7 +147,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
             <section className="panel workspace-section" key={assignment.id}>
               <div className="section-heading">
                 <div><p className="eyebrow">Production Publicity</p><h2>{assignment.people?.full_name ?? "Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"} · Person: {label(item.status)} · Playbill: {label(item.playbill_submission_status)}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
-                <div className="top-actions">{profileChanged && !isLocked ? <span className="status-badge gold">New profile version available</span> : null}<span className={`status-badge${isLocked ? " gold" : ""}`}>{isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`}</span></div>
+                <div className="top-actions">{profileChanged && !isLocked ? <StatusBadge status="pending" label="New profile version available" /> : null}<StatusBadge status={isLocked ? "locked" : "draft"} context="playbill" label={isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`} /></div>
               </div>
               {item.playbill_sync_error ? <p className="setup-warning">{item.playbill_sync_error}</p> : null}
               {!isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">

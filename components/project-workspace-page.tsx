@@ -35,6 +35,8 @@ import {
 import type { ProjectGanttSection } from "@/components/project-gantt";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectSwitcher } from "@/components/project-switcher";
+import { FeedbackBanner } from "@/components/ui/feedback-banner";
+import { InlineHelp } from "@/components/ui/inline-help";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
@@ -617,8 +619,7 @@ export default async function ProjectWorkspacePage({
         </div>
       </div>
 
-      {query?.error ? <p className="setup-warning">{query.error}</p> : null}
-      {query?.success ? <p className="setup-success">{query.success}</p> : null}
+      <FeedbackBanner error={query?.error} success={query?.success} />
 
       <ProjectWorkspaceNav projectId={typedProject.id} active={workspace} />
 
@@ -663,6 +664,7 @@ export default async function ProjectWorkspacePage({
             </p>
           </div>
         </div>
+        <InlineHelp title="What synchronizes automatically"><p>Vacant Production Management roles can be sent to a linked draft Playbill show, and assigning a person fills the linked Playbill role. Published or locked Playbill records are protected from automatic overwrites.</p><p>Guest-artist records link to Theatre Budget without changing non-guest assignments. “Sync and reconcile all” retries safe pending work and reports anything that still needs a person to review.</p></InlineHelp>
         {playbillShows.error ? <p className="setup-warning">{playbillShows.error}</p> : null}
         {linkedPlaybillShow || playbillLink ? (
           <div className="linked-record">
@@ -1152,6 +1154,7 @@ export default async function ProjectWorkspacePage({
           regularAction={bulkCreateRoleAssignmentsAction}
           budgetAction={bulkAssignTheatreBudgetGuestArtistsAction}
         />
+        <InlineHelp title="Guest artists, repeat assignments, and filled roles"><p>Choose Theatre Budget guest artists from the guest-artist search when they already exist there. Use the regular person search for everyone else. Filled roles disappear from the new-assignment list; people remain available for multiple roles, and an asterisk means they already hold at least one role in this project.</p></InlineHelp>
         <p className="muted">
           Filled roles are hidden from new-assignment dropdowns. An asterisk (*) marks people and Theatre Budget guest artists who already hold a role in this project; they remain selectable for additional roles.
         </p>
