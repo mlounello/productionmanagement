@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
+import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import {
   prepareProjectPublicityAction,
@@ -81,7 +82,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
     <div className="page workspace-page">
       <div className="page-header">
         <div><p className="eyebrow">Publicity Dashboard</p><h1>{project.title}</h1><p className="muted">Production Management collects and person-approves copy. Playbill handles final editorial approval and locking.</p></div>
-        <div className="top-actions"><Link className="button secondary" href={`/projects/${projectId}`}>Project</Link><Link className="button secondary" href="/my-profile">My Profile</Link></div>
+        <div className="top-actions"><ProjectContextSwitcher projectId={projectId} workspace="publicity"/><Link className="button secondary" href={`/projects/${projectId}/overview`}>Project</Link><Link className="button secondary" href="/my-profile">My Profile</Link></div>
       </div>
       <ProjectWorkspaceNav projectId={projectId} active="publicity" />
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}

@@ -339,7 +339,7 @@ export default async function PersonPage({
                   {assignment.project_roles?.department ? ` · ${assignment.project_roles.department}` : ""}
                 </span>
                 {assignment.projects?.id ? (
-                  <Link className="button secondary" href={`/projects/${assignment.projects.id}`}>
+                  <Link className="button secondary" href={`/projects/${assignment.projects.id}/overview`}>
                     Project
                   </Link>
                 ) : null}

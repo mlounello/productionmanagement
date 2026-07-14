@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { projectWorkspacePath } from "@/lib/project-routes";
 
 const workspaceItems = [
   { key: "overview", label: "Overview" },
@@ -17,7 +18,7 @@ export function ProjectWorkspaceNav({ projectId, active }: { projectId: string; 
         <Link
           aria-current={active === item.key ? "page" : undefined}
           className={active === item.key ? "active" : ""}
-          href={`/projects/${projectId}?workspace=${item.key}`}
+          href={projectWorkspacePath(projectId, item.key)}
           key={item.key}
         >
           {item.label}

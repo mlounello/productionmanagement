@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { DashboardViewEditor } from "@/components/dashboard-view-editor";
+import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { dashboardModuleDefinitions, normalizeDashboardLayout, type DashboardLayoutItem } from "@/lib/dashboard-modules";
 import { createDashboardViewAction, deleteDashboardViewAction, saveDashboardLayoutAction, setDefaultDashboardAction, updateDashboardDetailsAction } from "@/app/projects/[projectId]/dashboards/actions";
 
@@ -73,14 +74,14 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
     else if (item.key === "people_notes") content = <div className="dashboard-kpis"><div><strong>{new Set(activeAssignments.map((row) => row.person_id)).size}</strong><span>Project people</span></div><div><strong>{notes?.length ?? 0}</strong><span>Recent notes</span></div></div>;
     else content = <div className="compact-list">{calendarRows.filter((row) => row.is_run_of_show_relevant).slice(0, 6).map((row) => <div className="compact-row" key={row.id}><div><strong>{row.cue_number ? `${row.cue_number} · ` : ""}{row.title}</strong><span>{formatDate(row.starts_at)}</span></div></div>)}</div>;
     const moduleHref: Record<DashboardLayoutItem["key"], string> = {
-      project_summary: `/projects/${projectId}`,
-      upcoming_calendar: `/projects/${projectId}?workspace=calendar`,
-      role_status: `/projects/${projectId}?workspace=roles`,
-      assignment_status: `/projects/${projectId}?workspace=roles`,
+      project_summary: `/projects/${projectId}/overview`,
+      upcoming_calendar: `/projects/${projectId}/calendar`,
+      role_status: `/projects/${projectId}/roles`,
+      assignment_status: `/projects/${projectId}/roles`,
       publicity_status: `/projects/${projectId}/publicity`,
-      integration_health: `/projects/${projectId}?workspace=integrations`,
-      people_notes: `/projects/${projectId}?workspace=people`,
-      run_of_show: `/projects/${projectId}?workspace=run-of-show`
+      integration_health: `/projects/${projectId}/integrations`,
+      people_notes: `/projects/${projectId}/people`,
+      run_of_show: `/projects/${projectId}/run-of-show`
     };
     return <section className={`panel dashboard-module dashboard-module-${item.size}`} key={item.key}><div className="section-heading"><div><p className="eyebrow">Dashboard Module</p><h2>{moduleTitle(item.key)}</h2></div></div>{content}<Link className="dashboard-module-link" href={moduleHref[item.key]}>Open full workspace →</Link></section>;
   }
@@ -90,7 +91,7 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
 
   return (
     <div className="page workspace-page">
-      <div className="page-header"><div><p className="eyebrow">Saved Dashboards</p><h1>{projectRow.title}</h1><p className="muted">Build focused views from the project modules you need, then switch between them instantly.</p></div><Link className="button secondary" href={`/projects/${projectId}`}>Project overview</Link></div>
+      <div className="page-header"><div><p className="eyebrow">Saved Dashboards</p><h1>{projectRow.title}</h1><p className="muted">Build focused views from the project modules you need, then switch between them instantly.</p></div><div className="top-actions"><ProjectContextSwitcher projectId={projectId} workspace="dashboards"/><Link className="button secondary" href={`/projects/${projectId}/overview`}>Project overview</Link></div></div>
       <ProjectWorkspaceNav projectId={projectId} active="dashboards" />
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}{query?.success ? <p className="setup-success">{query.success}</p> : null}
       {viewsResult.error ? <p className="setup-warning">Saved dashboards need the latest database migration: {viewsResult.error.message}</p> : null}

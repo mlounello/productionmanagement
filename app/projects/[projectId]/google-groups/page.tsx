@@ -5,6 +5,7 @@ import { ENABLE_GOOGLE_GROUP_AUTO_CREATE, ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK, 
 import { generateGoogleGroupEmail } from "@/lib/google-groups";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
+import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { createRoleGroupGoogleGroupAction, createRoleGroupWelcomeTemplateAction, recheckAllGoogleMembershipsAction, recheckRoleGroupMembershipsAction, resendAssignmentWelcomeAction, retryAssignmentGoogleSyncAction, saveRoleGroupGoogleSettingsAction, sendRoleGroupWelcomeTestAction, setAssignmentGoogleAutomationSkippedAction, testRoleGroupGoogleGroupAction } from "@/app/projects/[projectId]/google-groups/actions";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function ProjectGoogleGroupsPage({ params, searchParams }: 
   ]);
   if (!project) notFound();
   const roleGroups = Array.from(new Set((roles ?? []).map((role) => String(role.role_group)))).sort(); const settingsByGroup = new Map((settings ?? []).map((row) => [String(row.role_group), row]));
-  return <div className="page"><div className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Google Groups</h1><p className="muted">Create each group in Google Admin, then connect its email here for automatic membership and welcome messages.</p></div><Link className="button secondary" href={`/projects/${projectId}`}>Back to project</Link></div>
+  return <div className="page"><div className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Google Groups</h1><p className="muted">Create each group in Google Admin, then connect its email here for automatic membership and welcome messages.</p></div><div className="top-actions"><ProjectContextSwitcher projectId={projectId} workspace="google-groups"/><Link className="button secondary" href={`/projects/${projectId}/overview`}>Back to project</Link></div></div>
     <ProjectWorkspaceNav projectId={projectId} active="google-groups" />
     {query?.error?<p className="setup-warning">{query.error}</p>:null}{query?.success?<p className="setup-success">{query.success}</p>:null}
     <section className="panel"><div className="workspace-summary"><div><span>{ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK?"On":"Off"}</span><p>Membership Checks</p></div><div><span>Manual</span><p>Group Changes</p></div><div><span>{GOOGLE_GROUP_EMAIL_SUFFIX||"None"}</span><p>Suggested Suffix</p></div><div><span>{GOOGLE_GROUP_DOMAIN}</span><p>Domain</p></div></div><p className="muted">Create and manage groups in Google. Production Management uses Apps Script to verify membership and flag missing people.</p><form action={recheckAllGoogleMembershipsAction}><input type="hidden" name="projectId" value={projectId}/><button type="submit">Check memberships for all groups</button></form>{!ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK?<p className="setup-warning">Apps Script membership checking is not configured or enabled yet. Group addresses and welcome templates can still be prepared.</p>:null}</section>

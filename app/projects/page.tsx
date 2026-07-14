@@ -87,7 +87,7 @@ export default async function ProjectsPage({
                     {formatProjectType(project.project_type)} · {project.status}
                   </span>
                 </div>
-                <Link className="button secondary" href={`/projects/${project.id}`}>
+                <Link className="button secondary" href={`/projects/${project.id}/overview`}>
                   Open
                 </Link>
               </div>

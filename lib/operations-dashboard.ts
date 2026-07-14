@@ -90,7 +90,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
   const playbillLinkedProjects = new Set((linksResult.data ?? []).filter((row) => row.local_entity_type === "project").map((row) => String(row.local_entity_id)));
   for (const row of rolesResult.data ?? []) {
     const status = String(row.playbill_sync_status);
-    if (status === "failed" || (playbillLinkedProjects.has(String(row.project_id)) && ["not_ready", "pending"].includes(status))) add({ id: `playbill-role-${row.id}`, projectId: String(row.project_id), category: "playbill", kind: "attention", severity: status === "failed" ? "urgent" : "warning", title: `${row.name}: Playbill role sync ${status.replace(/_/g, " ")}`, detail: String(row.sync_notes || "Open integrations to sync or reconcile this role."), href: `/projects/${row.project_id}?workspace=integrations`, dueAt: null });
+    if (status === "failed" || (playbillLinkedProjects.has(String(row.project_id)) && ["not_ready", "pending"].includes(status))) add({ id: `playbill-role-${row.id}`, projectId: String(row.project_id), category: "playbill", kind: "attention", severity: status === "failed" ? "urgent" : "warning", title: `${row.name}: Playbill role sync ${status.replace(/_/g, " ")}`, detail: String(row.sync_notes || "Open integrations to sync or reconcile this role."), href: `/projects/${row.project_id}/integrations`, dueAt: null });
   }
 
   const googleSettings = new Map((googleSettingsResult.data ?? []).map((row) => [`${row.project_id}:${row.role_group}`, row]));
@@ -101,8 +101,8 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     const name = personName(person);
     const roleName = role?.name || "assigned role";
     const playbillStatus = String(row.playbill_sync_status);
-    if (playbillStatus === "failed" || (playbillLinkedProjects.has(projectId) && playbillStatus === "pending")) add({ id: `playbill-assignment-${row.id}`, projectId, category: "playbill", kind: "attention", severity: playbillStatus === "failed" ? "urgent" : "warning", title: `${name}: Playbill assignment sync ${playbillStatus.replace(/_/g, " ")}`, detail: String(row.sync_notes || roleName), href: `/projects/${projectId}?workspace=integrations`, dueAt: null });
-    if (row.is_guest_artist && !["synced", "disabled"].includes(String(row.guest_artist_sync_status))) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: row.guest_artist_sync_status === "failed" ? "urgent" : "warning", title: `${name} needs a Theatre Budget link`, detail: `${roleName} · ${String(row.guest_artist_sync_status).replace(/_/g, " ")}`, href: `/projects/${projectId}?workspace=roles`, dueAt: null });
+    if (playbillStatus === "failed" || (playbillLinkedProjects.has(projectId) && playbillStatus === "pending")) add({ id: `playbill-assignment-${row.id}`, projectId, category: "playbill", kind: "attention", severity: playbillStatus === "failed" ? "urgent" : "warning", title: `${name}: Playbill assignment sync ${playbillStatus.replace(/_/g, " ")}`, detail: String(row.sync_notes || roleName), href: `/projects/${projectId}/integrations`, dueAt: null });
+    if (row.is_guest_artist && !["synced", "disabled"].includes(String(row.guest_artist_sync_status))) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: row.guest_artist_sync_status === "failed" ? "urgent" : "warning", title: `${name} needs a Theatre Budget link`, detail: `${roleName} · ${String(row.guest_artist_sync_status).replace(/_/g, " ")}`, href: `/projects/${projectId}/roles`, dueAt: null });
     if (row.google_automation_skipped) continue;
     const groupSettings = googleSettings.get(`${projectId}:${role?.role_group ?? ""}`);
     if (groupSettings?.google_group_sync_enabled && groupSettings.active_google_group_email && ["not_attempted", "missing", "failed"].includes(String(row.google_group_sync_status))) add({ id: `google-membership-${row.id}`, projectId, category: "google", kind: "attention", severity: row.google_group_sync_status === "failed" ? "urgent" : "warning", title: `${name}: Google Group membership ${String(row.google_group_sync_status).replace(/_/g, " ")}`, detail: String(row.google_group_sync_error || groupSettings.active_google_group_email), href: `/projects/${projectId}/google-groups`, dueAt: null });
@@ -122,7 +122,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     const time = new Date(dueAt).getTime();
     const isDeadline = row.item_type === "deadline" || row.item_type === "milestone" || Boolean(row.due_at);
     if (!isDeadline || time > new Date(upperDate).getTime()) continue;
-    add({ id: `calendar-${row.id}`, projectId: String(row.project_id), category: "calendar", kind: time < now.getTime() ? "attention" : "upcoming", severity: severityForDate(dueAt, now), title: String(row.title), detail: `${String(row.item_type).replace(/_/g, " ")} · ${String(row.status).replace(/_/g, " ")}`, href: `/projects/${row.project_id}?workspace=calendar`, dueAt });
+    add({ id: `calendar-${row.id}`, projectId: String(row.project_id), category: "calendar", kind: time < now.getTime() ? "attention" : "upcoming", severity: severityForDate(dueAt, now), title: String(row.title), detail: `${String(row.item_type).replace(/_/g, " ")} · ${String(row.status).replace(/_/g, " ")}`, href: `/projects/${row.project_id}/calendar`, dueAt });
   }
 
   return { items: sortOperationItems(items), warnings };

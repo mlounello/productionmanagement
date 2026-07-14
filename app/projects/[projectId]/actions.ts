@@ -21,6 +21,7 @@ import {
   fetchTheatreBudgetGuestArtistById,
   findTheatreBudgetGuestArtist
 } from "@/lib/theatre-budget";
+import { projectWorkspacePath, type ProjectWorkspaceKey } from "@/lib/project-routes";
 
 const projectIdSchema = z.string().uuid();
 const assignmentKindSchema = z.enum(["primary", "shared", "understudy", "alternate"]);
@@ -251,16 +252,12 @@ function timestampFromInput(datetimeValue?: string, dateValue?: string) {
   return datetimeToTimestamp(datetimeValue) ?? dateToTimestamp(dateValue);
 }
 
-function projectErrorPath(projectId: string, message: string, workspace?: string) {
-  const params = new URLSearchParams({ error: message });
-  if (workspace) params.set("workspace", workspace);
-  return `/projects/${projectId}?${params.toString()}`;
+function projectErrorPath(projectId: string, message: string, workspace?: ProjectWorkspaceKey) {
+  return projectWorkspacePath(projectId, workspace, { error: message });
 }
 
-function projectSuccessPath(projectId: string, message: string, workspace?: string) {
-  const params = new URLSearchParams({ success: message });
-  if (workspace) params.set("workspace", workspace);
-  return `/projects/${projectId}?${params.toString()}`;
+function projectSuccessPath(projectId: string, message: string, workspace?: ProjectWorkspaceKey) {
+  return projectWorkspacePath(projectId, workspace, { success: message });
 }
 
 function projectAssignmentErrorPath(projectId: string, message: string) {

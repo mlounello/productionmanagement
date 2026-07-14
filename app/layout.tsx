@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { AppSidebarNav } from "@/components/app-sidebar-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,28 +22,28 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body>
-        <header className="site-header">
-          <Link className="brand" href={user && !hasInternalAccess ? "/my-profile" : "/dashboard"}>
-            Production Management
-          </Link>
-          <nav aria-label="Primary navigation">
-            {hasInternalAccess ? <Link href="/dashboard">Dashboard</Link> : null}
-            {hasInternalAccess ? <Link href="/projects">Projects</Link> : null}
-            {user ? <Link href="/my-profile">My Profile</Link> : null}
-            {hasInternalAccess ? <Link href="/people">People</Link> : null}
-            {hasInternalAccess ? <Link href="/settings/reference-data">Settings</Link> : null}
-            {user ? (
-              <form action="/logout" className="nav-signout-form" method="post">
-                <button className="nav-signout-button" type="submit">
-                  Sign out
-                </button>
-              </form>
-            ) : (
-              <><Link href="/profile-access">Update Profile</Link><Link href="/login">Staff Sign In</Link></>
-            )}
-          </nav>
-        </header>
-        <main>{children}</main>
+        <div className={hasInternalAccess ? "app-shell" : "public-shell"}>
+          {hasInternalAccess ? (
+            <aside className="app-sidebar">
+              <Link className="sidebar-brand" href="/dashboard"><span>PM</span><strong>Production Management</strong></Link>
+              <AppSidebarNav />
+            </aside>
+          ) : null}
+          <div className="app-content">
+            <header className="site-header">
+              {!hasInternalAccess ? <Link className="brand" href={user ? "/my-profile" : "/"}>Production Management</Link> : <span className="site-context">Siena Production Operations</span>}
+              <nav aria-label="Account navigation">
+                {user ? <Link href="/my-profile">My Profile</Link> : null}
+                {user ? (
+                  <form action="/logout" className="nav-signout-form" method="post"><button className="nav-signout-button" type="submit">Sign out</button></form>
+                ) : (
+                  <><Link href="/profile-access">Update Profile</Link><Link href="/login">Staff Sign In</Link></>
+                )}
+              </nav>
+            </header>
+            <main>{children}</main>
+          </div>
+        </div>
       </body>
     </html>
   );
