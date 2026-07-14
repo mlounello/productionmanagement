@@ -1,10 +1,10 @@
-const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a", "blockquote", "h3", "h4", "div"]);
+const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a", "blockquote", "h1", "h2", "h3", "h4", "div"]);
 
 function sanitizeAttributes(tagName: string, attrs: string) {
   if (tagName !== "a") return "";
   const hrefMatch = attrs.match(/href\s*=\s*(["'])(.*?)\1/i);
   const href = hrefMatch?.[2]?.trim() ?? "";
-  if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) return "";
+  if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href) && !/^\{\{[a-z0-9_]+\}\}$/i.test(href)) return "";
   const escaped = href.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   return ` href="${escaped}" target="_blank" rel="noopener noreferrer"`;
 }

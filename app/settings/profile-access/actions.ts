@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 export async function saveProfileAccessTemplateAction(formData: FormData) {
   await requireUser();
@@ -16,7 +17,7 @@ export async function saveProfileAccessTemplateAction(formData: FormData) {
 
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase.from("email_templates").select("id").eq("template_type", "profile_access").is("project_id", null).order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  const payload = { name: "Profile access", subject_template: parsed.data.subject, body_template: parsed.data.body, active: true };
+  const payload = { name: "Profile access", subject_template: parsed.data.subject, body_template: sanitizeRichText(parsed.data.body), active: true };
   const result = existing
     ? await supabase.from("email_templates").update(payload).eq("id", existing.id)
     : await supabase.from("email_templates").insert({ ...payload, project_id: null, template_type: "profile_access" });
@@ -34,7 +35,7 @@ export async function savePublicityReminderTemplateAction(formData: FormData) {
   if (!parsed.success) redirect(`/settings/profile-access?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid reminder template.")}`);
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase.from("email_templates").select("id").eq("template_type", "publicity_reminder").is("project_id", null).order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  const payload = { name: "Publicity reminder", subject_template: parsed.data.subject, body_template: parsed.data.body, active: true };
+  const payload = { name: "Publicity reminder", subject_template: parsed.data.subject, body_template: sanitizeRichText(parsed.data.body), active: true };
   const result = existing
     ? await supabase.from("email_templates").update(payload).eq("id", existing.id)
     : await supabase.from("email_templates").insert({ ...payload, project_id: null, template_type: "publicity_reminder" });

@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+// @ts-expect-error Node's built-in TypeScript loader requires the extension.
+import { sanitizeRichText } from "../lib/rich-text.ts";
+
+test("preserves safe headings and template-variable links",()=>{
+  const html=sanitizeRichText('<h1>Welcome</h1><p><a href="{{profile_access_url}}">Open profile</a></p>');
+  assert.equal(html,'<h1>Welcome</h1><p><a href="{{profile_access_url}}" target="_blank" rel="noopener noreferrer">Open profile</a></p>');
+});
+
+test("removes executable markup and unsafe links",()=>{
+  const html=sanitizeRichText('<script>alert(1)</script><p onclick="alert(2)"><a href="javascript:alert(3)">Bad</a>Safe</p>');
+  assert.equal(html,'<p><a>Bad</a>Safe</p>');
+});

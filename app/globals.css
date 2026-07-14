@@ -1276,6 +1276,56 @@ legend {
   white-space: pre-line;
 }
 
+.rich-source-editor {
+  background: #14221d;
+  border: 1px solid #2b463b;
+  border-radius: 8px;
+  color: #e7f5ee;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.5;
+  min-height: 220px;
+  padding: 14px;
+  width: 100%;
+}
+
+.agreement-sections-editor {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.agreement-editor-section {
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.agreement-editor-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.agreement-editor-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agreement-rich-editor {
+  min-height: 150px;
+}
+
+.field-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .integration-panel {
   background: #fbfcfb;
   border: 1px solid var(--line);

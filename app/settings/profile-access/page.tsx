@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HtmlMessageEditor } from "@/components/html-message-editor";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { defaultProfileAccessTemplate, defaultPublicityReminderTemplate } from "@/lib/profile-access-links";
@@ -21,7 +22,7 @@ export default async function ProfileAccessSettingsPage({ searchParams }: { sear
     <section className="panel" style={{ maxWidth: 900 }}>
       <form action={saveProfileAccessTemplateAction} className="stacked-form">
         <label className="field"><span>Subject</span><input name="subject" defaultValue={template?.subject_template || defaultProfileAccessTemplate.subject} required /></label>
-        <label className="field"><span>HTML body</span><textarea name="body" rows={20} defaultValue={template?.body_template || defaultProfileAccessTemplate.body} required /></label>
+        <HtmlMessageEditor name="body" initialValue={template?.body_template || defaultProfileAccessTemplate.body} label="Email body" />
         <p className="muted">Variables: <code>{"{{person_name}}"}</code>, <code>{"{{profile_access_url}}"}</code>, <code>{"{{expires_in}}"}</code></p>
         <button type="submit">Save profile access email</button>
       </form>
@@ -30,7 +31,7 @@ export default async function ProfileAccessSettingsPage({ searchParams }: { sear
       <p className="eyebrow">Publicity Dashboard</p><h2>Bulk reminder email</h2>
       <form action={savePublicityReminderTemplateAction} className="stacked-form">
         <label className="field"><span>Subject</span><input name="subject" defaultValue={reminderTemplate?.subject_template || defaultPublicityReminderTemplate.subject} required /></label>
-        <label className="field"><span>HTML body</span><textarea name="body" rows={20} defaultValue={reminderTemplate?.body_template || defaultPublicityReminderTemplate.body} required /></label>
+        <HtmlMessageEditor name="body" initialValue={reminderTemplate?.body_template || defaultPublicityReminderTemplate.body} label="Email body" />
         <p className="muted">Variables: <code>{"{{person_name}}"}</code>, <code>{"{{project_title}}"}</code>, <code>{"{{outstanding_items}}"}</code>, <code>{"{{bio_due_date}}"}</code>, <code>{"{{headshot_due_date}}"}</code>, <code>{"{{profile_access_url}}"}</code>, <code>{"{{expires_in}}"}</code></p>
         <button type="submit">Save publicity reminder email</button>
       </form>

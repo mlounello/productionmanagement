@@ -94,7 +94,8 @@ Planning architecture rule: Calendar, Gantt, and Run of Show are synchronized pr
 - Implemented: per-project agreement wording and automatic-send behavior, individual and bulk sending, secure individualized links that require no account, and a project Onboarding checklist.
 - Implemented: students pause at role acceptance. Acceptance then releases Playbill role sync, Google membership checking, the Propared welcome, secure profile/headshot/show-bio instructions, and publicity preparation. Non-students continue through existing onboarding immediately.
 - Implemented: reusable profile and intake details remain separate from restricted project-specific agreement answers such as allergy information.
-- Next refinement: add friendly visual agreement-section builders, scheduled acceptance reminders, printable agreement exports, and richer audit/history views. The structured/versioned data model already supports these additions.
+- Implemented: agreement sections and reusable email bodies use visual rich-text editors by default, with optional source view/edit mode that returns to the visual editor after validating and applying source changes.
+- Next refinement: add scheduled acceptance reminders, printable agreement exports, and richer audit/history views. The structured/versioned data model already supports these additions.
 
 ## Phase 2A Reference Data Foundation
 
