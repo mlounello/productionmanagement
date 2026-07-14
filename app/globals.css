@@ -1159,6 +1159,47 @@ legend {
 .status-badge.info { background: #eaf1f8; color: #285a7a; }
 .status-badge.neutral { background: #edf2ef; color: #33443d; }
 
+.communication-editor { min-height: 220px; }
+
+.recipient-picker {
+  background: #fafcfa;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 430px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.email-preview {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(23, 54, 40, .07);
+  margin: 16px 0;
+  padding: 22px;
+}
+
+.email-preview .rich-render {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.campaign-send-grid {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.2fr);
+  margin-top: 18px;
+}
+
+.campaign-send-grid > form {
+  background: #fafcfa;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+
 .people-file-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1749,6 +1790,8 @@ legend {
   .operations-grid {
     grid-template-columns: 1fr;
   }
+
+  .campaign-send-grid { grid-template-columns: 1fr; }
 
   .operation-row {
     align-items: stretch;

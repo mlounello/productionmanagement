@@ -12,7 +12,8 @@
     "test:publicity-safety": "node --experimental-strip-types --test scripts/publicity-sync-policy.test.ts",
     "test:operations-dashboard": "node --experimental-strip-types --test scripts/operations-dashboard.test.ts",
     "test:project-routes": "node --experimental-strip-types --test scripts/project-routes.test.ts",
-    "test:ui-status": "node --experimental-strip-types --test scripts/status-display.test.ts"
+    "test:ui-status": "node --experimental-strip-types --test scripts/status-display.test.ts",
+    "test:communications": "node --experimental-strip-types --test scripts/communications.test.ts"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",

@@ -52,7 +52,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }] = await Promise.all([
     supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
     supabase.from("role_assignments").select("id, status, is_guest_artist, projects(id, title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
-    supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).order("awarded_on", { ascending: false }),
+    supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("awarded_on", { ascending: false }),
     supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
     supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on, bio_character_limit")
   ]);

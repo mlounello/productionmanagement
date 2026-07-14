@@ -62,12 +62,12 @@ New-assignment pickers hide roles that already have an active assignment. People
 
 ## Phase 5 Communication And Recognition
 
-- Email templates for cast announcements, crew announcements, role confirmations, audition reminders, and ACTF/recognition announcements.
-- Generated email drafts before sending.
-- Manual trigger first; Resend-backed sending after review.
-- Email audit trail in `email_messages`.
-- Recognition and accomplishment logging on the durable person file.
-- Recognition notification emails linked back to accomplishments.
+- Implemented: reusable WYSIWYG HTML templates and Siena starters for cast announcements, crew announcements, role confirmations, audition reminders/callbacks, recognition, and custom messages.
+- Implemented: project audiences by role group, assignment status, audition status, all project participants, or individually searched people; duplicate addresses are consolidated while multiple roles remain represented.
+- Implemented: frozen individualized campaign drafts, complete recipient review, safe single-address tests, explicit send confirmation, Resend delivery, duplicate-send protection, interrupted-send recovery, retry-only-failed delivery, and campaign history.
+- Implemented: per-recipient delivery audit through `communication_recipients` and the existing `email_messages` provider audit trail.
+- Implemented: recognition and accomplishment logging on durable person files with project/role context and client-visible versus management-only controls.
+- Implemented: optional individualized recognition announcement drafts linked back to the accomplishment; actual notification timestamps are recorded only after delivery succeeds.
 
 ## Phase 6 Supporting Planning Module
 

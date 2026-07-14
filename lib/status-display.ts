@@ -14,9 +14,9 @@ export function displayStatus(value?: string | null) {
 
 export function statusTone(value?: string | null): StatusTone {
   const status = String(value || "").toLowerCase();
-  if (["failed", "error", "missing", "declined", "bounced", "no_show", "returned"].includes(status)) return "danger";
+  if (["failed", "error", "missing", "declined", "bounced", "no_show", "returned", "partial"].includes(status)) return "danger";
   if (["created", "synced", "verified", "sent", "already_sent", "approved", "person_approved", "published", "confirmed"].includes(status)) return "success";
-  if (["pending", "changes_requested", "needs_review", "duplicate", "waitlist", "callback"].includes(status)) return "warning";
+  if (["pending", "changes_requested", "needs_review", "duplicate", "waitlist", "callback", "sending"].includes(status)) return "warning";
   if (["draft", "in_progress", "submitted", "scheduled"].includes(status)) return "info";
   return "neutral";
 }

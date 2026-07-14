@@ -1,4 +1,4 @@
-export const operationCategories = ["all", "publicity", "playbill", "budget", "google", "auditions", "calendar"] as const;
+export const operationCategories = ["all", "publicity", "playbill", "budget", "google", "auditions", "communications", "calendar"] as const;
 export const operationDueWindows = ["all", "overdue", "7", "30"] as const;
 
 export type OperationCategory = Exclude<(typeof operationCategories)[number], "all">;

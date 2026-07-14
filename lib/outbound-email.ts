@@ -1,4 +1,4 @@
-import { DISABLE_OUTBOUND_EMAIL } from "@/lib/config";
+import { DISABLE_OUTBOUND_EMAIL } from "./config";
 
 export type TemplateVariables = Record<string, string>;
 
