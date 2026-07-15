@@ -888,6 +888,13 @@ button {
   max-width: 860px;
 }
 
+.audition-preview-fields {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
 .audition-form-section {
   scroll-margin-top: 20px;
 }
