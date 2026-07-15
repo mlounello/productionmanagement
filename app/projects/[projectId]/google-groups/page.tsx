@@ -18,16 +18,17 @@ function title(value: string) { return value.replace(/_/g, " ").replace(/\b\w/g,
 
 export default async function ProjectGoogleGroupsPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams?: Promise<{ error?: string; success?: string; group?: string }> }) {
   const { projectId } = await params; const query = await searchParams; await requireUser(); const supabase = await createSupabaseServerClient();
-  const [{ data: project }, { data: roles }, { data: settings }, { data: templates }, { data: assignments }, { data: logs }] = await Promise.all([
+  const [{ data: project }, { data: roles }, { data: settings }, { data: templates }, { data: assignments }, { data: logs }, { data: setup }] = await Promise.all([
     supabase.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
     supabase.from("project_roles").select("id, name, role_group").eq("project_id", projectId).order("role_group").order("name"),
     supabase.from("project_role_group_google_settings").select("*").eq("project_id", projectId),
     supabase.from("email_templates").select("id, name, subject_template, usage_tags").or(`project_id.eq.${projectId},project_id.is.null`).overlaps("usage_tags", ["role_group_welcome","role_acceptance"]).eq("active", true).order("name"),
     supabase.from("role_assignments").select("id, role_id, person_id, google_group_sync_status, google_group_sync_error, google_group_membership_checked_at, google_automation_skipped, google_automation_skip_reason, welcome_email_status, welcome_email_error, project_roles(name, role_group), people(full_name, preferred_name, email)").eq("project_id", projectId).order("created_at"),
-    supabase.from("google_group_action_log").select("id, role_group, action_type, status, email_address, active_google_group_email, error_message, created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(100)
+    supabase.from("google_group_action_log").select("id, role_group, action_type, status, email_address, active_google_group_email, error_message, created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("project_setup_preferences").select("selected_role_groups").eq("project_id", projectId).maybeSingle()
   ]);
   if (!project) notFound();
-  const roleGroups = Array.from(new Set((roles ?? []).map((role) => String(role.role_group)))).sort(); const settingsByGroup = new Map((settings ?? []).map((row) => [String(row.role_group), row]));const welcomeTemplates=(templates??[]).filter((template)=>template.usage_tags?.includes("role_group_welcome"));const acceptanceTemplates=(templates??[]).filter((template)=>template.usage_tags?.includes("role_acceptance"));
+  const roleGroups = Array.from(new Set([...(setup?.selected_role_groups ?? []).map(String), ...(roles ?? []).map((role) => String(role.role_group))])).sort(); const settingsByGroup = new Map((settings ?? []).map((row) => [String(row.role_group), row]));const welcomeTemplates=(templates??[]).filter((template)=>template.usage_tags?.includes("role_group_welcome"));const acceptanceTemplates=(templates??[]).filter((template)=>template.usage_tags?.includes("role_acceptance"));
   return <div className="page"><div className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Google Groups</h1><p className="muted">Create each group in Google Admin, then connect its email here for automatic membership and welcome messages.</p></div><div className="top-actions"><ProjectContextSwitcher projectId={projectId} workspace="google-groups"/><Link className="button secondary" href={`/projects/${projectId}/overview`}>Back to project</Link></div></div>
     <ProjectWorkspaceNav projectId={projectId} active="google-groups" />
     <FeedbackBanner error={query?.error} success={query?.success} />

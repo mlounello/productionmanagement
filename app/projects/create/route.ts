@@ -42,7 +42,7 @@ function failureResponse(request: Request, message: string, status = 400) {
 }
 
 function successResponse(request: Request, projectId: string) {
-  const redirectPath = `/projects/${projectId}`;
+  const redirectPath = `/projects/${projectId}/setup`;
 
   if (wantsJson(request)) {
     return NextResponse.json({ redirectTo: redirectPath });
@@ -176,6 +176,17 @@ export async function POST(request: Request) {
 
   if (membershipError) {
     return failureResponse(request, membershipError.message);
+  }
+
+  const { error: setupError } = await supabase.from("project_setup_preferences").upsert({
+    project_id: String(project.id),
+    setup_status: "in_progress",
+    current_step: "workflow",
+    updated_by: authenticatedUser.id
+  }, { onConflict: "project_id" });
+
+  if (setupError) {
+    return failureResponse(request, `Project created, but its setup workflow could not be started: ${setupError.message}`);
   }
 
   return successResponse(request, String(project.id));

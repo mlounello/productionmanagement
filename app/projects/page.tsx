@@ -14,6 +14,7 @@ type ProjectRow = {
   status: string;
   starts_on: string | null;
   ends_on: string | null;
+  project_setup_preferences: Array<{ setup_status: string; current_step: string }>;
 };
 
 function formatProjectType(value: string) {
@@ -46,7 +47,7 @@ export default async function ProjectsPage({
   const [{ data, error }, { data: role }, departments, locations, projectTypes] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, title, project_type, status, starts_on, ends_on")
+      .select("id, title, project_type, status, starts_on, ends_on, project_setup_preferences(setup_status,current_step)")
       .order("created_at", { ascending: false }),
     supabase.rpc("get_user_role"),
     fetchActiveDepartments(),
@@ -84,11 +85,11 @@ export default async function ProjectsPage({
                 <div>
                   <strong>{project.title}</strong>
                   <span className="muted">
-                    {formatProjectType(project.project_type)} · {project.status}
+                    {formatProjectType(project.project_type)} · {project.status}{project.project_setup_preferences?.[0]?.setup_status === "in_progress" ? " · Setup in progress" : ""}
                   </span>
                 </div>
-                <Link className="button secondary" href={`/projects/${project.id}/overview`}>
-                  Open
+                <Link className="button secondary" href={project.project_setup_preferences?.[0]?.setup_status === "in_progress" ? `/projects/${project.id}/setup?step=${project.project_setup_preferences[0].current_step}` : `/projects/${project.id}/overview`}>
+                  {project.project_setup_preferences?.[0]?.setup_status === "in_progress" ? "Continue setup" : "Open"}
                 </Link>
               </div>
             ))}

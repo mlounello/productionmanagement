@@ -657,6 +657,9 @@ export default async function ProjectWorkspacePage({
         </div>
         <div className="top-actions">
           <ProjectSwitcher currentProjectId={typedProject.id} workspace={workspace} projects={projectOptions ?? [{ id: typedProject.id, title: typedProject.title }]} />
+          <Link className="button secondary" href={`/projects/${typedProject.id}/setup`}>
+            Project Setup
+          </Link>
           <Link className="button" href={`/projects/${typedProject.id}/publicity`}>
             Publicity
           </Link>

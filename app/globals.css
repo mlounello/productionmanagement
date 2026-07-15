@@ -1658,6 +1658,32 @@ a.readiness-row:hover { background: #f4faf6; color: inherit; }
 .readiness-state.optional { background: #edf2ef; color: #53645d; }
 .readiness-arrow { color: var(--siena-green); font-size: 18px; font-weight: 800; }
 
+.setup-workflow { max-width: 1280px; }
+.setup-step-nav {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 20px;
+  padding: 6px;
+}
+.setup-step-nav a {
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 8px;
+  text-align: center;
+}
+.setup-step-nav a:hover { background: #f4f8f6; color: var(--siena-green); }
+.setup-step-nav a.active { background: var(--siena-green); color: #fff; }
+.setup-step-actions { align-items: center; display: flex; justify-content: space-between; margin: 18px 0; }
+.setup-group-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.setup-group-card { background: #f7faf8; border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 4px; padding: 14px; }
+.setup-group-card span { color: var(--muted); font-size: 12px; }
+
 .campaign-send-grid {
   align-items: start;
   display: grid;
@@ -2284,6 +2310,7 @@ a.readiness-row:hover { background: #f4faf6; color: inherit; }
   .campaign-send-grid { grid-template-columns: 1fr; }
 
   .readiness-sections { grid-template-columns: 1fr; }
+  .setup-step-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .people-directory-tools {
     align-items: stretch;

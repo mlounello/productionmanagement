@@ -109,7 +109,7 @@ export function ProjectCreateForm({
         <input disabled={disabled || pending} id="endsOn" name="endsOn" type="date" />
       </div>
       <button disabled={disabled || pending} type="submit">
-        {pending ? "Creating..." : "Create project"}
+        {pending ? "Creating..." : "Create & configure project"}
       </button>
     </form>
   );

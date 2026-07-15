@@ -21,6 +21,7 @@ export function ProjectWorkspaceNav({ projectId, active }: { projectId: string; 
           {item.label}
         </Link>
       ))}
+      <Link aria-current={active === "setup" ? "page" : undefined} className={active === "setup" ? "active" : ""} href={`/projects/${projectId}/setup`}>Setup</Link>
       <Link aria-current={active === "publicity" ? "page" : undefined} className={active === "publicity" ? "active" : ""} href={`/projects/${projectId}/publicity`}>Publicity</Link>
       <Link aria-current={active === "onboarding" ? "page" : undefined} className={active === "onboarding" ? "active" : ""} href={`/projects/${projectId}/onboarding`}>Onboarding</Link>
       <Link aria-current={active === "auditions" ? "page" : undefined} className={active === "auditions" ? "active" : ""} href={`/projects/${projectId}/auditions`}>Auditions</Link>
