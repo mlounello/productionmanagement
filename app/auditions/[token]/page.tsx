@@ -12,6 +12,9 @@ type Role = { id: string; name: string; role_group: string };
 type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
 type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string };
 
+const roleGroupOrder=["cast","directorial_team","creative_team","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
+function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());}
+
 function formatSlot(slot: Slot, session?: Session) {
   const start = new Date(slot.starts_at);
   const end = slot.ends_at ? new Date(slot.ends_at) : null;
@@ -40,7 +43,13 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
     if (field.field_type === "long_text") return <textarea {...common} rows={5} placeholder={field.placeholder} defaultValue={typeof saved === "string" ? saved : ""} />;
     if (["short_text", "email", "phone"].includes(field.field_type)) return <input {...common} type={field.field_type === "email" ? "email" : field.field_type === "phone" ? "tel" : "text"} placeholder={field.placeholder} defaultValue={typeof saved === "string" ? saved : ""} readOnly={Boolean(profile) && field.field_key === "email"} />;
     if (field.field_type === "file") return <input {...common} type="file" accept={field.field_key === "headshot" ? "image/*" : ".pdf,.doc,.docx,image/*"} />;
-    if (field.field_type === "role_selector") return <div className="choice-grid">{payload.roles.map((role) => <label className="checkbox-card" key={role.id}><input type="checkbox" name={field.field_key} value={role.id} /><span>{role.name}</span></label>)}</div>;
+    if (field.field_type === "role_selector") {
+      if(!payload.roles.length)return <p className="muted">No vacant project roles are currently available.</p>;
+      const grouped=new Map<string,Role[]>();
+      for(const role of payload.roles)grouped.set(role.role_group,[...(grouped.get(role.role_group)??[]),role]);
+      const groups=[...grouped.entries()].sort(([a],[b])=>{const ai=roleGroupOrder.indexOf(a),bi=roleGroupOrder.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi)||a.localeCompare(b);});
+      return <div className="role-interest-groups"><p className="muted">Only currently vacant project roles are shown.</p>{groups.map(([group,roles])=><section key={group}><h3>{roleGroupLabel(group)}</h3><div className="choice-grid">{roles.map((role)=><label className="checkbox-card" key={role.id}><input type="checkbox" name={field.field_key} value={role.id}/><span>{role.name}</span></label>)}</div></section>)}</div>;
+    }
     if (field.field_type === "slot_selector") return availableSlots.length ? <select name="audition_slot" required={field.required} defaultValue=""><option value="">Choose an available time</option>{availableSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatSlot(slot, sessionById.get(slot.session_id))}</option>)}</select> : <p className="setup-warning">No self-bookable times are currently available. Staff will contact you if assignment is required.</p>;
     const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
     const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";

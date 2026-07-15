@@ -905,6 +905,11 @@ button {
   line-height: 1.4;
 }
 
+.role-interest-groups { display: grid; gap: 16px; }
+.role-interest-groups > p { margin: 0; }
+.role-interest-groups section { border-top: 1px solid var(--line); padding-top: 12px; }
+.role-interest-groups h3 { margin: 0 0 9px; }
+
 .choice-grid {
   display: grid;
   gap: 8px;
