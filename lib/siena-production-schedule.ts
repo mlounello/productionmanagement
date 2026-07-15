@@ -49,7 +49,7 @@ export function buildSienaProductionSchedule(openingOn:string){
       `Performance 5: ${format(offset(opening,7))}, 6:00pm to 11:00pm`,
       `Performance 6: ${format(offset(opening,8))}, 6:00pm to 11:00pm`,
       `Performance 7 (Closing Night): ${format(offset(opening,9))}, 6:00pm to 11:00pm`,
-      "Strike: Immediately following Performance 7"
+      `Strike: ${format(offset(opening,10))}, 12:00pm to 6:00pm`
     ].join("\n")
   };
 }

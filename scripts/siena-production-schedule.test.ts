@@ -9,7 +9,7 @@ test("builds the standard schedule from a Thursday opening",()=>{
   assert.match(schedule.techSchedule,/Preview\/Photo Call: November 11, 2026, 6:00pm to 11:00pm/);
   assert.match(schedule.performanceSchedule,/Performance 4 \(Matinee\): November 15, 2026, 1:00pm to 6:00pm/);
   assert.match(schedule.performanceSchedule,/Performance 7 \(Closing Night\): November 21, 2026, 6:00pm to 11:00pm/);
-  assert.match(schedule.performanceSchedule,/Strike: Immediately following Performance 7/);
+  assert.match(schedule.performanceSchedule,/Strike: November 22, 2026, 12:00pm to 6:00pm/);
 });
 
 test("rejects an opening date that would shift the standard weekday pattern",()=>{
