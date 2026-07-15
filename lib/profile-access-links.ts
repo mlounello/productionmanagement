@@ -96,11 +96,12 @@ export async function sendPublicityReminder(personId: string, projectId: string,
   const [{ data: person }, { data: project }, { data: submission }, { data: settings }] = await Promise.all([
     admin.from("people").select("id, full_name, preferred_name, email").eq("id", personId).maybeSingle(),
     admin.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
-    admin.from("project_publicity_submissions").select("id, bio, headshot_url, status, playbill_submission_status, reminder_count").eq("project_id", projectId).eq("person_id", personId).maybeSingle(),
+    admin.from("project_publicity_submissions").select("id, bio, headshot_url, status, playbill_submission_status, reminder_count, bio_required").eq("project_id", projectId).eq("person_id", personId).maybeSingle(),
     admin.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
   ]);
   if (!person || !project || !submission) throw new Error("The publicity reminder record could not be found.");
   if (settings && !settings.reminders_enabled) throw new Error("Publicity reminders are disabled for this project.");
+  if (submission.bio_required === false) throw new Error("This person is marked bio not required and cannot receive publicity reminders.");
   if (submission.playbill_submission_status === "locked") throw new Error("This submission is locked in Playbill.");
   const email = String(person.email ?? "").trim().toLowerCase();
   if (!email) throw new Error("Add an email address before sending this reminder.");

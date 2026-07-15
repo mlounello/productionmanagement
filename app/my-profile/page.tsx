@@ -19,7 +19,7 @@ type Profile = {
   publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number;
   performance_interests:string[];technical_interests:string[];vocal_range:string;instruments:string;special_skills:string;performance_experience:string;technical_experience:string;certifications_training:string;dance_styles:string[];dance_experience:string;
 };
-type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; projects: { title: string } | null };
+type Submission = { id: string; project_id: string; credited_name: string; bio: string; headshot_url: string; status: string; playbill_submission_status: string; playbill_locked_at: string | null; source_profile_version: number; bio_required: boolean; projects: { title: string } | null };
 type PublicitySettings = { project_id: string; bio_due_on: string | null; headshot_due_on: string | null; bio_character_limit: number };
 type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { id: string; title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
 type Accomplishment = { id: string; title: string; accomplishment_type: string; issuer: string; awarded_on: string | null; description: string; projects: { title: string } | null };
@@ -52,7 +52,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
 
   const typedProfile = profile as Profile;
   const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }] = await Promise.all([
-    supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
+    supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, bio_required, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
     supabase.from("role_assignments").select("id, status, is_guest_artist, projects(id, title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
     supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("awarded_on", { ascending: false }),
     supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
@@ -144,7 +144,8 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
           const locked = submission.playbill_submission_status === "locked";
           const previewRole = rolesByProject.get(submission.project_id)?.join(", ") || "Production role";
           return <article className="panel" key={submission.id}>
-            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><div className="badge-row"><StatusBadge status={submission.status} label={`Your approval: ${formatStatus(submission.status)}`} /><StatusBadge status={submission.playbill_submission_status} context="playbill" label={`Playbill: ${formatStatus(submission.playbill_submission_status)}`} /></div></div><StatusBadge status={locked ? "locked" : "draft"} context="playbill" label={locked ? "Final & locked" : `v${submission.source_profile_version}`} /></div>
+            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><div className="badge-row">{submission.bio_required ? <><StatusBadge status={submission.status} label={`Your approval: ${formatStatus(submission.status)}`} /><StatusBadge status={submission.playbill_submission_status} context="playbill" label={`Playbill: ${formatStatus(submission.playbill_submission_status)}`} /></> : <StatusBadge status="not_required" label="Bio not required" />}</div></div>{submission.bio_required ? <StatusBadge status={locked ? "locked" : "draft"} context="playbill" label={locked ? "Final & locked" : `v${submission.source_profile_version}`} /> : null}</div>
+            {!submission.bio_required ? <p className="muted">The production team has marked a bio as unnecessary for this production. No publicity action or reminder is required from you.</p> : <>
             <p className="muted">Bio due: {formatDate(settings?.bio_due_on ?? null)} · Headshot due: {formatDate(settings?.headshot_due_on ?? null)}</p>
             <p><strong>Credit:</strong> {submission.credited_name}</p>
             {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
@@ -155,6 +156,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}
             {!locked && ["draft", "awaiting_person_approval", "changes_requested"].includes(submission.status) ? <form action={approveMyPublicitySubmissionAction}><input type="hidden" name="submissionId" value={submission.id} /><button type="submit">Approve &amp; submit to Playbill</button></form> : null}
             {locked ? <p className="muted">This final Playbill copy remains here for historical reference and can no longer be changed.</p> : null}
+            </>}
           </article>;
         }) : <p className="muted">No production publicity records yet.</p>}
       </div></section>

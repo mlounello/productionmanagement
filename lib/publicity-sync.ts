@@ -25,8 +25,9 @@ export async function syncApprovedPublicityToPlaybill(submissionId: string) {
   // which should not need direct write privileges in the Playbill schema.
   const supabase = createSupabaseAdminClient();
   const { data: submission, error: submissionError } = await supabase.from("project_publicity_submissions")
-    .select("project_id, bio").eq("id", submissionId).maybeSingle();
+    .select("project_id, bio, bio_required").eq("id", submissionId).maybeSingle();
   if (submissionError || !submission) throw new Error(submissionError?.message ?? "Publicity submission not found.");
+  if (submission.bio_required === false) throw new PublicitySyncError("This person is marked bio not required for this project.", "disabled");
   const { data: settings } = await supabase.from("project_publicity_settings")
     .select("bio_character_limit").eq("project_id", submission.project_id).maybeSingle();
   const bioLimit = Number(settings?.bio_character_limit ?? 350);

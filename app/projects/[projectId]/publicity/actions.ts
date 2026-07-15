@@ -219,6 +219,26 @@ export async function savePublicitySettingsAction(formData: FormData) {
   redirect(path(projectId, "success", "Publicity deadlines and reminder settings saved."));
 }
 
+export async function setBioRequiredAction(formData: FormData) {
+  await requireUser();
+  const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
+  const submissionId = uuid.parse(String(formData.get("submissionId") ?? ""));
+  const bioRequired = String(formData.get("bioRequired") ?? "true") === "true";
+  try { await requirePublicityManager(projectId); }
+  catch (error) { redirect(path(projectId, "error", error instanceof Error ? error.message : "Permission denied.")); }
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("project_publicity_submissions")
+    .update({ bio_required: bioRequired })
+    .eq("id", submissionId)
+    .eq("project_id", projectId);
+  if (error) redirect(path(projectId, "error", error.message));
+  revalidatePath(`/projects/${projectId}/publicity`);
+  revalidatePath("/my-profile");
+  redirect(path(projectId, "success", bioRequired
+    ? "Bio requirement restored. This person will appear in outstanding publicity and reminders when action is needed."
+    : "Marked bio not required. This person is excluded from outstanding publicity and reminders."));
+}
+
 export async function sendPublicityReminderAction(formData: FormData) {
   const user = await requireUser();
   const projectId = uuid.parse(String(formData.get("projectId") ?? ""));

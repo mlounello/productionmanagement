@@ -17,7 +17,8 @@ import {
   savePublicitySettingsAction,
   sendBulkPublicityRemindersAction,
   sendPublicityReminderAction,
-  saveProjectPublicityCopyAction
+  saveProjectPublicityCopyAction,
+  setBioRequiredAction
 } from "@/app/projects/[projectId]/publicity/actions";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ type Publicity = {
   playbill_locked_at: string | null;
   last_reminder_sent_at: string | null;
   reminder_count: number;
+  bio_required: boolean;
 };
 type PublicitySettings = { bio_due_on: string | null; headshot_due_on: string | null; reminders_enabled: boolean; bio_character_limit: number };
 
@@ -61,7 +63,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
   const [{ data: project }, { data: assignments }, { data: submissions }, { data: playbillLink }, { data: settings }] = await Promise.all([
     supabase.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
     supabase.from("role_assignments").select("id, person_id, status, people(full_name, email, auth_user_id, publicity_profile_version), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)").order("created_at"),
-    supabase.from("project_publicity_submissions").select("id, person_id, credited_name, bio, headshot_url, source_profile_version, status, person_approved_at, editorial_approved_at, playbill_sync_status, playbill_sync_error, playbill_synced_at, playbill_submission_status, playbill_locked_at, last_reminder_sent_at, reminder_count").eq("project_id", projectId),
+    supabase.from("project_publicity_submissions").select("id, person_id, credited_name, bio, headshot_url, source_profile_version, status, person_approved_at, editorial_approved_at, playbill_sync_status, playbill_sync_error, playbill_synced_at, playbill_submission_status, playbill_locked_at, last_reminder_sent_at, reminder_count, bio_required").eq("project_id", projectId),
     supabase.from("external_links").select("id").eq("local_entity_type", "project").eq("local_entity_id", projectId).eq("external_app", "playbill").eq("external_table", "shows").maybeSingle(),
     supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
   ]);
@@ -76,10 +78,12 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
     rolesByPerson.set(assignment.person_id, roles);
   }
   const publicityRows = (submissions ?? []) as Publicity[];
-  const outstanding = publicityRows.filter((item) => item.playbill_submission_status !== "locked" && (!item.bio.trim() || !item.headshot_url.trim() || !["person_approved", "approved"].includes(item.status)));
-  const submitted = publicityRows.filter((item) => item.playbill_submission_status === "submitted").length;
-  const approved = publicityRows.filter((item) => item.playbill_submission_status === "approved").length;
-  const locked = publicityRows.filter((item) => item.playbill_submission_status === "locked").length;
+  const requiredPublicityRows = publicityRows.filter((item) => item.bio_required !== false);
+  const exempt = publicityRows.length - requiredPublicityRows.length;
+  const outstanding = requiredPublicityRows.filter((item) => item.playbill_submission_status !== "locked" && (!item.bio.trim() || !item.headshot_url.trim() || !["person_approved", "approved"].includes(item.status)));
+  const submitted = requiredPublicityRows.filter((item) => item.playbill_submission_status === "submitted").length;
+  const approved = requiredPublicityRows.filter((item) => item.playbill_submission_status === "approved").length;
+  const locked = requiredPublicityRows.filter((item) => item.playbill_submission_status === "locked").length;
   const publicitySettings = settings as PublicitySettings | null;
 
   return (
@@ -100,8 +104,9 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
       </section>
       <div className="top-actions" aria-label="Playbill status breakdown" style={{ marginBottom: 20 }}>
         {["pending", "draft", "submitted", "returned", "approved", "locked"].map((status) => (
-          <StatusBadge status={status} context="playbill" label={`${label(status)}: ${publicityRows.filter((item) => item.playbill_submission_status === status).length}`} key={status} />
+          <StatusBadge status={status} context="playbill" label={`${label(status)}: ${requiredPublicityRows.filter((item) => item.playbill_submission_status === status).length}`} key={status} />
         ))}
+        {exempt ? <StatusBadge status="not_required" label={`Bio not required: ${exempt}`} /> : null}
       </div>
 
       <section className="panel workspace-section">
@@ -146,22 +151,24 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           return (
             <section className="panel workspace-section" key={assignment.id}>
               <div className="section-heading">
-                <div><p className="eyebrow">Production Publicity</p><h2>{assignment.people?.full_name ?? "Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"} · Person: {label(item.status)} · Playbill: {label(item.playbill_submission_status)}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
-                <div className="top-actions">{profileChanged && !isLocked ? <StatusBadge status="pending" label="New profile version available" /> : null}<StatusBadge status={isLocked ? "locked" : "draft"} context="playbill" label={isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`} /></div>
+                <div><p className="eyebrow">Production Publicity</p><h2>{assignment.people?.full_name ?? "Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"}{item.bio_required ? ` · Person: ${label(item.status)} · Playbill: ${label(item.playbill_submission_status)}` : " · No publicity submission required"}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
+                <div className="top-actions">{!item.bio_required ? <StatusBadge status="not_required" label="Bio not required" /> : null}{item.bio_required && profileChanged && !isLocked ? <StatusBadge status="pending" label="New profile version available" /> : null}{item.bio_required ? <StatusBadge status={isLocked ? "locked" : "draft"} context="playbill" label={isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`} /> : null}</div>
               </div>
               {item.playbill_sync_error ? <p className="setup-warning">{item.playbill_sync_error}</p> : null}
-              {!isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">
+              {!item.bio_required ? <p className="muted">This person is excluded from outstanding publicity counts and will not receive publicity reminders for this project.</p> : null}
+              {item.bio_required && !isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">
                 <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} />
                 <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={item.credited_name} required /></label>
                 <PublicityBioField name="bio" label="Production bio" initialValue={item.bio} previewName={item.credited_name} previewRole={previewRole} characterLimit={publicitySettings?.bio_character_limit ?? 350} compact />
                 <label className="field"><span>Production headshot URL</span><input name="headshotUrl" type="url" defaultValue={item.headshot_url} placeholder="https://…" /></label>
                 <button type="submit">Save production copy</button>
-              </form> : <PublicityBioPreview bio={item.bio} name={item.credited_name} role={previewRole} />}
+              </form> : item.bio_required ? <PublicityBioPreview bio={item.bio} name={item.credited_name} role={previewRole} /> : null}
               <div className="top-actions" style={{ marginTop: 12 }}>
-                {!isLocked ? <form action={refreshPublicityFromProfileAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button className="button secondary" type="submit">Refresh from profile</button></form> : null}
-                {!isLocked && ['draft', 'changes_requested'].includes(item.status) ? <form action={requestPublicityApprovalAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Request person approval</button></form> : null}
-                {!isLocked && ["person_approved", "approved"].includes(item.status) && item.playbill_sync_status !== "synced" ? <form action={retryPublicitySyncAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Retry Playbill submission</button></form> : null}
-                {!isLocked && outstanding.some((row) => row.id === item.id) ? <form action={sendPublicityReminderAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="personId" value={item.person_id} /><button className="button secondary" type="submit">Send reminder</button></form> : null}
+                {item.bio_required && !isLocked ? <form action={refreshPublicityFromProfileAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button className="button secondary" type="submit">Refresh from profile</button></form> : null}
+                {item.bio_required && !isLocked && ['draft', 'changes_requested'].includes(item.status) ? <form action={requestPublicityApprovalAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Request person approval</button></form> : null}
+                {item.bio_required && !isLocked && ["person_approved", "approved"].includes(item.status) && item.playbill_sync_status !== "synced" ? <form action={retryPublicitySyncAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Retry Playbill submission</button></form> : null}
+                {item.bio_required && !isLocked && outstanding.some((row) => row.id === item.id) ? <form action={sendPublicityReminderAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="personId" value={item.person_id} /><button className="button secondary" type="submit">Send reminder</button></form> : null}
+                {!isLocked ? <form action={setBioRequiredAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><input type="hidden" name="bioRequired" value={item.bio_required ? "false" : "true"} /><button className="button secondary" type="submit">{item.bio_required ? "Mark bio not required" : "Require bio"}</button></form> : null}
               </div>
               {item.last_reminder_sent_at ? <p className="muted">{item.reminder_count} reminder{item.reminder_count === 1 ? "" : "s"} sent · Last {new Date(item.last_reminder_sent_at).toLocaleString("en-US")}</p> : null}
             </section>
