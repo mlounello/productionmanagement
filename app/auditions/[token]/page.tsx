@@ -3,6 +3,7 @@ import { submitAuditionAction } from "@/app/auditions/[token]/actions";
 import { requestIntakeVerificationCodeAction, verifyIntakeCodeAction } from "@/app/intake/actions";
 import { getVerifiedProfile } from "@/lib/profile-intake";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { hasProjectSchedule, ProjectScheduleDisplay, type ProjectSchedule } from "@/components/project-schedule-display";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
   const preview=query?.preview==="1";
   const { data, error } = preview?await supabase.rpc("get_audition_form_preview",{form_token:token}):await supabase.rpc("get_public_audition_form", { form_token: token });
   if (error || !data) notFound();
-  const payload = data as { form: { id: string; title: string; description: string }; project: { title: string }; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
+  const payload = data as { form: { id: string; title: string; description: string }; project: { title: string }; schedule?: ProjectSchedule; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
   const profile = preview?null:await getVerifiedProfile(query?.profile, "audition", payload.form.id);
   const profileValues: Record<string, string | string[]> = profile ? {
     email: profile.email, full_name: profile.full_name, preferred_name: profile.preferred_name, pronouns: profile.pronouns, phone: profile.phone,
@@ -70,6 +71,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
         if (!fields.length) return null;
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
+          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Staff must add it under Project Onboarding before this form can collect a meaningful schedule acknowledgement.</p>}</>:null}
           <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
@@ -83,6 +85,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
         if (!fields.length) return null;
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
+          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Please contact production staff before confirming your availability.</p>}</>:null}
           <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
