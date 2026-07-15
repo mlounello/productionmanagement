@@ -5,11 +5,26 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { ensureRoleAcceptanceRequest } from "@/lib/role-acceptance";
 import { sanitizeRichText } from "@/lib/rich-text";
+import { buildSienaProductionSchedule } from "@/lib/siena-production-schedule";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function sendRoleAcceptanceAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));const assignmentId=z.string().uuid().parse(formData.get("assignmentId"));let message="";try{const result=await ensureRoleAcceptanceRequest(projectId,assignmentId,user.id,true);message=result.warnings.length?`Request prepared, but attention is needed: ${result.warnings.join(" ")}`:`Role acceptance ${result.status}.`;}catch(e){redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(e instanceof Error?e.message:"Acceptance request failed.")}`);}redirect(`/projects/${projectId}/onboarding?success=${encodeURIComponent(message)}`);}
 
 export async function sendAllRoleAcceptancesAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));const ids=JSON.parse(String(formData.get("assignmentIds")??"[]")) as string[];let sent=0,attention=0;for(const id of ids){try{const result=await ensureRoleAcceptanceRequest(projectId,z.string().uuid().parse(id),user.id,true);if(result.warnings.length)attention++;else if(result.status==="sent")sent++;}catch{attention++;}}redirect(`/projects/${projectId}/onboarding?success=${encodeURIComponent(`${sent} acceptance request${sent===1?"":"s"} sent. ${attention?`${attention} need attention.`:""}`)}`);}
+
+export async function generateStandardScheduleAction(formData:FormData){
+  const user=await requireUser();
+  const projectId=z.string().uuid().parse(formData.get("projectId"));
+  const openingOn=String(formData.get("openingOn")??"");
+  let schedule:ReturnType<typeof buildSienaProductionSchedule>;
+  try{schedule=buildSienaProductionSchedule(openingOn);}catch(error){redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(error instanceof Error?error.message:"Opening night is invalid.")}`);}
+  const supabase=await createSupabaseServerClient();
+  const {error:projectError}=await supabase.from("projects").update({opening_on:openingOn}).eq("id",projectId);
+  if(projectError)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(projectError.message)}`);
+  const {error}=await supabase.from("project_role_acceptance_settings").upsert({project_id:projectId,rehearsal_schedule:schedule.rehearsalSchedule,tech_schedule:schedule.techSchedule,performance_schedule:schedule.performanceSchedule,updated_by:user.id},{onConflict:"project_id"});
+  if(error)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(error.message)}`);
+  redirect(`/projects/${projectId}/onboarding?success=Standard%20Siena%20schedule%20generated%20from%20opening%20night.`);
+}
 
 export async function saveProjectAcceptanceSettingsAction(formData:FormData){
   const user=await requireUser();

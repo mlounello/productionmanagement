@@ -108,6 +108,11 @@ export function ProjectCreateForm({
         <label htmlFor="endsOn">End date</label>
         <input disabled={disabled || pending} id="endsOn" name="endsOn" type="date" />
       </div>
+      <div className="field">
+        <label htmlFor="openingOn">Opening night</label>
+        <input disabled={disabled || pending} id="openingOn" name="openingOn" type="date" />
+        <small>Choose the Thursday opening date to auto-fill Siena’s standard rehearsal, tech/dress, performance, and strike schedules.</small>
+      </div>
       <button disabled={disabled || pending} type="submit">
         {pending ? "Creating..." : "Create & configure project"}
       </button>

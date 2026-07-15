@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { APP_SCHEMA } from "@/lib/config";
+import { buildSienaProductionSchedule, isThursdayOpening } from "@/lib/siena-production-schedule";
 
 const projectSchema = z.object({
   title: z.string().trim().min(1, "Project title is required.").max(160),
@@ -10,7 +11,8 @@ const projectSchema = z.object({
   departmentId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
   startsOn: z.string().trim().optional(),
-  endsOn: z.string().trim().optional()
+  endsOn: z.string().trim().optional(),
+  openingOn: z.string().trim().optional()
 });
 
 function slugify(value: string) {
@@ -131,13 +133,15 @@ export async function POST(request: Request) {
   const rawLocationId = optionalString(formData.get("locationId"));
   const rawStartsOn = optionalString(formData.get("startsOn"));
   const rawEndsOn = optionalString(formData.get("endsOn"));
+  const rawOpeningOn = optionalString(formData.get("openingOn"));
   const parsed = projectSchema.safeParse({
     title: rawTitle,
     projectType: rawProjectType,
     departmentId: rawDepartmentId,
     locationId: rawLocationId,
     startsOn: rawStartsOn,
-    endsOn: rawEndsOn
+    endsOn: rawEndsOn,
+    openingOn: rawOpeningOn
   });
 
   if (!parsed.success) {
@@ -145,6 +149,13 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
+  if(input.openingOn){
+    try{
+      if(!isThursdayOpening(input.openingOn))return failureResponse(request,"The standard Siena schedule requires opening night to be a Thursday.");
+    }catch(error){
+      return failureResponse(request,error instanceof Error?error.message:"Opening night is invalid.");
+    }
+  }
   const slugBase = slugify(input.title) || "project";
   const slug = `${slugBase}-${Date.now().toString(36)}`;
 
@@ -158,6 +169,7 @@ export async function POST(request: Request) {
       primary_location_id: input.locationId || null,
       starts_on: input.startsOn || null,
       ends_on: input.endsOn || null,
+      opening_on: input.openingOn || null,
       created_by: authenticatedUser.id
     })
     .select("id")
@@ -176,6 +188,18 @@ export async function POST(request: Request) {
 
   if (membershipError) {
     return failureResponse(request, membershipError.message);
+  }
+
+  if(input.openingOn){
+    const schedule=buildSienaProductionSchedule(input.openingOn);
+    const {error:acceptanceError}=await supabase.from("project_role_acceptance_settings").upsert({
+      project_id:String(project.id),
+      rehearsal_schedule:schedule.rehearsalSchedule,
+      tech_schedule:schedule.techSchedule,
+      performance_schedule:schedule.performanceSchedule,
+      updated_by:authenticatedUser.id
+    },{onConflict:"project_id"});
+    if(acceptanceError)return failureResponse(request,`Project created, but its standard schedule could not be generated: ${acceptanceError.message}`);
   }
 
   const { error: setupError } = await supabase.from("project_setup_preferences").upsert({
