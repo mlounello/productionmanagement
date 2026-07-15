@@ -23,7 +23,9 @@ const fieldSchema = z.object({
   sensitivity: z.enum(["standard", "sensitive"]),
   profile_field: z.string().trim().max(80),
   export_group: z.string().trim().min(1).max(80),
-  sort_order: z.number().int()
+  sort_order: z.number().int(),
+  conditional_logic:z.object({field_key:z.string().max(100).optional(),value:z.string().max(300).optional()}).optional().default({}),
+  settings:z.object({booking_category:z.string().max(80).optional(),same_day_as:z.string().max(100).optional()}).optional().default({})
 });
 const sectionSchema = z.object({
   id: z.string().uuid().optional(),
@@ -192,9 +194,10 @@ export async function createAuditionSessionAction(formData: FormData) {
   const sessionType = z.enum(["appointments", "group_call", "workshop", "walk_in", "callback"]).parse(formData.get("sessionType"));
   const requestedBookingMode = z.enum(["self_book", "staff_assigned", "walk_in"]).parse(formData.get("bookingMode"));
   const bookingMode=sessionType==="callback"?"staff_assigned":requestedBookingMode;
+  const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
   if (!(endsAt > startsAt)) redirect(path(projectId, "Session end must be after its start.", true));
   const { data: session, error } = await supabase.from("audition_sessions").insert({
-    project_id: projectId, title, location, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(),
+    project_id: projectId, title, location, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), booking_category:bookingCategory,
     interval_minutes: interval, slots_per_interval: capacity, capacity, session_type: sessionType, booking_mode: bookingMode,
     instructions: String(formData.get("instructions") ?? ""), is_published: formData.get("isPublished") === "on"
     ,booking_opens_at: sessionType!=="callback"&&String(formData.get("bookingOpensAt") ?? "") ? new Date(String(formData.get("bookingOpensAt"))).toISOString() : null
@@ -215,6 +218,12 @@ export async function createAuditionSessionAction(formData: FormData) {
   const { error: slotsError } = await supabase.from("audition_slots").insert(rows);
   if (slotsError) redirect(path(projectId, slotsError.message, true));
   redirect(path(projectId, `${rows.length} audition slot${rows.length === 1 ? "" : "s"} created.`));
+}
+
+export async function updateAuditionSessionCategoryAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const sessionId=uuid.parse(formData.get("sessionId"));const {supabase}=await context(projectId);
+  const category=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
+  const {error}=await supabase.from("audition_sessions").update({booking_category:category}).eq("id",sessionId).eq("project_id",projectId);if(error)redirect(path(projectId,error.message,true));redirect(path(projectId,"Audition block category updated."));
 }
 
 export async function updateAuditionSubmissionAction(formData: FormData) {

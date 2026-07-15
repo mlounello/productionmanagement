@@ -4,14 +4,15 @@ import { requestIntakeVerificationCodeAction, verifyIntakeCodeAction } from "@/a
 import { getVerifiedProfile } from "@/lib/profile-intake";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { hasProjectSchedule, ProjectScheduleDisplay, type ProjectSchedule } from "@/components/project-schedule-display";
+import { AuditionSlotSelector } from "@/components/audition-slot-selector";
 
 export const dynamic = "force-dynamic";
 
-type Field = { id: string; section_key: string; field_key: string; label: string; field_type: string; required: boolean; options: string[]; help_text: string; placeholder: string; sensitivity: string; sort_order: number };
+type Field = { id: string; section_key: string; field_key: string; label: string; field_type: string; required: boolean; options: string[]; help_text: string; placeholder: string; sensitivity: string; sort_order: number; settings?:{booking_category?:string;same_day_as?:string};conditional_logic?:{field_key?:string;value?:string} };
 type Section = { id: string; section_key: string; title: string; description: string; sort_order: number };
 type Role = { id: string; name: string; role_group: string };
 type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
-type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string; session_type: string; starts_at: string; ends_at: string | null };
+type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string; booking_category:string; session_type: string; starts_at: string; ends_at: string | null };
 
 const roleGroupOrder=["cast","directorial_team","creative_team","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
 function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());}
@@ -57,7 +58,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
       const groups=[...grouped.entries()].sort(([a],[b])=>{const ai=roleGroupOrder.indexOf(a),bi=roleGroupOrder.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi)||a.localeCompare(b);});
       return <div className="role-interest-groups"><p className="muted">Only currently vacant project roles are shown.</p>{groups.map(([group,roles])=><section key={group}><h3>{roleGroupLabel(group)}</h3><div className="choice-grid">{roles.map((role)=><label className="checkbox-card" key={role.id}><input type="checkbox" name={field.field_key} value={role.id}/><span>{role.name}</span></label>)}</div></section>)}</div>;
     }
-    if (field.field_type === "slot_selector") return availableSlots.length ? <select name="audition_slot" required={field.required} defaultValue=""><option value="">Choose an available time</option>{availableSlots.map((slot) => <option key={slot.id} value={slot.id}>{formatSlot(slot, sessionById.get(slot.session_id))}</option>)}</select> : <p className="setup-warning">No self-bookable times are currently available. Staff will contact you if assignment is required.</p>;
+    if (field.field_type === "slot_selector") {const category=field.settings?.booking_category||"general";const choices=availableSlots.filter((slot)=>(sessionById.get(slot.session_id)?.booking_category||"general")===category).map((slot)=>({id:slot.id,startsAt:slot.starts_at,label:formatSlot(slot,sessionById.get(slot.session_id))}));return choices.length?<AuditionSlotSelector fieldKey={field.field_key} required={field.required} choices={choices} sameDayAs={field.settings?.same_day_as} condition={field.conditional_logic}/>:<p className="setup-warning">No available {category.replace(/_/g," ")} times are currently published.</p>;}
     const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
     const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";
     const selected = Array.isArray(saved) ? saved : saved ? [saved] : [];
@@ -85,7 +86,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
     </fieldset>:<form action={submitAuditionAction} className="stacked-form" encType="multipart/form-data">
       <input type="hidden" name="formToken" value={token} />
       <input type="hidden" name="profileSession" value={query?.profile??""}/>
-      <input type="hidden" name="fieldDefinitions" value={JSON.stringify(payload.fields.map(({ field_key, field_type, required }) => ({ field_key, field_type, required })))} />
+      <input type="hidden" name="fieldDefinitions" value={JSON.stringify(payload.fields.map(({ field_key, field_type, required,settings,conditional_logic }) => ({ field_key, field_type, required,settings,conditional_logic })))} />
       {payload.sections.map((section) => {
         const fields = payload.fields.filter((field) => field.section_key === section.section_key);
         if (!fields.length) return null;

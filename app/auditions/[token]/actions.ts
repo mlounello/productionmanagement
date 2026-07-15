@@ -10,23 +10,23 @@ const uuid = z.string().uuid();
 
 export async function submitAuditionAction(formData: FormData) {
   const token = uuid.parse(formData.get("formToken"));
-  const fields = JSON.parse(String(formData.get("fieldDefinitions") ?? "[]")) as Array<{ field_key: string; field_type: string; required: boolean }>;
+  const fields = JSON.parse(String(formData.get("fieldDefinitions") ?? "[]")) as Array<{ field_key: string; field_type: string; required: boolean;settings?:{booking_category?:string;same_day_as?:string};conditional_logic?:{field_key?:string;value?:string} }>;
   const answers: Record<string, string | string[]> = {};
+  const bookings:Record<string,string>={};
   const uploads: Array<{ key: string; file: File }> = [];
   for (const field of fields) {
     if (field.field_type === "file") {
       const file = formData.get(field.field_key);
       if (file instanceof File && file.size > 0) uploads.push({ key: field.field_key, file });
-      if (field.required && !(file instanceof File && file.size > 0)) redirect(`/auditions/${token}?error=${encodeURIComponent(`${field.field_key} is required.`)}`);
       continue;
     }
     const values = formData.getAll(field.field_key).map(String).filter(Boolean);
+    if(field.field_type==="slot_selector"){const selected=values[0]??"";if(selected){bookings[field.field_key]=uuid.parse(selected);answers[field.field_key]=selected;}continue;}
     const value = field.field_type === "multiple_choice" || field.field_type === "role_selector" ? values : (values[0] ?? "");
-    if (field.required && (!value || (Array.isArray(value) && value.length === 0))) redirect(`/auditions/${token}?error=${encodeURIComponent("Please complete all required questions.")}`);
     answers[field.field_key] = value;
   }
-  const slotRaw = String(formData.get("audition_slot") ?? "");
-  const slotId = slotRaw ? uuid.parse(slotRaw) : null;
+  const applies=(field:typeof fields[number])=>{const condition=field.conditional_logic;if(!condition?.field_key||!condition.value)return true;const source=answers[condition.field_key];return Array.isArray(source)?source.includes(condition.value):source===condition.value;};
+  for(const field of fields){if(!field.required||!applies(field))continue;const value=field.field_type==="file"?uploads.find((upload)=>upload.key===field.field_key):field.field_type==="slot_selector"?bookings[field.field_key]:answers[field.field_key];if(!value||(Array.isArray(value)&&!value.length))redirect(`/auditions/${token}?error=${encodeURIComponent("Please complete all required questions and audition bookings.")}`);}
   const admin = createSupabaseAdminClient();
   const { data: form, error: formError } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();
   if(formError){console.error("Audition form verification failed",{token,error:formError.message});redirect(`/auditions/${token}?error=${encodeURIComponent("We could not verify this audition form. No submission was created. Please contact production staff.")}`);}
@@ -35,7 +35,7 @@ export async function submitAuditionAction(formData: FormData) {
   const { data: existingBefore } = submittedEmail ? await admin.from("people").select("id").ilike("email", submittedEmail).limit(1).maybeSingle() : { data: null };
   const verified = await getVerifiedProfile(String(formData.get("profileSession") ?? ""), "audition", String(form.id));
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.rpc("submit_public_audition", { form_token: token, answer_payload: answers, selected_slot_id: slotId });
+  const { data, error } = await supabase.rpc("submit_public_audition_v2", { form_token: token, answer_payload: answers, booking_payload:bookings });
   if (error || !data) redirect(`/auditions/${token}?error=${encodeURIComponent(error?.message ?? "Could not submit audition form.")}`);
   const result = data as { submission_id: string; access_token: string };
   const { data: submission } = await admin.from("audition_submissions").select("person_id").eq("id", result.submission_id).maybeSingle();

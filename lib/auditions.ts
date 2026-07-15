@@ -32,6 +32,8 @@ export type AuditionFieldInput = {
   profile_field: string;
   export_group: string;
   sort_order: number;
+  conditional_logic?: { field_key?: string; value?: string };
+  settings?: { booking_category?: string; same_day_as?: string };
 };
 
 export const standardAuditionSections: AuditionSectionInput[] = [
@@ -68,7 +70,7 @@ export const standardAuditionFields: AuditionFieldInput[] = [
   { section_key: "schedule", field_key: "schedule_changes", label: "Do You Anticipate Schedule Changes After Auditions?", field_type: "long_text", required: false, options: [], help_text: "", placeholder: "", sensitivity: "standard", profile_field: "", export_group: "conflicts", sort_order: 210 },
   { section_key: "schedule", field_key: "final_comments", label: "Final Questions or Comments", field_type: "long_text", required: false, options: [], help_text: "For the director or production manager.", placeholder: "", sensitivity: "standard", profile_field: "", export_group: "comments", sort_order: 220 },
   { section_key: "schedule", field_key: "audition_source", label: "How Did You Hear About Auditions?", field_type: "single_choice", required: false, options: ["Digest", "Poster", "SaintsConnect", "A friend", "A class", "Other"], help_text: "", placeholder: "", sensitivity: "standard", profile_field: "", export_group: "source", sort_order: 230 },
-  { section_key: "booking", field_key: "audition_slot", label: "Select Your Audition Time", field_type: "slot_selector", required: false, options: [], help_text: "Available times and group calls appear here.", placeholder: "", sensitivity: "standard", profile_field: "", export_group: "booking", sort_order: 240 }
+  { section_key: "booking", field_key: "audition_slot", label: "Select Your Audition Time", field_type: "slot_selector", required: false, options: [], help_text: "Available times and group calls appear here.", placeholder: "", sensitivity: "standard", profile_field: "", export_group: "booking", sort_order: 240, settings:{booking_category:"general"}, conditional_logic:{} }
 ];
 
 export const optionalMusicFields: AuditionFieldInput[] = [
