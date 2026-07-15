@@ -28,7 +28,8 @@ export async function submitAuditionAction(formData: FormData) {
   const slotRaw = String(formData.get("audition_slot") ?? "");
   const slotId = slotRaw ? uuid.parse(slotRaw) : null;
   const admin = createSupabaseAdminClient();
-  const { data: form } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();
+  const { data: form, error: formError } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();
+  if(formError){console.error("Audition form verification failed",{token,error:formError.message});redirect(`/auditions/${token}?error=${encodeURIComponent("We could not verify this audition form. No submission was created. Please contact production staff.")}`);}
   if (!form) redirect(`/auditions/${token}?error=${encodeURIComponent("Audition form is unavailable.")}`);
   const submittedEmail = String(answers.email ?? "").trim().toLowerCase();
   const { data: existingBefore } = submittedEmail ? await admin.from("people").select("id").ilike("email", submittedEmail).limit(1).maybeSingle() : { data: null };
