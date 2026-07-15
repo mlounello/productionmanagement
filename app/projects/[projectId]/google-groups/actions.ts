@@ -30,6 +30,7 @@ export async function saveRoleGroupGoogleSettingsAction(formData: FormData) {
   if (!project) redirect(route(projectId, "Project not found.", true));
   const proposed = generateGoogleGroupEmail(String(project.title), roleGroupSlug);
   const manualEmail = z.string().trim().email().or(z.literal("")).parse(formData.get("manualGoogleGroupEmail"));
+  const roleAcceptanceTemplateId = z.string().uuid().or(z.literal("")).parse(String(formData.get("roleAcceptanceTemplateId") ?? ""));
   const { data: existing } = await supabase.from("project_role_group_google_settings").select("active_google_group_email, google_group_creation_status").eq("project_id", projectId).eq("role_group", roleGroupSlug).maybeSingle();
   const activeEmail = mode === "manual" ? manualEmail.toLowerCase() : mode === "auto" ? String(existing?.active_google_group_email ?? "") : String(existing?.active_google_group_email ?? "");
   if (mode === "manual" && !activeEmail) redirect(route(projectId, "Enter the existing Google Group email for manual mode.", true));
@@ -40,6 +41,7 @@ export async function saveRoleGroupGoogleSettingsAction(formData: FormData) {
     google_group_sync_enabled: mode !== "disabled" && formData.get("googleGroupSyncEnabled") === "on",
     welcome_email_enabled: formData.get("welcomeEmailEnabled") === "on",
     welcome_email_template_id: String(formData.get("welcomeEmailTemplateId") ?? "") || null,
+    role_acceptance_email_template_id: roleAcceptanceTemplateId || null,
     propared_role_group_link: z.string().trim().url().or(z.literal("")).parse(formData.get("proparedRoleGroupLink")),
     remove_from_google_group_on_unassign: formData.get("removeOnUnassign") === "on"
   }, { onConflict: "project_id,role_group" });
