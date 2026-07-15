@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 import { sendPublicityReminder } from "@/lib/profile-access-links";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
+import { firstAndLastName } from "@/lib/person-display-name";
 
 const uuid = z.string().uuid();
 const copySchema = z.object({
@@ -41,18 +42,7 @@ function values(formData: FormData) {
   };
 }
 
-function creditedNameForProfile(person: {
-  full_name: string;
-  last_name: string;
-  preferred_name: string;
-}) {
-  const preferredName = String(person.preferred_name ?? "").trim();
-  const lastName = String(person.last_name ?? "").trim();
-  const fullName = String(person.full_name ?? "").trim();
-  if (!preferredName) return fullName;
-  if (!lastName || preferredName.toLocaleLowerCase().endsWith(lastName.toLocaleLowerCase())) return preferredName;
-  return `${preferredName} ${lastName}`;
-}
+const creditedNameForProfile=firstAndLastName;
 
 export async function prepareProjectPublicityAction(formData: FormData) {
   await requireUser();
@@ -60,14 +50,14 @@ export async function prepareProjectPublicityAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: assignments, error } = await supabase
     .from("role_assignments")
-    .select("id, person_id, people(full_name, last_name, preferred_name, publicity_bio, publicity_headshot_url, publicity_profile_version)")
+    .select("id, person_id, people(full_name, first_name, last_name, publicity_bio, publicity_headshot_url, publicity_profile_version)")
     .eq("project_id", projectId)
     .not("status", "in", "(declined,withdrawn)");
   if (error) redirect(path(projectId, "error", error.message));
 
   const rowsByPerson = new Map<string, Record<string, unknown>>();
   for (const assignment of assignments ?? []) {
-    const person = assignment.people as unknown as { full_name: string; last_name: string; preferred_name: string; publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number } | null;
+    const person = assignment.people as unknown as { full_name: string; first_name: string; last_name: string; publicity_bio: string; publicity_headshot_url: string; publicity_profile_version: number } | null;
     rowsByPerson.set(String(assignment.person_id), {
       project_id: projectId,
       person_id: assignment.person_id,
@@ -129,7 +119,7 @@ export async function refreshPublicityFromProfileAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: submission, error } = await supabase.from("project_publicity_submissions").select("person_id").eq("id", submissionId).eq("project_id", projectId).maybeSingle();
   if (error || !submission) redirect(path(projectId, "error", error?.message ?? "Submission not found."));
-  const { data: person, error: personError } = await supabase.from("people").select("full_name, last_name, preferred_name, publicity_bio, publicity_headshot_url, publicity_profile_version").eq("id", submission.person_id).maybeSingle();
+  const { data: person, error: personError } = await supabase.from("people").select("full_name, first_name, last_name, publicity_bio, publicity_headshot_url, publicity_profile_version").eq("id", submission.person_id).maybeSingle();
   if (personError || !person) redirect(path(projectId, "error", personError?.message ?? "Person not found."));
   const { error: updateError } = await supabase.from("project_publicity_submissions").update({
     credited_name: creditedNameForProfile(person),

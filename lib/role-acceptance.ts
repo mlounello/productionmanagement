@@ -4,6 +4,7 @@ import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
+import { firstAndLastName } from "@/lib/person-display-name";
 
 export async function ensureRoleAcceptanceRequest(projectId:string, assignmentId:string, actorUserId:string|null, send=true, respectAutoSend=false){
   const admin=createSupabaseAdminClient();
@@ -38,8 +39,8 @@ export async function beginAssignmentOnboarding(projectId:string, assignmentId:s
 export async function completeAcceptedOnboarding(requestId:string){
   const admin=createSupabaseAdminClient(); const {data:req}=await admin.from("role_acceptance_requests").select("project_id,role_assignment_id,person_id").eq("id",requestId).maybeSingle(); if(!req)throw new Error("Acceptance request not found.");
   await admin.from("role_assignments").update({status:"accepted",confirmation_status:"accepted",onboarding_status:"onboarding",onboarding_checklist:{agreement_confirmed:true,google_group_checked:false,welcome_sent:false,publicity_prepared:false}}).eq("id",req.role_assignment_id);
-  const {data:person}=await admin.from("people").select("full_name,last_name,preferred_name,publicity_bio,publicity_headshot_url,publicity_profile_version").eq("id",req.person_id).maybeSingle();
-  const preferred=String(person?.preferred_name??"").trim(); const last=String(person?.last_name??"").trim(); const credited=!preferred?String(person?.full_name??""):(!last||preferred.toLowerCase().endsWith(last.toLowerCase())?preferred:`${preferred} ${last}`);
+  const {data:person}=await admin.from("people").select("full_name,first_name,last_name,publicity_bio,publicity_headshot_url,publicity_profile_version").eq("id",req.person_id).maybeSingle();
+  const credited=firstAndLastName(person??{});
   const pub=await admin.from("project_publicity_submissions").upsert({project_id:req.project_id,person_id:req.person_id,credited_name:credited,bio:person?.publicity_bio??"",headshot_url:person?.publicity_headshot_url??"",source_profile_version:Number(person?.publicity_profile_version??1),status:"draft",playbill_sync_status:"not_ready"},{onConflict:"project_id,person_id",ignoreDuplicates:true});
   const warnings:string[]=[]; if(pub.error)warnings.push(pub.error.message);
   try{await syncAssignmentToPlaybill(String(req.project_id),String(req.role_assignment_id));}catch(e){warnings.push(`Playbill: ${e instanceof Error?e.message:"sync failed"}`);}

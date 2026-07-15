@@ -17,6 +17,7 @@ import {
   type PlaybillShowRole
 } from "@/lib/playbill";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstAndLastName } from "@/lib/person-display-name";
 
 type PmClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -210,7 +211,7 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
 
   const personInput = {
     programId: String(show.program_id),
-    fullName: String(person.full_name),
+    fullName: firstAndLastName(person),
     firstName: String(person.first_name ?? ""),
     lastName: String(person.last_name ?? ""),
     preferredName: String(person.preferred_name ?? ""),

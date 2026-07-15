@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { firstAndLastName } from "@/lib/person-display-name";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
@@ -26,7 +27,7 @@ export const dynamic = "force-dynamic";
 type Assignment = {
   id: string;
   person_id: string;
-  people: { full_name: string; email: string; auth_user_id: string | null; publicity_profile_version: number } | null;
+  people: { full_name: string; first_name: string; last_name: string; email: string; auth_user_id: string | null; publicity_profile_version: number } | null;
   project_roles: { name: string; role_group: string } | null;
 };
 
@@ -62,7 +63,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
   const supabase = await createSupabaseServerClient();
   const [{ data: project }, { data: assignments }, { data: submissions }, { data: playbillLink }, { data: settings }] = await Promise.all([
     supabase.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
-    supabase.from("role_assignments").select("id, person_id, status, people(full_name, email, auth_user_id, publicity_profile_version), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)").order("created_at"),
+    supabase.from("role_assignments").select("id, person_id, status, people(full_name, first_name, last_name, email, auth_user_id, publicity_profile_version), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)").order("created_at"),
     supabase.from("project_publicity_submissions").select("id, person_id, credited_name, bio, headshot_url, source_profile_version, status, person_approved_at, editorial_approved_at, playbill_sync_status, playbill_sync_error, playbill_synced_at, playbill_submission_status, playbill_locked_at, last_reminder_sent_at, reminder_count, bio_required").eq("project_id", projectId),
     supabase.from("external_links").select("id").eq("local_entity_type", "project").eq("local_entity_id", projectId).eq("external_app", "playbill").eq("external_table", "shows").maybeSingle(),
     supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
@@ -133,7 +134,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           <input type="hidden" name="projectId" value={projectId} />
           <div className="compact-list">{outstanding.map((item) => {
             const assignment = assignmentRows.find((row) => row.person_id === item.person_id);
-            return <label className="check-row" key={item.id}><input type="checkbox" name="personId" value={item.person_id} defaultChecked /><span><strong>{assignment?.people?.full_name ?? "Unknown person"}</strong> · {!item.bio.trim() ? "Bio missing · " : ""}{!item.headshot_url.trim() ? "Headshot missing · " : ""}{label(item.status)}</span></label>;
+            return <label className="check-row" key={item.id}><input type="checkbox" name="personId" value={item.person_id} defaultChecked /><span><strong>{firstAndLastName(assignment?.people??{})||"Unknown person"}</strong> · {!item.bio.trim() ? "Bio missing · " : ""}{!item.headshot_url.trim() ? "Headshot missing · " : ""}{label(item.status)}</span></label>;
           })}</div>
           <button type="submit">Send selected reminders</button>
         </form> : <EmptyState title="Everyone is current">No publicity reminders are needed right now.</EmptyState>}
@@ -143,7 +144,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
         {[...new Map(assignmentRows.map((assignment) => [assignment.person_id, assignment])).values()].map((assignment) => {
           const item = submissionByPerson.get(assignment.person_id);
           if (!item) return (
-            <section className="panel" key={assignment.person_id}><strong>{assignment.people?.full_name ?? "Unknown person"}</strong><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"} · Not prepared</p></section>
+            <section className="panel" key={assignment.person_id}><strong>{firstAndLastName(assignment.people??{})||"Unknown person"}</strong><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"} · Not prepared</p></section>
           );
           const profileChanged = Number(assignment.people?.publicity_profile_version ?? 1) > item.source_profile_version;
           const isLocked = item.playbill_submission_status === "locked";
@@ -151,7 +152,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           return (
             <section className="panel workspace-section" key={assignment.id}>
               <div className="section-heading">
-                <div><p className="eyebrow">Production Publicity</p><h2>{assignment.people?.full_name ?? "Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"}{item.bio_required ? ` · Person: ${label(item.status)} · Playbill: ${label(item.playbill_submission_status)}` : " · No publicity submission required"}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
+                <div><p className="eyebrow">Production Publicity</p><h2>{firstAndLastName(assignment.people??{})||"Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"}{item.bio_required ? ` · Person: ${label(item.status)} · Playbill: ${label(item.playbill_submission_status)}` : " · No publicity submission required"}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
                 <div className="top-actions">{!item.bio_required ? <StatusBadge status="not_required" label="Bio not required" /> : null}{item.bio_required && profileChanged && !isLocked ? <StatusBadge status="pending" label="New profile version available" /> : null}{item.bio_required ? <StatusBadge status={isLocked ? "locked" : "draft"} context="playbill" label={isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`} /> : null}</div>
               </div>
               {item.playbill_sync_error ? <p className="setup-warning">{item.playbill_sync_error}</p> : null}
