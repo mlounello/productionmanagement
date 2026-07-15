@@ -11,4 +11,40 @@ export async function sendRoleAcceptanceAction(formData:FormData){const user=awa
 
 export async function sendAllRoleAcceptancesAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));const ids=JSON.parse(String(formData.get("assignmentIds")??"[]")) as string[];let sent=0,attention=0;for(const id of ids){try{const result=await ensureRoleAcceptanceRequest(projectId,z.string().uuid().parse(id),user.id,true);if(result.warnings.length)attention++;else if(result.status==="sent")sent++;}catch{attention++;}}redirect(`/projects/${projectId}/onboarding?success=${encodeURIComponent(`${sent} acceptance request${sent===1?"":"s"} sent. ${attention?`${attention} need attention.`:""}`)}`);}
 
-export async function saveProjectAcceptanceSettingsAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));let castSections:unknown,crewSections:unknown;try{castSections=JSON.parse(String(formData.get("castSections")??"[]"));crewSections=JSON.parse(String(formData.get("crewSections")??"[]"));}catch{redirect(`/projects/${projectId}/onboarding?error=Agreement%20section%20source%20could%20not%20be%20read.`);}const section=z.array(z.object({key:z.string().min(1),title:z.string(),body:z.string(),acknowledgement:z.string(),requires_response:z.boolean()})).refine((items)=>new Set(items.map((item)=>item.key)).size===items.length,"Each agreement section must have a unique key.");const parsed=z.object({rehearsalSchedule:z.string().max(12000),techSchedule:z.string().max(12000),performanceSchedule:z.string().max(12000),castIntroduction:z.string().max(5000),crewIntroduction:z.string().max(5000),castSections:section,crewSections:section,expiresDays:z.coerce.number().int().min(1).max(90),autoSend:z.boolean()}).safeParse({rehearsalSchedule:String(formData.get("rehearsalSchedule")??""),techSchedule:String(formData.get("techSchedule")??""),performanceSchedule:String(formData.get("performanceSchedule")??""),castIntroduction:String(formData.get("castIntroduction")??""),crewIntroduction:String(formData.get("crewIntroduction")??""),castSections,crewSections,expiresDays:formData.get("expiresDays"),autoSend:formData.get("autoSend")==="on"});if(!parsed.success)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(parsed.error.issues[0]?.message??"Invalid agreement settings.")}`);const clean=(items:z.infer<typeof section>)=>items.map((item)=>({...item,body:sanitizeRichText(item.body),acknowledgement:sanitizeRichText(item.acknowledgement)}));const supabase=await createSupabaseServerClient();const {error}=await supabase.from("project_role_acceptance_settings").upsert({project_id:projectId,rehearsal_schedule:parsed.data.rehearsalSchedule,tech_schedule:parsed.data.techSchedule,performance_schedule:parsed.data.performanceSchedule,cast_introduction:sanitizeRichText(parsed.data.castIntroduction),crew_introduction:sanitizeRichText(parsed.data.crewIntroduction),cast_sections:clean(parsed.data.castSections),crew_sections:clean(parsed.data.crewSections),expires_days:parsed.data.expiresDays,auto_send:parsed.data.autoSend,updated_by:user.id},{onConflict:"project_id"});if(error)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(error.message)}`);redirect(`/projects/${projectId}/onboarding?success=Project%20schedule%20and%20agreement%20settings%20saved.`);}
+export async function saveProjectAcceptanceSettingsAction(formData:FormData){
+  const user=await requireUser();
+  const projectId=z.string().uuid().parse(formData.get("projectId"));
+  let castSections:unknown,crewSections:unknown;
+  try{
+    castSections=JSON.parse(String(formData.get("castSections")??"[]"));
+    crewSections=JSON.parse(String(formData.get("crewSections")??"[]"));
+  }catch{
+    redirect(`/projects/${projectId}/onboarding?error=Agreement%20section%20source%20could%20not%20be%20read.`);
+  }
+  const section=z.array(z.object({key:z.string().min(1),title:z.string(),body:z.string(),acknowledgement:z.string(),requires_response:z.boolean()})).refine((items)=>new Set(items.map((item)=>item.key)).size===items.length,"Each agreement section must have a unique key.");
+  const choices=(value:FormDataEntryValue|null)=>[...new Set(String(value??"").split("\n").map((line)=>line.trim()).filter(Boolean))];
+  const parsed=z.object({
+    rehearsalSchedule:z.string().max(12000),techSchedule:z.string().max(12000),performanceSchedule:z.string().max(12000),
+    castIntroduction:z.string().max(5000),crewIntroduction:z.string().max(5000),castSections:section,crewSections:section,
+    castCreditOptions:z.array(z.string().min(1).max(120)).min(1,"Add at least one Cast registration credit choice."),
+    crewCreditOptions:z.array(z.string().min(1).max(120)).min(1,"Add at least one Crew registration credit choice."),
+    expiresDays:z.coerce.number().int().min(1).max(90),autoSend:z.boolean()
+  }).safeParse({
+    rehearsalSchedule:String(formData.get("rehearsalSchedule")??""),techSchedule:String(formData.get("techSchedule")??""),performanceSchedule:String(formData.get("performanceSchedule")??""),
+    castIntroduction:String(formData.get("castIntroduction")??""),crewIntroduction:String(formData.get("crewIntroduction")??""),castSections,crewSections,
+    castCreditOptions:choices(formData.get("castCreditOptions")),crewCreditOptions:choices(formData.get("crewCreditOptions")),
+    expiresDays:formData.get("expiresDays"),autoSend:formData.get("autoSend")==="on"
+  });
+  if(!parsed.success)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(parsed.error.issues[0]?.message??"Invalid agreement settings.")}`);
+  const clean=(items:z.infer<typeof section>)=>items.map((item)=>({...item,body:sanitizeRichText(item.body),acknowledgement:sanitizeRichText(item.acknowledgement)}));
+  const supabase=await createSupabaseServerClient();
+  const {error}=await supabase.from("project_role_acceptance_settings").upsert({
+    project_id:projectId,rehearsal_schedule:parsed.data.rehearsalSchedule,tech_schedule:parsed.data.techSchedule,performance_schedule:parsed.data.performanceSchedule,
+    cast_introduction:sanitizeRichText(parsed.data.castIntroduction),crew_introduction:sanitizeRichText(parsed.data.crewIntroduction),
+    cast_sections:clean(parsed.data.castSections),crew_sections:clean(parsed.data.crewSections),
+    cast_credit_options:parsed.data.castCreditOptions,crew_credit_options:parsed.data.crewCreditOptions,
+    expires_days:parsed.data.expiresDays,auto_send:parsed.data.autoSend,updated_by:user.id
+  },{onConflict:"project_id"});
+  if(error)redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(error.message)}`);
+  redirect(`/projects/${projectId}/onboarding?success=Project%20schedule%2C%20agreements%2C%20and%20credit%20choices%20saved.`);
+}
