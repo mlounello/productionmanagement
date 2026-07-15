@@ -705,7 +705,7 @@ export default async function ProjectWorkspacePage({
       </section>
 
       {workspace === "overview" ? (
-        <><ProjectReadinessChecklist readiness={readiness!}/><section className="panel workspace-section">
+        <><ProjectReadinessChecklist readiness={readiness!} projectId={typedProject.id}/><section className="panel workspace-section">
           <div className="section-heading"><div><p className="eyebrow">Project At A Glance</p><h2>Choose your workspace</h2><p className="muted">Open a focused workspace above, or build reusable dashboard views from the modules you use most.</p></div><Link className="button" href={`/projects/${typedProject.id}/dashboards`}>Build a dashboard</Link></div>
           <div className="workspace-summary">
             <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>

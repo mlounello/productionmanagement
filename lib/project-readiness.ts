@@ -1,7 +1,7 @@
 import { DISABLE_OUTBOUND_EMAIL,ENABLE_BUDGET_WRITES,ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK,ENABLE_PLAYBILL_WRITES } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export type ReadinessState="ready"|"attention"|"off"|"optional";
+export type ReadinessState="ready"|"attention"|"off"|"optional"|"ignored";
 export type ReadinessItem={id:string;title:string;detail:string;state:ReadinessState;href?:string};
 export type ReadinessSection={id:string;title:string;description:string;items:ReadinessItem[]};
 export type ProjectReadiness={sections:ReadinessSection[];ready:number;required:number;attention:number};
@@ -14,13 +14,14 @@ function complete(value:unknown){return Boolean(String(value??"").trim());}
 
 export async function loadProjectReadiness(projectId:string,roleGroups:string[],guestArtistCount:number):Promise<ProjectReadiness>{
   const supabase=await createSupabaseServerClient();
-  const [{data:groupSettings},{data:acceptance},{data:publicity},{data:templates},{data:playbillLink},{data:setupRow}]=await Promise.all([
+  const [{data:groupSettings},{data:acceptance},{data:publicity},{data:templates},{data:playbillLink},{data:setupRow},{data:waivers}]=await Promise.all([
     supabase.from("project_role_group_google_settings").select("role_group,active_google_group_email,google_group_sync_enabled,welcome_email_enabled,welcome_email_template_id,role_acceptance_email_template_id,propared_role_group_link").eq("project_id",projectId),
     supabase.from("project_role_acceptance_settings").select("auto_send,rehearsal_schedule,tech_schedule,performance_schedule,cast_credit_options,crew_credit_options").eq("project_id",projectId).maybeSingle(),
     supabase.from("project_publicity_settings").select("bio_due_on,headshot_due_on,reminders_enabled,bio_character_limit").eq("project_id",projectId).maybeSingle(),
     supabase.from("email_templates").select("id,project_id,name,usage_tags,active,updated_at").or(`project_id.eq.${projectId},project_id.is.null`).eq("active",true).order("updated_at",{ascending:false}),
     supabase.from("external_links").select("id").eq("local_entity_type","project").eq("local_entity_id",projectId).eq("external_app","playbill").eq("external_schema","app_playbill").eq("external_table","shows").maybeSingle(),
-    supabase.from("project_setup_preferences").select("setup_status,uses_role_acceptance,uses_google_groups,uses_propared,uses_playbill,uses_publicity,uses_auditions,uses_budget,selected_role_groups").eq("project_id",projectId).maybeSingle()
+    supabase.from("project_setup_preferences").select("setup_status,uses_role_acceptance,uses_google_groups,uses_propared,uses_playbill,uses_publicity,uses_auditions,uses_budget,selected_role_groups").eq("project_id",projectId).maybeSingle(),
+    supabase.from("project_readiness_waivers").select("item_id,reason").eq("project_id",projectId)
   ]);
   const setup=setupRow as SetupPreferences|null;
   const choice=(key:keyof Omit<SetupPreferences,"setup_status"|"selected_role_groups">)=>setup?Boolean(setup[key]):true;
@@ -49,7 +50,8 @@ export async function loadProjectReadiness(projectId:string,roleGroups:string[],
     {id:"budget",title:"Theatre Budget integration",state:!usesBudget?"optional":guestArtistCount?ENABLE_BUDGET_WRITES?"ready":"off":"optional",detail:!usesBudget?"Theatre Budget guest-artist linking is not used for this project.":guestArtistCount?ENABLE_BUDGET_WRITES?`${guestArtistCount} guest-artist assignment${guestArtistCount===1?"":"s"}; Budget writes are enabled.`:"Guest artists are assigned, but Budget writes are disabled.":"No guest artists are currently assigned; Budget setup is not required yet.",href:usesBudget?`/projects/${projectId}/integrations`:`/projects/${projectId}/setup?step=workflow`}
   ];
   const setupItems:ReadinessItem[]=[{id:"setup-workflow",title:"Initial project setup workflow",state:setup?.setup_status==="complete"?"ready":"attention",detail:setup?.setup_status==="complete"?"Initial questions and review have been completed; checks remain live.":"Continue the guided project setup and review its integration checks.",href:`/projects/${projectId}/setup`}];
-  const sections:ReadinessSection[]=[{id:"setup",title:"Guided setup",description:"The initial production configuration and workflow choices.",items:setupItems},{id:"email",title:"Email delivery and defaults",description:"Application delivery plus the templates used by selected automated messages.",items:emailItems},{id:"acceptance",title:"Student onboarding",description:"Role acceptance and the dates students agree to attend.",items:acceptanceItems},{id:"groups",title:"Role-group automation",description:"Selected role groups and their Google, email, Propared, and acceptance settings.",items:groupItems},{id:"integrations",title:"Integrations and publicity",description:"Project-level services selected for this production.",items:integrationItems}];
-  const requiredItems=sections.flatMap((section)=>section.items).filter((item)=>item.state!=="optional");
+  const waiverByItem=new Map((waivers??[]).map((waiver)=>[String(waiver.item_id),String(waiver.reason)]));
+  const sections:ReadinessSection[]=[{id:"setup",title:"Guided setup",description:"The initial production configuration and workflow choices.",items:setupItems},{id:"email",title:"Email delivery and defaults",description:"Application delivery plus the templates used by selected automated messages.",items:emailItems},{id:"acceptance",title:"Student onboarding",description:"Role acceptance and the dates students agree to attend.",items:acceptanceItems},{id:"groups",title:"Role-group automation",description:"Selected role groups and their Google, email, Propared, and acceptance settings.",items:groupItems},{id:"integrations",title:"Integrations and publicity",description:"Project-level services selected for this production.",items:integrationItems}].map((section)=>({...section,items:section.items.map((item)=>waiverByItem.has(item.id)?{...item,state:"ignored" as const,detail:`${item.detail} Ignored: ${waiverByItem.get(item.id)}.`}:item)}));
+  const requiredItems=sections.flatMap((section)=>section.items).filter((item)=>item.state!=="optional"&&item.state!=="ignored");
   return {sections,ready:requiredItems.filter((item)=>item.state==="ready").length,required:requiredItems.length,attention:requiredItems.filter((item)=>item.state!=="ready").length};
 }
