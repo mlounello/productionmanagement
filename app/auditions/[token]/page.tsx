@@ -11,7 +11,7 @@ type Field = { id: string; section_key: string; field_key: string; label: string
 type Section = { id: string; section_key: string; title: string; description: string; sort_order: number };
 type Role = { id: string; name: string; role_group: string };
 type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
-type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string };
+type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string; session_type: string; starts_at: string; ends_at: string | null };
 
 const roleGroupOrder=["cast","directorial_team","creative_team","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
 function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());}
@@ -20,6 +20,11 @@ function formatSlot(slot: Slot, session?: Session) {
   const start = new Date(slot.starts_at);
   const end = slot.ends_at ? new Date(slot.ends_at) : null;
   return `${session?.title ?? "Audition"} · ${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${end ? `–${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}${session?.location ? ` · ${session.location}` : ""} (${slot.capacity - Number(slot.booked)} open)`;
+}
+
+function formatSession(session: Session) {
+  const start=new Date(session.starts_at);const end=session.ends_at?new Date(session.ends_at):null;
+  return `${start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})} · ${start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}${end?`–${end.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}`:""}`;
 }
 
 export default async function PublicAuditionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string; success?: string; notice?: string; challenge?: string; profile?: string; preview?:string }> }) {
@@ -38,6 +43,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
   } : {};
   const sessionById = new Map(payload.sessions.map((session) => [session.id, session]));
   const availableSlots = payload.slots.filter((slot) => Number(slot.booked) < slot.capacity && sessionById.get(slot.session_id)?.booking_mode === "self_book");
+  const callbackSessions=payload.sessions.filter((session)=>session.session_type==="callback");
   const renderField = (field: Field) => {
     const common = { name: field.field_key, required: field.required };
     const saved = profileValues[field.field_key];
@@ -55,7 +61,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
     const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
     const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";
     const selected = Array.isArray(saved) ? saved : saved ? [saved] : [];
-    return <div className="choice-grid">{options.map((option) => <label className="checkbox-card" key={option}><input type={checkbox ? "checkbox" : "radio"} name={field.field_key} value={option} required={field.required && !checkbox} defaultChecked={selected.includes(option)} /><span>{option}</span></label>)}</div>;
+    return <>{field.field_key==="callback_availability"?<div className="audition-callback-schedule">{callbackSessions.length?callbackSessions.map((session)=><div className="schedule-block" key={session.id}><h3>{session.title||"Callbacks"}</h3><p>{formatSession(session)}{session.location?`\n${session.location}`:""}{session.instructions?`\n${session.instructions}`:""}</p></div>):<p className="setup-warning">No callback date has been published for this project yet.</p>}</div>:null}<div className="choice-grid">{options.map((option) => <label className="checkbox-card" key={option}><input type={checkbox ? "checkbox" : "radio"} name={field.field_key} value={option} required={field.required && !checkbox} defaultChecked={selected.includes(option)} /><span>{option}</span></label>)}</div></>;
   };
   return <div className="page audition-public-page">
     <header className="page-header"><div><p className="eyebrow">{payload.project.title}</p><h1>{payload.form.title}</h1><p className="muted">{payload.form.description}</p></div></header>

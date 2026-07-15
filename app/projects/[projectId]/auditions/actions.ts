@@ -189,17 +189,18 @@ export async function createAuditionSessionAction(formData: FormData) {
   const endsAt = new Date(z.string().min(1).parse(formData.get("endsAt")));
   const interval = z.coerce.number().int().min(1).max(240).parse(formData.get("intervalMinutes"));
   const capacity = z.coerce.number().int().min(1).max(500).parse(formData.get("capacity"));
-  const sessionType = z.enum(["appointments", "group_call", "workshop", "walk_in"]).parse(formData.get("sessionType"));
-  const bookingMode = z.enum(["self_book", "staff_assigned", "walk_in"]).parse(formData.get("bookingMode"));
+  const sessionType = z.enum(["appointments", "group_call", "workshop", "walk_in", "callback"]).parse(formData.get("sessionType"));
+  const requestedBookingMode = z.enum(["self_book", "staff_assigned", "walk_in"]).parse(formData.get("bookingMode"));
+  const bookingMode=sessionType==="callback"?"staff_assigned":requestedBookingMode;
   if (!(endsAt > startsAt)) redirect(path(projectId, "Session end must be after its start.", true));
   const { data: session, error } = await supabase.from("audition_sessions").insert({
     project_id: projectId, title, location, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(),
     interval_minutes: interval, slots_per_interval: capacity, capacity, session_type: sessionType, booking_mode: bookingMode,
     instructions: String(formData.get("instructions") ?? ""), is_published: formData.get("isPublished") === "on"
-    ,booking_opens_at: String(formData.get("bookingOpensAt") ?? "") ? new Date(String(formData.get("bookingOpensAt"))).toISOString() : null
-    ,booking_closes_at: String(formData.get("bookingClosesAt") ?? "") ? new Date(String(formData.get("bookingClosesAt"))).toISOString() : null
-    ,reschedule_deadline: String(formData.get("rescheduleDeadline") ?? "") ? new Date(String(formData.get("rescheduleDeadline"))).toISOString() : null
-    ,cancel_deadline: String(formData.get("cancelDeadline") ?? "") ? new Date(String(formData.get("cancelDeadline"))).toISOString() : null
+    ,booking_opens_at: sessionType!=="callback"&&String(formData.get("bookingOpensAt") ?? "") ? new Date(String(formData.get("bookingOpensAt"))).toISOString() : null
+    ,booking_closes_at: sessionType!=="callback"&&String(formData.get("bookingClosesAt") ?? "") ? new Date(String(formData.get("bookingClosesAt"))).toISOString() : null
+    ,reschedule_deadline: sessionType!=="callback"&&String(formData.get("rescheduleDeadline") ?? "") ? new Date(String(formData.get("rescheduleDeadline"))).toISOString() : null
+    ,cancel_deadline: sessionType!=="callback"&&String(formData.get("cancelDeadline") ?? "") ? new Date(String(formData.get("cancelDeadline"))).toISOString() : null
   }).select("id").single();
   if (error || !session) redirect(path(projectId, error?.message ?? "Could not create session.", true));
   const rows: Array<Record<string, unknown>> = [];
