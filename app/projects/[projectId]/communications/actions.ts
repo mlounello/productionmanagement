@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { communicationTypes, communicationTypeLabel, communicationVariables, renderCommunication, selectCommunicationCandidates, type AudienceSelection, type CommunicationCandidate } from "@/lib/communications";
-import { sendHtmlEmail } from "@/lib/outbound-email";
+import { sendHtmlEmail, sendHtmlEmailBatch } from "@/lib/outbound-email";
+import { createHash } from "node:crypto";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -136,22 +137,29 @@ export async function sendCommunicationCampaignAction(formData: FormData) {
     redirect(route(projectId, "success", "Campaign delivery states reconciled; no unsent recipients remain.", campaignId));
   }
   await supabase.from("communication_campaigns").update({ status: "sending", reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq("id", campaignId);
-  for (let start = 0; start < recipients.length; start += 10) {
-    await Promise.all(recipients.slice(start, start + 10).map(async (recipient) => {
+  for (let start = 0; start < recipients.length; start += 100) {
+    const prepared = (await Promise.all(recipients.slice(start, start + 100).map(async (recipient) => {
       const { data: prior } = await supabase.from("email_messages").select("id").eq("campaign_recipient_id", recipient.id).eq("status", "sent").maybeSingle();
-      if (prior) { await supabase.from("communication_recipients").update({ status: "sent", error_message: "" }).eq("id", recipient.id); return; }
+      if (prior) { await supabase.from("communication_recipients").update({ status: "sent", error_message: "" }).eq("id", recipient.id); return null; }
       await supabase.from("communication_recipients").update({ status: "sending", error_message: "" }).eq("id", recipient.id);
       const { data: message, error: messageError } = await supabase.from("email_messages").insert({ project_id: projectId, person_id: recipient.person_id, campaign_id: campaignId, campaign_recipient_id: recipient.id, message_type: campaign.message_type, to_email: recipient.to_email, subject: recipient.subject, body: recipient.body, status: "queued", created_by: user.id }).select("id").single();
-      if (messageError || !message) { await supabase.from("communication_recipients").update({ status: "failed", error_message: messageError?.message ?? "Could not create email audit record." }).eq("id", recipient.id); return; }
-      try {
-        const provider = await sendHtmlEmail({ to: recipient.to_email, subject: recipient.subject, html: recipient.body });
+      if (messageError || !message) { await supabase.from("communication_recipients").update({ status: "failed", error_message: messageError?.message ?? "Could not create email audit record." }).eq("id", recipient.id); return null; }
+      return { recipient, message };
+    }))).filter((item): item is NonNullable<typeof item> => item !== null);
+    if (!prepared.length) continue;
+    try {
+      const stableIds = prepared.map(({ recipient }) => recipient.id).sort().join(",");
+      const key = `pm-campaign-${campaignId}-${createHash("sha256").update(stableIds).digest("hex").slice(0, 32)}`;
+      const providers = await sendHtmlEmailBatch(prepared.map(({ recipient }) => ({ to: recipient.to_email, subject: recipient.subject, html: recipient.body })), { idempotencyKey: key });
+      await Promise.all(prepared.map(async ({ recipient, message }, index) => {
+        const provider = providers[index];
         const now = new Date().toISOString();
         await Promise.all([supabase.from("email_messages").update({ status: "sent", provider_message_id: provider.id, sent_at: now }).eq("id", message.id), supabase.from("communication_recipients").update({ status: "sent", provider_message_id: provider.id, sent_at: now, error_message: "" }).eq("id", recipient.id)]);
-      } catch (sendError) {
-        const messageText = sendError instanceof Error ? sendError.message : "Email delivery failed.";
-        await Promise.all([supabase.from("email_messages").update({ status: "failed" }).eq("id", message.id), supabase.from("communication_recipients").update({ status: "failed", error_message: messageText }).eq("id", recipient.id)]);
-      }
-    }));
+      }));
+    } catch (sendError) {
+      const messageText = sendError instanceof Error ? sendError.message : "Email delivery failed.";
+      await Promise.all(prepared.flatMap(({ recipient, message }) => [supabase.from("email_messages").update({ status: "failed" }).eq("id", message.id), supabase.from("communication_recipients").update({ status: "failed", error_message: messageText }).eq("id", recipient.id)]));
+    }
   }
   const { data: final } = await supabase.from("communication_recipients").select("status").eq("campaign_id", campaignId);
   const sent = (final ?? []).filter((row) => row.status === "sent").length;

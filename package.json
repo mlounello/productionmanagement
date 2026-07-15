@@ -14,7 +14,8 @@
     "test:project-routes": "node --experimental-strip-types --test scripts/project-routes.test.ts",
     "test:ui-status": "node --experimental-strip-types --test scripts/status-display.test.ts",
     "test:communications": "node --experimental-strip-types --test scripts/communications.test.ts",
-    "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts"
+    "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts",
+    "test:email-rate-limit": "node --experimental-strip-types --test scripts/resend-rate-limit.test.ts"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",

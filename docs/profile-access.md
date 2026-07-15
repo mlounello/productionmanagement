@@ -15,7 +15,11 @@ Production Management profile access mirrors Playbill contributor access:
 - `SUPABASE_SERVICE_ROLE_KEY`: the server-only service-role key for the shared Supabase project. Never prefix this variable with `NEXT_PUBLIC_`.
 - `RESEND_API_KEY`: an API key allowed to send from the configured domain.
 - `EMAIL_FROM`: the verified sender, for example `Siena Theatre Production Management <production@mlounello.com>`.
+- `RESEND_MAX_REQUESTS_PER_SECOND=4`: optional safety override. The application will never configure itself above four requests per second, leaving room below Resend's standard five-request team limit.
+- `RESEND_MAX_RETRIES=5`: optional retry count for per-second rate limits and temporary Resend failures. Resend's `Retry-After` and rate-limit reset headers take precedence over the backoff calculation.
 - `DISABLE_OUTBOUND_EMAIL=false`
+
+All email workflows use the same paced sender within an application instance. Campaigns use Resend's batch endpoint in groups of no more than 100 personalized messages, and every provider request uses an idempotency key so an automatic retry does not duplicate delivery. A daily or monthly quota error is not repeatedly retried because pacing cannot fix an exhausted account quota; unsent campaign recipients remain failed and visible so staff can resume them after the quota resets or the Resend plan changes.
 
 Apply `supabase/migrations/202607132200_branded_profile_access_links.sql` before deploying the feature.
 
