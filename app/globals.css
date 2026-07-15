@@ -1276,16 +1276,32 @@ legend {
   white-space: pre-line;
 }
 
-.rich-source-editor {
-  background: #14221d;
+.field textarea.rich-source-editor {
+  background: #101713;
   border: 1px solid #2b463b;
   border-radius: 8px;
-  color: #e7f5ee;
+  caret-color: #fff;
+  color: #f5f7f6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   line-height: 1.5;
   min-height: 220px;
   padding: 14px;
+  -webkit-text-fill-color: #f5f7f6;
   width: 100%;
+}
+
+.field textarea.rich-source-editor:focus {
+  background: #101713;
+  border-color: #7eb69f;
+  color: #fff;
+  outline: 2px solid rgb(126 182 159 / 30%);
+  -webkit-text-fill-color: #fff;
+}
+
+.field textarea.rich-source-editor::selection {
+  background: #2f6953;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
 }
 
 .agreement-sections-editor {
