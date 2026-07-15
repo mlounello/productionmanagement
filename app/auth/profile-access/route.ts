@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const tokenHash = url.searchParams.get("token_hash")?.trim() ?? "";
   const rawType = url.searchParams.get("type")?.trim() ?? "";
+  const requestedNext=url.searchParams.get("next")??"/my-profile";
+  const next=requestedNext.startsWith("/")&&!requestedNext.startsWith("//")?requestedNext:"/my-profile";
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
@@ -40,10 +42,11 @@ export async function GET(request: NextRequest) {
   });
   const { error: claimError } = await authenticated.rpc("claim_my_person_profile");
   const { error: emailError } = claimError ? { error: null } : await authenticated.rpc("sync_my_person_email");
-  const profileError = claimError?.message ?? emailError?.message ?? null;
+  const {error:auditionAccessError}=claimError||emailError?{error:null}:await authenticated.rpc("claim_pending_audition_access");
+  const profileError = claimError?.message ?? emailError?.message ?? auditionAccessError?.message ?? null;
   const destination = profileError
     ? `/my-profile?error=${encodeURIComponent(profileError)}`
-    : "/my-profile";
+    : next;
   const response = NextResponse.redirect(new URL(destination, url.origin));
   const cookieName = getSupabaseAuthCookieName(supabaseUrl);
   if (cookieName) {

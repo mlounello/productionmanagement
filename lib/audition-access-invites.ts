@@ -1,0 +1,12 @@
+import { createProfileAccessUrl } from "@/lib/profile-access-links";
+import { sendHtmlEmail } from "@/lib/outbound-email";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+const escape=(value:unknown)=>String(value??"").replace(/[&<>"']/g,(character)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]??character));
+
+export async function sendAuditionAccessInvite(input:{projectId:string;personId:string;reviewerRole:string;actorUserId:string}){
+  const admin=createSupabaseAdminClient();const [{data:person},{data:project}]=await Promise.all([admin.from("people").select("id,full_name,preferred_name,email").eq("id",input.personId).maybeSingle(),admin.from("projects").select("title").eq("id",input.projectId).maybeSingle()]);
+  if(!person||!project)throw new Error("The person or project could not be found.");const email=String(person.email??"").trim().toLowerCase();if(!email)throw new Error("Add an email address before sending audition access.");
+  const access=await createProfileAccessUrl({id:String(person.id),email},input.actorUserId,`/projects/${input.projectId}/auditions`);const role=input.reviewerRole.replace(/_/g," ");const subject=`Audition access for ${project.title}`;const html=`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#24352e"><h1 style="color:#006b54">Siena Theatre Production Management</h1><p>Hello ${escape(person.preferred_name||person.full_name)},</p><p>You have been invited to serve as <strong>${escape(role)}</strong> for <strong>${escape(project.title)}</strong> and review its restricted audition materials.</p><p style="margin:32px 0"><a href="${escape(access.url)}" style="background:#006b54;color:#fff;padding:14px 22px;border-radius:6px;text-decoration:none;font-weight:bold">Open Audition Workspace</a></p><p>No registration or password setup is required. Opening this private, one-time link securely connects your existing profile and grants only the project access assigned to you.</p><p>This link expires in 7 days and should not be forwarded.</p><p>Thank you,<br>Siena Theatre</p></div>`;
+  try{const sent=await sendHtmlEmail({to:email,subject,html});await admin.from("email_messages").insert({project_id:input.projectId,person_id:input.personId,message_type:"audition_access_invite",to_email:email,subject,body:html,status:"sent",provider_message_id:sent.id,sent_at:new Date().toISOString(),created_by:input.actorUserId});return {email};}catch(error){await admin.from("profile_access_links").delete().eq("id",access.accessId);throw error;}
+}

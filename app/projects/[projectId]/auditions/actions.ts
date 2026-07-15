@@ -8,6 +8,7 @@ import { optionalMusicFields, standardAuditionFields, standardAuditionSections }
 import { beginAssignmentOnboarding } from "@/lib/role-acceptance";
 import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { sendAuditionAccessInvite } from "@/lib/audition-access-invites";
 
 const uuid = z.string().uuid();
 const fieldSchema = z.object({
@@ -81,7 +82,7 @@ export async function createAuditionFormAction(formData: FormData) {
     project_id: projectId,
     title,
     description: "Complete each section as thoroughly as you are able. New and returning performers are welcome.",
-    settings: { packet_rubric: ["Preparation", "Character / Acting", "Collaboration", "Overall recommendation"] }
+    settings: {}
   }).select("id").single();
   if (error || !form) redirect(path(projectId, error?.message ?? "Could not create form.", true));
   const { error: sectionError } = await supabase.from("audition_form_sections").insert(
@@ -152,17 +153,6 @@ export async function updateAuditionFormAction(formData: FormData) {
   }).eq("id", formId).eq("project_id", projectId);
   if (error) redirect(path(projectId, error.message, true));
   redirect(path(projectId, `Form saved as ${status}.`));
-}
-
-export async function saveAuditionRubricAction(formData: FormData) {
-  const projectId = uuid.parse(formData.get("projectId"));
-  const formId = uuid.parse(formData.get("formId"));
-  const { supabase } = await context(projectId);
-  const rubric = z.string().max(5000).parse(formData.get("rubric")).split("\n").map((item) => item.trim()).filter(Boolean).slice(0, 30);
-  const { data: form } = await supabase.from("audition_forms").select("settings").eq("id", formId).eq("project_id", projectId).single();
-  const { error } = await supabase.from("audition_forms").update({ settings: { ...((form?.settings as Record<string, unknown>) ?? {}), packet_rubric: rubric } }).eq("id", formId).eq("project_id", projectId);
-  if (error) redirect(path(projectId, error.message, true));
-  redirect(path(projectId, "Custom review rubric saved."));
 }
 
 export async function duplicateAuditionFormVersionAction(formData: FormData) {
@@ -248,11 +238,8 @@ export async function saveAuditionReviewAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId"));
   const submissionId = uuid.parse(formData.get("submissionId"));
   const { supabase, user } = await reviewContext(projectId);
-  const rubricLabels = z.array(z.string().max(200)).parse(JSON.parse(String(formData.get("rubricLabels") ?? "[]")));
-  const rubric: Record<string, number> = {};
-  rubricLabels.forEach((label, index) => { const raw = Number(formData.get(`rubric_${index}`)); if (Number.isFinite(raw) && raw >= 1 && raw <= 5) rubric[label] = raw; });
   const { error } = await supabase.from("audition_reviews").upsert({
-    submission_id: submissionId, reviewer_user_id: user.id, rubric,
+    submission_id: submissionId, reviewer_user_id: user.id, rubric:{},
     notes: z.string().trim().max(10000).parse(formData.get("reviewNotes")),
     recommendation: z.enum(["", "callback", "consider", "cast", "not_cast", "discuss"]).parse(formData.get("recommendation"))
   }, { onConflict: "submission_id,reviewer_user_id" });
@@ -318,10 +305,10 @@ export async function addAuditionProjectStaffAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));
   const personId=uuid.parse(formData.get("personId"));
   const reviewerRole=z.enum(["director","production_manager","intimacy_staff"]).parse(formData.get("reviewerRole"));
-  const {supabase}=await projectManagerContext(projectId);
-  const {data:person,error:personError}=await supabase.from("people").select("id,auth_user_id,full_name").eq("id",personId).maybeSingle();
+  const {supabase,user}=await projectManagerContext(projectId);
+  const {data:person,error:personError}=await supabase.from("people").select("id,auth_user_id,full_name,email").eq("id",personId).maybeSingle();
   if(personError||!person)redirect(path(projectId,personError?.message??"Staff profile not found.",true));
-  if(!person.auth_user_id)redirect(path(projectId,"This person needs a connected Production Management login before audition access can be granted.",true));
+  if(!person.auth_user_id){if(!String(person.email??"").trim())redirect(path(projectId,"Add an email address to this person before sending audition access.",true));const {error:inviteError}=await supabase.from("audition_access_invites").upsert({project_id:projectId,person_id:person.id,reviewer_role:reviewerRole,invited_by:user.id,claimed_by:null,claimed_at:null,updated_at:new Date().toISOString()},{onConflict:"project_id,person_id,reviewer_role"});if(inviteError)redirect(path(projectId,inviteError.message,true));try{const result=await sendAuditionAccessInvite({projectId,personId:person.id,reviewerRole,actorUserId:user.id});redirect(path(projectId,`${person.full_name} was invited as ${reviewerRole.replace(/_/g," ")}. Their access will activate automatically when they open the secure email sent to ${result.email}.`));}catch(error){await supabase.from("audition_access_invites").delete().eq("project_id",projectId).eq("person_id",person.id).eq("reviewer_role",reviewerRole);redirect(path(projectId,error instanceof Error?error.message:"Audition access invitation failed.",true));}}
   const projectRole=reviewerRole==="production_manager"?"project_manager":"staff";
   const {error:membershipError}=await supabase.from("project_memberships").upsert({project_id:projectId,user_id:person.auth_user_id,person_id:person.id,role:projectRole,title:reviewerRole.replace(/_/g," "),active:true},{onConflict:"project_id,user_id,role"});
   if(membershipError)redirect(path(projectId,membershipError.message,true));

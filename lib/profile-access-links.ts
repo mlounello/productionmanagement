@@ -40,7 +40,7 @@ async function activeTemplate(templateType = "profile_access", projectId: string
     : { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY };
 }
 
-export async function createProfileAccessUrl(person: { id: string; email: string }, actorUserId: string | null) {
+export async function createProfileAccessUrl(person: { id: string; email: string }, actorUserId: string | null,destinationPath="/my-profile") {
   const admin = createSupabaseAdminClient();
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + LINK_LIFETIME_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -49,7 +49,8 @@ export async function createProfileAccessUrl(person: { id: string; email: string
     email: person.email,
     token_hash: hashProfileAccessToken(token),
     expires_at: expiresAt,
-    created_by: actorUserId
+    created_by: actorUserId,
+    destination_path:destinationPath.startsWith("/")&&!destinationPath.startsWith("//")?destinationPath:"/my-profile"
   }).select("id").single();
   if (error) throw new Error(error.message);
   return { accessId: String(access.id), url: `${SITE_URL.replace(/\/+$/, "")}/profile-access/${token}` };
@@ -169,7 +170,7 @@ export async function sendProfileAccessForEmail(email: string) {
 export async function getProfileAccessLink(token: string) {
   const admin = createSupabaseAdminClient();
   const { data } = await admin.from("profile_access_links")
-    .select("id, person_id, email, expires_at, used_at, people(full_name, preferred_name)")
+    .select("id, person_id, email, expires_at, used_at, destination_path, people(full_name, preferred_name)")
     .eq("token_hash", hashProfileAccessToken(token))
     .maybeSingle();
   if (!data || data.used_at || new Date(String(data.expires_at)).getTime() <= Date.now()) return null;
@@ -202,7 +203,7 @@ export async function consumeProfileAccessLink(token: string) {
   // branded link may be opened on a different browser/device than the server
   // process that generated it.
   const callback = new URL(`${SITE_URL.replace(/\/+$/, "")}/auth/profile-access`);
-  callback.searchParams.set("next", "/my-profile");
+  callback.searchParams.set("next", String(access.destination_path||"/my-profile"));
   callback.searchParams.set("token_hash", generated.hashedToken);
   callback.searchParams.set("type", generated.type);
   return callback.toString();
