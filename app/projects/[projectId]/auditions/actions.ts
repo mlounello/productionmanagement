@@ -58,6 +58,18 @@ async function reviewContext(projectId: string) {
   return { projectId: parsed, supabase, user };
 }
 
+async function projectManagerContext(projectId:string){
+  const user=await requireUser();
+  const parsed=uuid.parse(projectId);
+  const supabase=await createSupabaseServerClient();
+  const [{data:projectAllowed},{data:appAllowed}]=await Promise.all([
+    supabase.rpc("has_project_role",{target_project_id:parsed,allowed_roles:["project_manager","producer"]}),
+    supabase.rpc("has_app_role",{allowed_roles:["admin","producer"]})
+  ]);
+  if(!projectAllowed&&!appAllowed)throw new Error("Only a project manager or producer can add project staff.");
+  return {projectId:parsed,supabase,user};
+}
+
 export async function createAuditionFormAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId"));
   const { supabase } = await context(projectId);
@@ -80,6 +92,23 @@ export async function createAuditionFormAction(formData: FormData) {
   );
   if (fieldError) redirect(path(projectId, fieldError.message, true));
   redirect(path(projectId, "Audition form created from the editable Siena template."));
+}
+
+export async function deleteAuditionFormAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));
+  const formId=uuid.parse(formData.get("formId"));
+  const {supabase}=await context(projectId);
+  const [{data:form,error:formError},{count,error:countError}]=await Promise.all([
+    supabase.from("audition_forms").select("id,status,title").eq("id",formId).eq("project_id",projectId).maybeSingle(),
+    supabase.from("audition_submissions").select("id",{count:"exact",head:true}).eq("form_id",formId)
+  ]);
+  if(formError||!form)redirect(path(projectId,formError?.message??"Audition form not found.",true));
+  if(countError)redirect(path(projectId,countError.message,true));
+  if(form.status==="published")redirect(path(projectId,"Archive this published form instead of deleting it.",true));
+  if((count??0)>0)redirect(path(projectId,"This form has submissions and cannot be deleted. Archive it to preserve applicant records.",true));
+  const {error}=await supabase.from("audition_forms").delete().eq("id",formId).eq("project_id",projectId);
+  if(error)redirect(path(projectId,error.message,true));
+  redirect(path(projectId,`${form.title} was deleted.`));
 }
 
 export async function saveAuditionFormBuilderAction(formData: FormData) {
@@ -273,6 +302,22 @@ export async function setAuditionReviewerAction(formData: FormData) {
   const { error } = await supabase.from("audition_reviewer_permissions").upsert({ project_id: projectId, user_id: userId, reviewer_role: reviewerRole, active: true }, { onConflict: "project_id,user_id,reviewer_role" });
   if (error) redirect(path(projectId, error.message, true));
   redirect(path(projectId, "Audition reviewer access granted."));
+}
+
+export async function addAuditionProjectStaffAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));
+  const personId=uuid.parse(formData.get("personId"));
+  const reviewerRole=z.enum(["director","production_manager","intimacy_staff"]).parse(formData.get("reviewerRole"));
+  const {supabase}=await projectManagerContext(projectId);
+  const {data:person,error:personError}=await supabase.from("people").select("id,auth_user_id,full_name").eq("id",personId).maybeSingle();
+  if(personError||!person)redirect(path(projectId,personError?.message??"Staff profile not found.",true));
+  if(!person.auth_user_id)redirect(path(projectId,"This person needs a connected Production Management login before audition access can be granted.",true));
+  const projectRole=reviewerRole==="production_manager"?"project_manager":"staff";
+  const {error:membershipError}=await supabase.from("project_memberships").upsert({project_id:projectId,user_id:person.auth_user_id,person_id:person.id,role:projectRole,title:reviewerRole.replace(/_/g," "),active:true},{onConflict:"project_id,user_id,role"});
+  if(membershipError)redirect(path(projectId,membershipError.message,true));
+  const {error:permissionError}=await supabase.from("audition_reviewer_permissions").upsert({project_id:projectId,user_id:person.auth_user_id,reviewer_role:reviewerRole,active:true},{onConflict:"project_id,user_id,reviewer_role"});
+  if(permissionError)redirect(path(projectId,permissionError.message,true));
+  redirect(path(projectId,`${person.full_name} was added to the project and granted ${reviewerRole.replace(/_/g," ")} audition access.`));
 }
 
 export async function removeAuditionReviewerAction(formData: FormData) {
