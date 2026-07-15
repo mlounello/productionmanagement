@@ -34,6 +34,7 @@ import {
 import type { ProjectGanttSection } from "@/components/project-gantt";
 import { PeopleDirectory, type DirectoryPerson } from "@/components/people-directory";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
+import { ProjectReadinessChecklist } from "@/components/project-readiness-checklist";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
 import { InlineHelp } from "@/components/ui/inline-help";
@@ -42,6 +43,7 @@ import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
 import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
+import { loadProjectReadiness } from "@/lib/project-readiness";
 
 const ProjectCalendar = nextDynamic(() => import("@/components/project-calendar").then((module) => module.ProjectCalendar));
 const ProjectGantt = nextDynamic(() => import("@/components/project-gantt").then((module) => module.ProjectGantt));
@@ -533,6 +535,7 @@ export default async function ProjectWorkspacePage({
   const unlinkedGuestAssignments = assignmentRows.filter(
     (assignment) => assignment.is_guest_artist && !budgetLinksByAssignmentId.has(assignment.id)
   );
+  const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
   const playbillShowRoleLinksByAssignmentId = new Map(
     playbillAssignmentLinks
       .filter((link) => link.external_table === "show_roles")
@@ -699,7 +702,7 @@ export default async function ProjectWorkspacePage({
       </section>
 
       {workspace === "overview" ? (
-        <section className="panel workspace-section">
+        <><ProjectReadinessChecklist readiness={readiness!}/><section className="panel workspace-section">
           <div className="section-heading"><div><p className="eyebrow">Project At A Glance</p><h2>Choose your workspace</h2><p className="muted">Open a focused workspace above, or build reusable dashboard views from the modules you use most.</p></div><Link className="button" href={`/projects/${typedProject.id}/dashboards`}>Build a dashboard</Link></div>
           <div className="workspace-summary">
             <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>
@@ -707,7 +710,7 @@ export default async function ProjectWorkspacePage({
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Warnings</p></div>
             <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Links Needed</p></div>
           </div>
-        </section>
+        </section></>
       ) : null}
 
       <section className="panel workspace-section" id="integrations" hidden={workspace !== "integrations"}>
