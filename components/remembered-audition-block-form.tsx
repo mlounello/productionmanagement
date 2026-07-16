@@ -22,7 +22,10 @@ export function RememberedAuditionBlockForm({ projectId, action, children }: {
         const value = saved[control.name];
         if (!value) continue;
         if (control instanceof HTMLInputElement && (control.type === "checkbox" || control.type === "radio")) control.checked = Boolean(value.checked);
-        else if (value.value !== undefined) control.value = value.value;
+        else if (value.value !== undefined) {
+          control.value = value.value;
+          control.dispatchEvent(new Event("input", { bubbles: true }));
+        }
       }
     } catch {
       localStorage.removeItem(storageKey);
