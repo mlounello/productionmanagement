@@ -6,7 +6,7 @@ type Choice={id:string;label:string;startsAt:string};
 type Condition={field_key?:string;value?:string};
 
 function selectedValues(name:string){return Array.from(document.getElementsByName(name)).flatMap((element)=>{const input=element as HTMLInputElement|HTMLSelectElement;if("checked" in input&&(input.type==="radio"||input.type==="checkbox"))return input.checked?[input.value]:[];return input.value?[input.value]:[];});}
-function day(value:string){const date=new Date(value);return `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}`;}
+function day(value:string){const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(value));const get=(type:string)=>parts.find((part)=>part.type===type)?.value??"";return `${get("year")}-${get("month")}-${get("day")}`;}
 
 export function AuditionSlotSelector({fieldKey,required,choices,sameDayAs,condition}:{fieldKey:string;required:boolean;choices:Choice[];sameDayAs?:string;condition?:Condition}){
   const [dependencyDay,setDependencyDay]=useState("");const [conditionValues,setConditionValues]=useState<string[]>([]);

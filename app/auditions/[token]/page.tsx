@@ -20,12 +20,12 @@ function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b
 function formatSlot(slot: Slot, session?: Session) {
   const start = new Date(slot.starts_at);
   const end = slot.ends_at ? new Date(slot.ends_at) : null;
-  return `${session?.title ?? "Audition"} · ${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${end ? `–${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}${session?.location ? ` · ${session.location}` : ""} (${slot.capacity - Number(slot.booked)} open)`;
+  return `${session?.title ?? "Audition"} · ${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })} · ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}${end ? `–${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}` : ""}${session?.location ? ` · ${session.location}` : ""} (${slot.capacity - Number(slot.booked)} open)`;
 }
 
 function formatSession(session: Session) {
   const start=new Date(session.starts_at);const end=session.ends_at?new Date(session.ends_at):null;
-  return `${start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})} · ${start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}${end?`–${end.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}`:""}`;
+  return `${start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:"America/New_York"})} · ${start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})}${end?`–${end.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})}`:""}`;
 }
 
 export default async function PublicAuditionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string; success?: string; notice?: string; challenge?: string; profile?: string; preview?:string }> }) {

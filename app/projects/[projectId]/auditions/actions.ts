@@ -236,8 +236,8 @@ export async function updateAuditionSubmissionAction(formData: FormData) {
     callback_status: z.enum(["not_reviewed", "recommended", "invited", "declined", "not_called"]).parse(formData.get("callbackStatus")),
     casting_status: z.enum(["not_reviewed", "considering", "cast", "not_cast", "withdrawn"]).parse(formData.get("castingStatus")),
     private_notes: z.string().trim().max(10000).parse(formData.get("privateNotes")),
-    scheduled_starts_at: String(formData.get("scheduledStartsAt") ?? "") ? new Date(String(formData.get("scheduledStartsAt"))).toISOString() : null,
-    scheduled_ends_at: String(formData.get("scheduledEndsAt") ?? "") ? new Date(String(formData.get("scheduledEndsAt"))).toISOString() : null,
+    scheduled_starts_at: String(formData.get("scheduledStartsAt") ?? "") ? easternDate(String(formData.get("scheduledStartsAt"))).toISOString() : null,
+    scheduled_ends_at: String(formData.get("scheduledEndsAt") ?? "") ? easternDate(String(formData.get("scheduledEndsAt"))).toISOString() : null,
     schedule_notes: z.string().trim().max(2000).parse(formData.get("scheduleNotes")),
     checked_in_at: formData.get("auditionStatus") === "checked_in" ? new Date().toISOString() : null
   }).eq("id", submissionId).eq("project_id", projectId);
