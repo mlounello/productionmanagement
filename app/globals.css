@@ -543,6 +543,20 @@ button {
 .feedback-banner span { font-size: 14px; }
 .feedback-success { background: #edf7f1; border-color: #b9dbc9; color: var(--siena-green); }
 .feedback-error { background: #fff5f4; border-color: #f5c2c0; color: var(--danger); }
+.feedback-floating {
+  align-items: start;
+  box-shadow: 0 14px 38px rgba(18, 40, 30, .2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+  max-width: min(420px, calc(100vw - 32px));
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  width: max-content;
+  z-index: 1000;
+}
+.feedback-floating div { display: grid; gap: 2px; }
+.feedback-floating button { background: transparent; border: 0; color: currentColor; font-size: 22px; line-height: 1; padding: 0 0 0 10px; }
 
 .inline-help {
   background: #f5f8f6;

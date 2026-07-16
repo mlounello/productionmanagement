@@ -43,6 +43,10 @@ function path(projectId: string, message?: string, error?: boolean) {
   return `${base}?${error ? "error" : "success"}=${encodeURIComponent(message)}`;
 }
 
+function schedulePath(projectId: string, message?: string, error?: boolean) {
+  return `${path(projectId, message, error)}#schedule`;
+}
+
 function easternDate(value:string){const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);if(!match)return new Date(value);const base=Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]),Number(match[4]),Number(match[5]));const offset=(instant:number)=>{const name=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",timeZoneName:"longOffset"}).formatToParts(new Date(instant)).find((part)=>part.type==="timeZoneName")?.value??"GMT-00:00";const parsed=/GMT([+-])(\d{2}):(\d{2})/.exec(name);if(!parsed)return 0;const minutes=Number(parsed[2])*60+Number(parsed[3]);return parsed[1]==="-"?-minutes:minutes;};let result=base-offset(base)*60_000;result=base-offset(result)*60_000;return new Date(result);}
 
 async function context(projectId: string) {
@@ -187,7 +191,7 @@ export async function createAuditionSessionAction(formData: FormData) {
   const requestedBookingMode = z.enum(["self_book", "staff_assigned", "walk_in"]).parse(formData.get("bookingMode"));
   const bookingMode=sessionType==="callback"?"staff_assigned":requestedBookingMode;
   const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
-  if (!(endsAt > startsAt)) redirect(path(projectId, "Session end must be after its start.", true));
+  if (!(endsAt > startsAt)) redirect(schedulePath(projectId, "Session end must be after its start.", true));
   const { data: session, error } = await supabase.from("audition_sessions").insert({
     project_id: projectId, title, location, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), booking_category:bookingCategory,
     interval_minutes: interval, slots_per_interval: capacity, capacity, session_type: sessionType, booking_mode: bookingMode,
@@ -197,7 +201,7 @@ export async function createAuditionSessionAction(formData: FormData) {
     ,reschedule_deadline: sessionType!=="callback"&&String(formData.get("rescheduleDeadline") ?? "") ? easternDate(String(formData.get("rescheduleDeadline"))).toISOString() : null
     ,cancel_deadline: sessionType!=="callback"&&String(formData.get("cancelDeadline") ?? "") ? easternDate(String(formData.get("cancelDeadline"))).toISOString() : null
   }).select("id").single();
-  if (error || !session) redirect(path(projectId, error?.message ?? "Could not create session.", true));
+  if (error || !session) redirect(schedulePath(projectId, error?.message ?? "Could not create session.", true));
   const rows: Array<Record<string, unknown>> = [];
   if (sessionType === "appointments") {
     for (let cursor = startsAt.getTime(); cursor < endsAt.getTime(); cursor += interval * 60_000) {
@@ -208,19 +212,19 @@ export async function createAuditionSessionAction(formData: FormData) {
     rows.push({ session_id: session.id, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(), capacity, slot_type: sessionType, self_bookable: bookingMode === "self_book" });
   }
   const { error: slotsError } = await supabase.from("audition_slots").insert(rows);
-  if (slotsError) redirect(path(projectId, slotsError.message, true));
-  redirect(path(projectId, `${rows.length} audition slot${rows.length === 1 ? "" : "s"} created.`));
+  if (slotsError) redirect(schedulePath(projectId, slotsError.message, true));
+  redirect(schedulePath(projectId, `${rows.length} audition slot${rows.length === 1 ? "" : "s"} created.`));
 }
 
 export async function updateAuditionSessionAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));const sessionId=uuid.parse(formData.get("sessionId"));const {supabase}=await context(projectId);
-  const title=z.string().trim().min(1).max(200).parse(formData.get("title"));const location=z.string().trim().max(200).parse(formData.get("location"));const startsAt=easternDate(z.string().min(1).parse(formData.get("startsAt")));const endsAt=easternDate(z.string().min(1).parse(formData.get("endsAt")));if(!(endsAt>startsAt))redirect(path(projectId,"Session end must be after its start.",true));
+  const title=z.string().trim().min(1).max(200).parse(formData.get("title"));const location=z.string().trim().max(200).parse(formData.get("location"));const startsAt=easternDate(z.string().min(1).parse(formData.get("startsAt")));const endsAt=easternDate(z.string().min(1).parse(formData.get("endsAt")));if(!(endsAt>startsAt))redirect(schedulePath(projectId,"Session end must be after its start.",true));
   const interval=z.coerce.number().int().min(1).max(240).parse(formData.get("intervalMinutes"));const capacity=z.coerce.number().int().min(1).max(500).parse(formData.get("capacity"));const sessionType=z.enum(["appointments","group_call","workshop","walk_in","callback"]).parse(formData.get("sessionType"));const requestedBookingMode=z.enum(["self_book","staff_assigned","walk_in"]).parse(formData.get("bookingMode"));const bookingMode=sessionType==="callback"?"staff_assigned":requestedBookingMode;const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
-  const {data:current,error:currentError}=await supabase.from("audition_sessions").select("id,starts_at,ends_at,interval_minutes,capacity,session_type,booking_mode,booking_category").eq("id",sessionId).eq("project_id",projectId).maybeSingle();if(currentError||!current)redirect(path(projectId,currentError?.message??"Audition block not found.",true));
+  const {data:current,error:currentError}=await supabase.from("audition_sessions").select("id,starts_at,ends_at,interval_minutes,capacity,session_type,booking_mode,booking_category").eq("id",sessionId).eq("project_id",projectId).maybeSingle();if(currentError||!current)redirect(schedulePath(projectId,currentError?.message??"Audition block not found.",true));
   const structuralChange=new Date(current.starts_at).getTime()!==startsAt.getTime()||new Date(current.ends_at).getTime()!==endsAt.getTime()||Number(current.interval_minutes)!==interval||Number(current.capacity)!==capacity||current.session_type!==sessionType||current.booking_mode!==bookingMode||current.booking_category!==bookingCategory;
   const dateValue=(name:string)=>sessionType!=="callback"&&String(formData.get(name)??"")?easternDate(String(formData.get(name))).toISOString():"";const update={title,location,starts_at:startsAt.toISOString(),ends_at:endsAt.toISOString(),booking_category:bookingCategory,interval_minutes:interval,capacity,session_type:sessionType,booking_mode:bookingMode,instructions:z.string().trim().max(4000).parse(formData.get("instructions")),is_published:formData.get("isPublished")==="on",booking_opens_at:dateValue("bookingOpensAt"),booking_closes_at:dateValue("bookingClosesAt"),reschedule_deadline:dateValue("rescheduleDeadline"),cancel_deadline:dateValue("cancelDeadline")};const rows:Array<Record<string,unknown>>=[];if(structuralChange){if(sessionType==="appointments"){for(let cursor=startsAt.getTime();cursor<endsAt.getTime();cursor+=interval*60_000){const slotEnd=Math.min(cursor+interval*60_000,endsAt.getTime());rows.push({starts_at:new Date(cursor).toISOString(),ends_at:new Date(slotEnd).toISOString(),capacity,slot_type:capacity===1?"individual":"group",self_bookable:bookingMode==="self_book"});}}else rows.push({starts_at:startsAt.toISOString(),ends_at:endsAt.toISOString(),capacity,slot_type:sessionType,self_bookable:bookingMode==="self_book"});}
-  const {error:updateError}=await supabase.rpc("update_audition_session_block",{target_project_id:projectId,target_session_id:sessionId,session_payload:update,slot_payload:rows,rebuild_slots:structuralChange});if(updateError)redirect(path(projectId,updateError.message.includes("already has applicant bookings")?"This block already has applicant bookings. You can still edit its title, location, instructions, deadlines, and visibility, but its times, format, category, interval, booking mode, and capacity are locked to protect those bookings.":updateError.message,true));
-  redirect(path(projectId,structuralChange?"Audition block updated and its available slots were rebuilt.":"Audition block details updated."));
+  const {error:updateError}=await supabase.rpc("update_audition_session_block",{target_project_id:projectId,target_session_id:sessionId,session_payload:update,slot_payload:rows,rebuild_slots:structuralChange});if(updateError)redirect(schedulePath(projectId,updateError.message.includes("already has applicant bookings")?"This block already has applicant bookings. You can still edit its title, location, instructions, deadlines, and visibility, but its times, format, category, interval, booking mode, and capacity are locked to protect those bookings.":updateError.message,true));
+  redirect(schedulePath(projectId,structuralChange?"Audition block updated and its available slots were rebuilt.":"Audition block details updated."));
 }
 
 export async function updateAuditionSubmissionAction(formData: FormData) {
