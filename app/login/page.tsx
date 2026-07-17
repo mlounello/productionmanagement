@@ -46,7 +46,7 @@ export default async function LoginPage({
       <section className="panel" style={{ maxWidth: 520 }}>
         <p className="eyebrow">Siena Production Operations</p>
         <h1>Sign in</h1>
-        <p className="muted">Use your Siena Google account or receive a magic link.</p>
+        <p className="muted">Staff may use a Siena Google account or staff magic link. Production contributors can use the secure profile link sent to the email address stored on their profile, including a personal address.</p>
         {!hasSupabaseEnv() ? (
           <div className="panel setup-warning">
             Supabase env vars are not configured yet. Add `.env.local` before signing in.
@@ -62,7 +62,7 @@ export default async function LoginPage({
           </div>
           <button type="submit">Send magic link</button>
         </form>
-        <p className="muted">Only updating your contributor profile? <Link href="/profile-access">Request a secure profile link</Link>.</p>
+        <p className="muted">Only updating your contributor profile? <Link href="/profile-access">Request a secure profile link using the email address on your profile</Link>.</p>
       </section>
     </div>
   );

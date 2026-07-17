@@ -11,7 +11,7 @@ const DEFAULT_BODY = `<div style="font-family:Arial,sans-serif;max-width:600px;m
 <p>Hello {{person_name}},</p>
 <p>You have been invited to review and update your Siena Theatre production profile, including your contact information, publicity bio, and headshot.</p>
 <p style="margin:32px 0"><a href="{{profile_access_url}}" style="background:#006b54;color:#fff;padding:14px 22px;border-radius:6px;text-decoration:none;font-weight:bold">Open My Production Profile</a></p>
-<p>The access page will ask you to press Continue before opening your private session. No password or account setup is required.</p>
+<p>The access page will ask you to press Continue before opening your private session. This link is already connected to the email address where this message was delivered, so you will not need to enter an email address or create an account.</p>
 <p>This link expires in {{expires_in}} and should not be forwarded. If you did not expect this message, you may safely ignore it.</p>
 <p>Thank you,<br>Siena Theatre</p>
 </div>`;
