@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { APP_SCHEMA, getSupabaseAuthCookieName } from "@/lib/config";
+import { AUTH_CALLBACK_PATH, shouldNormalizeAuthCallback } from "@/lib/auth-callback-routing";
 
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -14,8 +15,8 @@ export async function middleware(request: NextRequest) {
   const hasAuthCallbackParams =
     requestUrl.searchParams.has("code") ||
     (requestUrl.searchParams.has("token_hash") && requestUrl.searchParams.has("type"));
-  if (hasAuthCallbackParams && requestUrl.pathname !== "/auth/callback") {
-    requestUrl.pathname = "/auth/callback";
+  if (shouldNormalizeAuthCallback(requestUrl.pathname, hasAuthCallbackParams)) {
+    requestUrl.pathname = AUTH_CALLBACK_PATH;
     return NextResponse.redirect(requestUrl);
   }
 

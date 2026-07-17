@@ -2,6 +2,7 @@ import { createClient, type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { APP_SCHEMA, getSupabaseAuthCookieName } from "@/lib/config";
 import { persistSupabaseSessionCookie } from "@/lib/supabase-session-cookie";
+import { safeAuthDestination } from "@/lib/auth-callback-routing";
 
 const allowedTypes = new Set<EmailOtpType>(["magiclink", "invite", "signup", "recovery", "email"]);
 
@@ -9,8 +10,7 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const tokenHash = url.searchParams.get("token_hash")?.trim() ?? "";
   const rawType = url.searchParams.get("type")?.trim() ?? "";
-  const requestedNext=url.searchParams.get("next")??"/my-profile";
-  const next=requestedNext.startsWith("/")&&!requestedNext.startsWith("//")?requestedNext:"/my-profile";
+  const next=safeAuthDestination(url.searchParams.get("next"),"/my-profile");
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 

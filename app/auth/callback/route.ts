@@ -1,14 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { persistSupabaseSessionCookie } from "@/lib/supabase-session-cookie";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
+import { safeAuthDestination } from "@/lib/auth-callback-routing";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type");
-  const requestedNext = url.searchParams.get("next") || "/projects";
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/projects";
+  const next = safeAuthDestination(url.searchParams.get("next"), "/projects");
   const origin = url.origin;
   const { applyCookies, cookieName, isSecure, supabase } = createSupabaseRouteClient(request);
   const stampCallback = (
