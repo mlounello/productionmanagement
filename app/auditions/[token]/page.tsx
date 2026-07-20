@@ -62,13 +62,13 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
     const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
     const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";
     const selected = Array.isArray(saved) ? saved : saved ? [saved] : [];
-    return <>{field.field_key==="callback_availability"?<div className="audition-callback-schedule">{callbackSessions.length?callbackSessions.map((session)=><div className="schedule-block" key={session.id}><h3>{session.title||"Callbacks"}</h3><p>{formatSession(session)}{session.location?`\n${session.location}`:""}{session.instructions?`\n${session.instructions}`:""}</p></div>):<p className="setup-warning">No callback date has been published for this project yet.</p>}</div>:null}<div className="choice-grid">{options.map((option) => <label className="checkbox-card" key={option}><input type={checkbox ? "checkbox" : "radio"} name={field.field_key} value={option} required={field.required && !checkbox} defaultChecked={selected.includes(option)} /><span>{option}</span></label>)}</div></>;
+    return <>{field.field_key==="callback_availability"?<div className="audition-callback-schedule">{callbackSessions.length?callbackSessions.map((session)=><div className="schedule-block" key={session.id}><h3>{session.title||"Callbacks"}</h3><p>{formatSession(session)}{session.location?`\n${session.location}`:""}{session.instructions?`\n${session.instructions}`:""}</p></div>):<p className="audition-empty-note">No callback date has been published for this project yet.</p>}</div>:null}<div className="choice-grid">{options.map((option) => <label className="checkbox-card" key={option}><input type={checkbox ? "checkbox" : "radio"} name={field.field_key} value={option} required={field.required && !checkbox} defaultChecked={selected.includes(option)} /><span>{option}</span></label>)}</div></>;
   };
   return <div className="page audition-public-page">
     <header className="page-header"><div><p className="eyebrow">{payload.project.title}</p><h1>{payload.form.title}</h1><p className="muted">{payload.form.description}</p></div></header>
     {preview?<p className="setup-warning"><strong>Secure staff preview.</strong> This is the current form layout. Profile verification and submission are disabled until the form is published.</p>:null}
     {query?.error ? <p className="setup-warning">{query.error}</p> : null}{query?.success ? <p className="setup-success">{query.success}</p> : null}{query?.notice ? <p className="setup-success">{query.notice}</p> : null}
-    {!preview?<section className="panel"><h2>Load your saved Siena Theatre profile</h2><p className="muted">Optional: enter the email already on your profile and your exact 90# when applicable. We will email a six-digit verification code before filling saved vocal range, interests, experience, and skills.</p>
+    {!preview?<section className="panel audition-profile-loader"><h2>Load your saved Siena Theatre profile</h2><p className="muted">Optional: enter the email already on your profile and your exact 90# when applicable. We will email a six-digit verification code before filling saved vocal range, interests, experience, and skills.</p>
       <form action={requestIntakeVerificationCodeAction} className="form-row"><input type="hidden" name="contextType" value="audition"/><input type="hidden" name="contextId" value={payload.form.id}/><input type="hidden" name="contextToken" value={token}/><label className="field"><span>Email</span><input type="email" name="email" required/></label><label className="field"><span>90# (if applicable)</span><input name="vendorNumber"/></label><button type="submit">Load my saved profile</button></form>
       {query?.challenge?<form action={verifyIntakeCodeAction} className="form-row"><input type="hidden" name="contextType" value="audition"/><input type="hidden" name="contextId" value={payload.form.id}/><input type="hidden" name="contextToken" value={token}/><input type="hidden" name="challengeId" value={query.challenge}/><label className="field"><span>Six-digit verification code</span><input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required/></label><button type="submit">Verify and add details</button></form>:null}
     </section>:null}
@@ -96,7 +96,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
           <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
-      <button type="submit">Submit audition form</button>
+      <button className="audition-submit-button" type="submit">Submit audition form</button>
     </form>}
   </div>;
 }

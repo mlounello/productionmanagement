@@ -899,7 +899,45 @@ button {
 }
 
 .audition-public-page {
-  max-width: 860px;
+  max-width: 920px;
+  padding-bottom: 80px;
+}
+
+.audition-public-page .page-header {
+  margin-bottom: 28px;
+}
+
+.audition-public-page .page-header h1 {
+  font-size: clamp(34px, 5vw, 48px);
+  letter-spacing: -.025em;
+}
+
+.audition-public-page .page-header .muted {
+  font-size: 17px;
+  line-height: 1.55;
+  margin-bottom: 0;
+  max-width: 760px;
+}
+
+.audition-public-page > .stacked-form {
+  gap: 20px;
+}
+
+.audition-profile-loader {
+  background: #f0f7f3;
+  border-color: #c3dace;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  padding: 24px 26px;
+}
+
+.audition-profile-loader h2 {
+  margin-bottom: 8px;
+}
+
+.audition-profile-loader > .muted {
+  line-height: 1.55;
+  margin-bottom: 20px;
 }
 
 .audition-preview-fields {
@@ -910,13 +948,81 @@ button {
 }
 
 .audition-form-section {
+  border-color: #d4e1da;
+  border-radius: 14px;
+  box-shadow: 0 5px 18px rgb(22 55 42 / 5%);
+  padding: 26px 28px 28px;
   scroll-margin-top: 20px;
+}
+
+.audition-form-section > h2 {
+  font-size: 25px;
+  letter-spacing: -.015em;
+  margin-bottom: 7px;
+}
+
+.audition-form-section > .muted {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+
+.audition-form-section > .stacked-form {
+  gap: 22px;
+}
+
+.audition-form-section .field {
+  gap: 7px;
+}
+
+.audition-form-section .field > span {
+  color: #25372f;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.35;
 }
 
 .audition-field > small {
   color: var(--muted);
+  font-size: 13px;
   font-weight: 450;
-  line-height: 1.4;
+  line-height: 1.45;
+}
+
+.audition-public-page .field > input:not([type="radio"]):not([type="checkbox"]),
+.audition-public-page .field > select,
+.audition-public-page .field > textarea {
+  border-color: #bfd0c7;
+  border-radius: 9px;
+  font-size: 15px;
+  line-height: 1.45;
+  min-height: 46px;
+  padding: 10px 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.audition-public-page .field > input:not([type="radio"]):not([type="checkbox"]):focus,
+.audition-public-page .field > select:focus,
+.audition-public-page .field > textarea:focus {
+  border-color: var(--siena-green);
+  box-shadow: 0 0 0 3px rgb(0 103 71 / 13%);
+  outline: 0;
+}
+
+.audition-public-page input[type="file"] {
+  color: var(--muted);
+  padding: 6px 8px !important;
+}
+
+.audition-public-page input[type="file"]::file-selector-button {
+  background: #eef5f1;
+  border: 1px solid #b9cec3;
+  border-radius: 6px;
+  color: #183d31;
+  cursor: pointer;
+  font-weight: 700;
+  margin-right: 10px;
+  padding: 7px 10px;
 }
 
 .audition-slot-control {
@@ -961,14 +1067,88 @@ button {
 }
 
 .role-interest-groups { display: grid; gap: 16px; }
-.role-interest-groups > p { margin: 0; }
-.role-interest-groups section { border-top: 1px solid var(--line); padding-top: 12px; }
-.role-interest-groups h3 { margin: 0 0 9px; }
+.role-interest-groups > p { font-size: 13px; margin: 0; }
+.role-interest-groups section { border-top: 1px solid var(--line); padding-top: 14px; }
+.role-interest-groups h3 { font-size: 18px; margin: 0 0 10px; }
 
 .choice-grid {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.audition-public-page .choice-grid {
+  gap: 9px;
+}
+
+.audition-public-page .checkbox-card {
+  align-items: center;
+  background: #fbfcfb;
+  border-color: #cddbd4;
+  border-radius: 9px;
+  cursor: pointer;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 12px;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.audition-public-page .checkbox-card:hover {
+  background: #f4f8f6;
+  border-color: #9ebbad;
+}
+
+.audition-public-page .checkbox-card:has(input:checked) {
+  background: #e9f5ef;
+  border-color: var(--siena-green);
+  box-shadow: inset 0 0 0 1px var(--siena-green);
+}
+
+.audition-public-page .checkbox-card:has(input:focus-visible) {
+  outline: 3px solid rgb(0 103 71 / 16%);
+  outline-offset: 2px;
+}
+
+.audition-public-page .checkbox-card input[type="radio"],
+.audition-public-page .checkbox-card input[type="checkbox"] {
+  accent-color: var(--siena-green);
+  flex: 0 0 18px;
+  height: 18px;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  width: 18px;
+}
+
+.audition-public-page .checkbox-card input:focus-visible {
+  outline: 0;
+}
+
+.audition-public-page .checkbox-card span {
+  color: #263931;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.audition-public-page .choice-grid:has(> .checkbox-card:only-child) {
+  grid-template-columns: minmax(0, 420px);
+}
+
+.audition-public-page .audition-empty-note {
+  background: #f3f6f4;
+  border-left: 3px solid #9eb2a8;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 4px 0 10px;
+  padding: 9px 11px;
+}
+
+.audition-submit-button {
+  border-radius: 9px;
+  font-size: 16px;
+  min-height: 50px;
+  box-shadow: 0 5px 14px rgb(0 103 71 / 16%);
 }
 
 .sensitive-section,
@@ -1326,19 +1506,21 @@ legend {
 }
 
 .schedule-block {
-  background: var(--green-soft);
-  border-left: 4px solid var(--green);
+  background: #f2f7f4;
+  border-left: 4px solid var(--siena-green);
   border-radius: 0 8px 8px 0;
-  margin-top: 1.25rem;
-  padding: 1rem 1.1rem;
+  margin-top: 14px;
+  padding: 14px 16px;
 }
 
 .schedule-block h3 {
-  margin: 0 0 .4rem;
+  font-size: 17px;
+  margin: 0 0 6px;
 }
 
 .schedule-block p {
-  line-height: 1.65;
+  font-size: 14px;
+  line-height: 1.6;
   margin: 0;
   white-space: pre-line;
 }
@@ -2425,6 +2607,16 @@ a.readiness-main:hover { color: var(--siena-green); }
     display: block;
   }
 
+  .audition-public-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .audition-form-section,
+  .audition-profile-loader {
+    padding: 22px;
+  }
+
   .gantt {
     grid-template-columns: 180px minmax(520px, 1fr);
   }
@@ -2442,5 +2634,32 @@ a.readiness-main:hover { color: var(--siena-green); }
   .modal-backdrop {
     justify-content: center;
     padding: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .audition-public-page {
+    padding-bottom: 48px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 22px;
+  }
+
+  .audition-public-page .page-header h1 {
+    font-size: 34px;
+  }
+
+  .audition-form-section,
+  .audition-profile-loader {
+    border-radius: 11px;
+    padding: 18px 16px 20px;
+  }
+
+  .audition-form-section > h2 {
+    font-size: 22px;
+  }
+
+  .audition-public-page .choice-grid {
+    grid-template-columns: 1fr;
   }
 }
