@@ -26,6 +26,7 @@ export async function submitAuditionAction(formData: FormData) {
     answers[field.field_key] = value;
   }
   const applies=(field:typeof fields[number])=>{const condition=field.conditional_logic;if(!condition?.field_key||!condition.value)return true;const source=answers[condition.field_key];return Array.isArray(source)?source.includes(condition.value):source===condition.value;};
+  for(const field of fields){const dependency=field.settings?.same_day_as;if(field.field_type==="slot_selector"&&bookings[field.field_key]&&dependency&&!bookings[dependency])redirect(`/auditions/${token}?error=${encodeURIComponent("Choose the linked audition block before selecting the dependent audition time.")}`);}
   for(const field of fields){if(!field.required||!applies(field))continue;const value=field.field_type==="file"?uploads.find((upload)=>upload.key===field.field_key):field.field_type==="slot_selector"?bookings[field.field_key]:answers[field.field_key];if(!value||(Array.isArray(value)&&!value.length))redirect(`/auditions/${token}?error=${encodeURIComponent("Please complete all required questions and audition bookings.")}`);}
   const admin = createSupabaseAdminClient();
   const { data: form, error: formError } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();

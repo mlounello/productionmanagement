@@ -919,6 +919,29 @@ button {
   line-height: 1.4;
 }
 
+.audition-slot-control {
+  display: grid;
+  gap: 6px;
+}
+
+.audition-slot-control.is-locked {
+  background: #f2f4f3;
+  border: 1px dashed #b8c3bd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.audition-slot-control.is-locked select {
+  background: #e5e9e7;
+  color: #66736d;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.audition-slot-control > small {
+  color: var(--muted);
+}
+
 .role-interest-groups { display: grid; gap: 16px; }
 .role-interest-groups > p { margin: 0; }
 .role-interest-groups section { border-top: 1px solid var(--line); padding-top: 12px; }
