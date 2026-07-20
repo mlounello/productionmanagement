@@ -17,7 +17,8 @@
     "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts",
     "test:email-rate-limit": "node --experimental-strip-types --test scripts/resend-rate-limit.test.ts",
     "test:auth-routing": "node --experimental-strip-types --test scripts/auth-callback-routing.test.ts",
-    "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts"
+    "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts",
+    "test:audition-upload": "node --experimental-strip-types --test scripts/audition-upload.test.ts"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.20",

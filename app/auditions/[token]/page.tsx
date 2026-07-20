@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { submitAuditionAction } from "@/app/auditions/[token]/actions";
 import { requestIntakeVerificationCodeAction, verifyIntakeCodeAction } from "@/app/intake/actions";
 import { getVerifiedProfile } from "@/lib/profile-intake";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { hasProjectSchedule, ProjectScheduleDisplay, type ProjectSchedule } from "@/components/project-schedule-display";
 import { AuditionSlotSelector } from "@/components/audition-slot-selector";
+import { AuditionSubmissionForm } from "@/components/audition-submission-form";
+import { auditionUploadSizeLabel } from "@/lib/audition-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ type Session = { id: string; title: string; location: string; instructions: stri
 
 const roleGroupOrder=["cast","directorial_team","creative_team","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
 function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());}
+function fieldHelpText(field:Field){if(field.field_type!=="file")return field.help_text;const base=field.help_text.replace(/\s*maximum\s+\d+(?:\.\d+)?\s*mb\.?/ig,"").trim();return `${base}${base?" ":""}Maximum ${auditionUploadSizeLabel()}.`;}
 
 function formatSlot(slot: Slot, session?: Session) {
   const start = new Date(slot.starts_at);
@@ -79,24 +81,20 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
           {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Staff must add it under Project Onboarding before this form can collect a meaningful schedule acknowledgement.</p>}</>:null}
-          <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
+          <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{fieldHelpText(field) ? <small>{fieldHelpText(field)}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
       <button type="button" disabled>Preview only — publish to accept submissions</button>
-    </fieldset>:<form action={submitAuditionAction} className="stacked-form" encType="multipart/form-data">
-      <input type="hidden" name="formToken" value={token} />
-      <input type="hidden" name="profileSession" value={query?.profile??""}/>
-      <input type="hidden" name="fieldDefinitions" value={JSON.stringify(payload.fields.map(({ field_key, field_type, required,settings,conditional_logic }) => ({ field_key, field_type, required,settings,conditional_logic })))} />
+    </fieldset>:<AuditionSubmissionForm token={token} profileSession={query?.profile??""} fieldDefinitions={JSON.stringify(payload.fields.map(({ field_key, field_type, required,settings,conditional_logic }) => ({ field_key, field_type, required,settings,conditional_logic })))}>
       {payload.sections.map((section) => {
         const fields = payload.fields.filter((field) => field.section_key === section.section_key);
         if (!fields.length) return null;
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
           {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Please contact production staff before confirming your availability.</p>}</>:null}
-          <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{field.help_text ? <small>{field.help_text}</small> : null}{renderField(field)}</label>)}</div>
+          <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{fieldHelpText(field) ? <small>{fieldHelpText(field)}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
-      <button className="audition-submit-button" type="submit">Submit audition form</button>
-    </form>}
+    </AuditionSubmissionForm>}
   </div>;
 }

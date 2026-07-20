@@ -1151,6 +1151,22 @@ button {
   box-shadow: 0 5px 14px rgb(0 103 71 / 16%);
 }
 
+.audition-submit-progress,
+.audition-submit-message {
+  margin: 0;
+}
+
+.audition-submit-progress {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.audition-public-page form[data-submitting="true"] .audition-submit-button {
+  cursor: wait;
+  opacity: .72;
+}
+
 .sensitive-section,
 .sensitive-answer,
 .sensitive-choice {
