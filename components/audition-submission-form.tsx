@@ -56,7 +56,7 @@ export function AuditionSubmissionForm({
         return;
       }
 
-      const warnings: string[] = [];
+      const warnings: string[] = result.warning ? [result.warning] : [];
       for (const upload of uploads) {
         const uploadData = new FormData();
         uploadData.set("accessToken", result.accessToken);

@@ -9,6 +9,8 @@ import { beginAssignmentOnboarding } from "@/lib/role-acceptance";
 import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { sendAuditionAccessInvite } from "@/lib/audition-access-invites";
+import { testGoogleCalendarAccess } from "@/lib/google-calendar-apps-script";
+import { syncAuditionCalendarSlots } from "@/lib/audition-calendar-sync";
 
 const uuid = z.string().uuid();
 const fieldSchema = z.object({
@@ -89,6 +91,26 @@ async function projectManagerContext(projectId:string){
   ]);
   if(!projectAllowed&&!appAllowed)throw new Error("Only a project manager or producer can add project staff.");
   return {projectId:parsed,supabase,user};
+}
+
+function calendarPath(projectId:string,message?:string,error?:boolean){return `${path(projectId,message,error)}#calendar-sync`;}
+
+export async function saveAuditionCalendarSettingsAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase,user}=await context(projectId);
+  const calendarId=z.string().trim().min(1).max(320).parse(formData.get("calendarId"));
+  const additionalGuestEmails=Array.from(new Set(String(formData.get("additionalGuestEmails")??"").split(/[\s,;]+/).map((value)=>value.trim().toLowerCase()).filter(Boolean)));
+  if(additionalGuestEmails.some((email)=>!z.string().email().safeParse(email).success))redirect(calendarPath(projectId,"Every additional calendar guest must be a valid email address.",true));
+  const {error}=await supabase.from("project_google_calendar_settings").upsert({project_id:projectId,enabled:formData.get("enabled")==="on",calendar_id:calendarId,invite_directorial_team:formData.get("inviteDirectorialTeam")==="on",additional_guest_emails:additionalGuestEmails,updated_at:new Date().toISOString(),updated_by:user.id},{onConflict:"project_id"});
+  if(error)redirect(calendarPath(projectId,error.message,true));redirect(calendarPath(projectId,"Google Calendar invitation settings saved."));
+}
+
+export async function testAuditionCalendarAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:settings}=await supabase.from("project_google_calendar_settings").select("calendar_id").eq("project_id",projectId).maybeSingle();if(!settings)redirect(calendarPath(projectId,"Save the calendar settings before testing the connection.",true));
+  try{const result=await testGoogleCalendarAccess(settings.calendar_id);await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:""}).eq("project_id",projectId);redirect(calendarPath(projectId,`Connected to ${String(result.calendarName??settings.calendar_id)}.`));}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+}
+
+export async function syncExistingAuditionCalendarAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:slots}=await supabase.from("audition_slots").select("id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId);try{const result=await syncAuditionCalendarSlots(projectId,(slots??[]).map((slot)=>String(slot.id)));if(result.status==="skipped")redirect(calendarPath(projectId,"Turn on calendar invitations and save the project settings before synchronizing.",true));redirect(calendarPath(projectId,result.warnings.length?`Calendar sync finished with warnings: ${result.warnings.join(" ")}`:"All current audition bookings were synchronized."));}catch(error){redirect(calendarPath(projectId,error instanceof Error?error.message:"Calendar sync failed.",true));}
 }
 
 export async function createAuditionFormAction(formData: FormData) {
@@ -239,7 +261,8 @@ export async function updateAuditionSessionAction(formData:FormData){
   const dateValue=(name:string)=>sessionType!=="callback"&&String(formData.get(name)??"")?easternDate(String(formData.get(name))).toISOString():"";const update={title,location,starts_at:startsAt.toISOString(),ends_at:endsAt.toISOString(),booking_category:bookingCategory,auto_assign_session_id:autoAssignSessionId,interval_minutes:interval,capacity,session_type:sessionType,booking_mode:bookingMode,instructions:z.string().trim().max(4000).parse(formData.get("instructions")),is_published:formData.get("isPublished")==="on",booking_opens_at:dateValue("bookingOpensAt"),booking_closes_at:dateValue("bookingClosesAt"),reschedule_deadline:dateValue("rescheduleDeadline"),cancel_deadline:dateValue("cancelDeadline")};const rows:Array<Record<string,unknown>>=[];if(structuralChange){if(sessionType==="appointments"){for(let cursor=startsAt.getTime();cursor<endsAt.getTime();cursor+=interval*60_000){const slotEnd=Math.min(cursor+interval*60_000,endsAt.getTime());rows.push({starts_at:new Date(cursor).toISOString(),ends_at:new Date(slotEnd).toISOString(),capacity,slot_type:capacity===1?"individual":"group",self_bookable:bookingMode==="self_book"});}}else rows.push({starts_at:startsAt.toISOString(),ends_at:endsAt.toISOString(),capacity,slot_type:sessionType,self_bookable:bookingMode==="self_book"});}
   const {error:updateError}=await supabase.rpc("update_audition_session_block",{target_project_id:projectId,target_session_id:sessionId,session_payload:update,slot_payload:rows,rebuild_slots:structuralChange});if(updateError)redirect(schedulePath(projectId,updateError.message.includes("already has applicant bookings")?"This block already has applicant bookings. You can still edit its title, location, instructions, deadlines, and visibility, but its times, format, category, interval, booking mode, and capacity are locked to protect those bookings.":updateError.message,true));
   const {error:linkError}=await supabase.from("audition_sessions").update({auto_assign_session_id:autoAssignSessionId}).eq("id",sessionId).eq("project_id",projectId);if(linkError)redirect(schedulePath(projectId,linkError.message,true));
-  redirect(schedulePath(projectId,structuralChange?"Audition block updated and its available slots were rebuilt.":"Audition block details updated."));
+  let calendarWarning="";let calendarUpdated=false;const {data:sessionSlots}=await supabase.from("audition_slots").select("id").eq("session_id",sessionId);try{const result=await syncAuditionCalendarSlots(projectId,(sessionSlots??[]).map((slot)=>String(slot.id)));calendarWarning=result.warnings.join(" ");calendarUpdated=result.status==="synced";}catch(error){calendarWarning=error instanceof Error?error.message:"Calendar sync failed.";}
+  redirect(schedulePath(projectId,calendarWarning?`Audition block saved, but calendar updates need attention: ${calendarWarning}`:structuralChange?"Audition block updated and its available slots were rebuilt.":calendarUpdated?"Audition block details and calendar invitations were updated.":"Audition block details updated."));
 }
 
 export async function updateAuditionSubmissionAction(formData: FormData) {

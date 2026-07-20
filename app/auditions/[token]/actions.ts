@@ -5,11 +5,12 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { applyProfileEnrichment, getVerifiedProfile } from "@/lib/profile-intake";
+import { syncAuditionCalendarSlots, syncAuditionSubmissionCalendar } from "@/lib/audition-calendar-sync";
 
 const uuid = z.string().uuid();
 
 export type AuditionSubmissionResult =
-  | { ok: true; accessToken: string }
+  | { ok: true; accessToken: string; warning?: string }
   | { ok: false; error: string };
 
 export async function submitAuditionAction(formData: FormData): Promise<AuditionSubmissionResult> {
@@ -68,7 +69,9 @@ export async function submitAuditionAction(formData: FormData): Promise<Audition
       console.error("Audition profile enrichment failed", { submissionId: result.submission_id, error: profileError instanceof Error ? profileError.message : "Unknown error" });
     }
   }
-  return {ok:true,accessToken:result.access_token};
+  let calendarWarning="";
+  try{const calendar=await syncAuditionSubmissionCalendar(result.submission_id);calendarWarning=calendar.warnings.join(" ");}catch(error){calendarWarning=error instanceof Error?error.message:"Google Calendar invitations could not be created.";}
+  return {ok:true,accessToken:result.access_token,...(calendarWarning?{warning:"Your audition was saved, but the calendar invitation could not be sent yet. Production staff can retry it for you."}:{})};
 }
 
 export async function manageAuditionBookingAction(formData: FormData) {
@@ -77,7 +80,12 @@ export async function manageAuditionBookingAction(formData: FormData) {
   const action = z.enum(["cancel", "reschedule"]).parse(formData.get("requestedAction"));
   const slotRaw = String(formData.get("slotId") ?? "");
   const supabase = await createSupabaseServerClient();
+  const admin=createSupabaseAdminClient();
+  const {data:before}=await admin.from("audition_submissions").select("id,project_id,audition_submission_slots(slot_id)").eq("applicant_token",access).maybeSingle();
+  const oldSlotIds=((before?.audition_submission_slots??[]) as Array<{slot_id:string}>).map((row)=>row.slot_id);
   const { error } = await supabase.rpc("manage_public_audition_submission", { access_token: access, requested_action: action, selected_slot_id: slotRaw ? uuid.parse(slotRaw) : null });
   if (error) redirect(`/auditions/${token}/confirmation?access=${access}&error=${encodeURIComponent(error.message)}`);
-  redirect(`/auditions/${token}/confirmation?access=${access}&success=${encodeURIComponent(action === "cancel" ? "Audition registration cancelled." : "Audition time updated.")}`);
+  let warning="";
+  if(before){const {data:after}=await admin.from("audition_submissions").select("audition_submission_slots(slot_id)").eq("id",before.id).maybeSingle();const newSlotIds=((after?.audition_submission_slots??[]) as Array<{slot_id:string}>).map((row)=>row.slot_id);try{const result=await syncAuditionCalendarSlots(String(before.project_id),[...oldSlotIds,...newSlotIds]);warning=result.warnings.join(" ");await admin.from("audition_submissions").update({google_calendar_sync_status:result.status,google_calendar_sync_error:warning,google_calendar_synced_at:new Date().toISOString()}).eq("id",before.id);}catch(syncError){warning=syncError instanceof Error?syncError.message:"Calendar update failed.";}}
+  const params=new URLSearchParams({access,success:action === "cancel" ? "Audition registration cancelled." : "Audition time updated."});if(warning)params.set("warning","Your booking was updated, but the calendar invitation could not be updated yet. Production staff can retry it for you.");redirect(`/auditions/${token}/confirmation?${params}`);
 }
