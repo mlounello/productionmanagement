@@ -106,11 +106,17 @@ export async function saveAuditionCalendarSettingsAction(formData:FormData){
 
 export async function testAuditionCalendarAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:settings}=await supabase.from("project_google_calendar_settings").select("calendar_id").eq("project_id",projectId).maybeSingle();if(!settings)redirect(calendarPath(projectId,"Save the calendar settings before testing the connection.",true));
-  try{const result=await testGoogleCalendarAccess(settings.calendar_id);await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:""}).eq("project_id",projectId);redirect(calendarPath(projectId,`Connected to ${String(result.calendarName??settings.calendar_id)}.`));}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+  let calendarName=settings.calendar_id;
+  try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:""}).eq("project_id",projectId);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+  redirect(calendarPath(projectId,`Connected to ${calendarName}.`));
 }
 
 export async function syncExistingAuditionCalendarAction(formData:FormData){
-  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:slots}=await supabase.from("audition_slots").select("id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId);try{const result=await syncAuditionCalendarSlots(projectId,(slots??[]).map((slot)=>String(slot.id)));if(result.status==="skipped")redirect(calendarPath(projectId,"Turn on calendar invitations and save the project settings before synchronizing.",true));redirect(calendarPath(projectId,result.warnings.length?`Calendar sync finished with warnings: ${result.warnings.join(" ")}`:"All current audition bookings were synchronized."));}catch(error){redirect(calendarPath(projectId,error instanceof Error?error.message:"Calendar sync failed.",true));}
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:slots}=await supabase.from("audition_slots").select("id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId);
+  let result:Awaited<ReturnType<typeof syncAuditionCalendarSlots>>;
+  try{result=await syncAuditionCalendarSlots(projectId,(slots??[]).map((slot)=>String(slot.id)));}catch(error){redirect(calendarPath(projectId,error instanceof Error?error.message:"Calendar sync failed.",true));}
+  if(result.status==="skipped")redirect(calendarPath(projectId,"Turn on calendar invitations and save the project settings before synchronizing.",true));
+  redirect(calendarPath(projectId,result.warnings.length?`Calendar sync finished with warnings: ${result.warnings.join(" ")}`:"All current audition bookings were synchronized."));
 }
 
 export async function createAuditionFormAction(formData: FormData) {
