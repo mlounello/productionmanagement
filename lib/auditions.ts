@@ -33,7 +33,12 @@ export type AuditionFieldInput = {
   export_group: string;
   sort_order: number;
   conditional_logic?: { field_key?: string; value?: string };
-  settings?: { booking_category?: string; same_day_as?: string };
+  settings?: {
+    booking_category?: string;
+    same_day_as?: string;
+    dependency_filter?: "same_day" | "mapped_sessions";
+    session_map?: Record<string, string[]>;
+  };
 };
 
 export const standardAuditionSections: AuditionSectionInput[] = [

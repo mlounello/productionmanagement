@@ -942,6 +942,24 @@ button {
   color: var(--muted);
 }
 
+.audition-session-map {
+  display: grid;
+  gap: 12px;
+}
+
+.audition-session-map > p {
+  margin: 0;
+}
+
+.audition-session-map-row {
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
 .role-interest-groups { display: grid; gap: 16px; }
 .role-interest-groups > p { margin: 0; }
 .role-interest-groups section { border-top: 1px solid var(--line); padding-top: 12px; }

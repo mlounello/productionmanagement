@@ -10,7 +10,7 @@ const uuid = z.string().uuid();
 
 export async function submitAuditionAction(formData: FormData) {
   const token = uuid.parse(formData.get("formToken"));
-  const fields = JSON.parse(String(formData.get("fieldDefinitions") ?? "[]")) as Array<{ field_key: string; field_type: string; required: boolean;settings?:{booking_category?:string;same_day_as?:string};conditional_logic?:{field_key?:string;value?:string} }>;
+  const fields = JSON.parse(String(formData.get("fieldDefinitions") ?? "[]")) as Array<{ field_key: string; field_type: string; required: boolean;settings?:{booking_category?:string;same_day_as?:string;dependency_filter?:"same_day"|"mapped_sessions";session_map?:Record<string,string[]>};conditional_logic?:{field_key?:string;value?:string} }>;
   const answers: Record<string, string | string[]> = {};
   const bookings:Record<string,string>={};
   const uploads: Array<{ key: string; file: File }> = [];

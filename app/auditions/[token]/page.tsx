@@ -8,7 +8,7 @@ import { AuditionSlotSelector } from "@/components/audition-slot-selector";
 
 export const dynamic = "force-dynamic";
 
-type Field = { id: string; section_key: string; field_key: string; label: string; field_type: string; required: boolean; options: string[]; help_text: string; placeholder: string; sensitivity: string; sort_order: number; settings?:{booking_category?:string;same_day_as?:string};conditional_logic?:{field_key?:string;value?:string} };
+type Field = { id: string; section_key: string; field_key: string; label: string; field_type: string; required: boolean; options: string[]; help_text: string; placeholder: string; sensitivity: string; sort_order: number; settings?:{booking_category?:string;same_day_as?:string;dependency_filter?:"same_day"|"mapped_sessions";session_map?:Record<string,string[]>};conditional_logic?:{field_key?:string;value?:string} };
 type Section = { id: string; section_key: string; title: string; description: string; sort_order: number };
 type Role = { id: string; name: string; role_group: string };
 type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
@@ -58,7 +58,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
       const groups=[...grouped.entries()].sort(([a],[b])=>{const ai=roleGroupOrder.indexOf(a),bi=roleGroupOrder.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi)||a.localeCompare(b);});
       return <div className="role-interest-groups"><p className="muted">Only currently vacant project roles are shown.</p>{groups.map(([group,roles])=><section key={group}><h3>{roleGroupLabel(group)}</h3><div className="choice-grid">{roles.map((role)=><label className="checkbox-card" key={role.id}><input type="checkbox" name={field.field_key} value={role.id}/><span>{role.name}</span></label>)}</div></section>)}</div>;
     }
-    if (field.field_type === "slot_selector") {const category=field.settings?.booking_category||"general";const choices=availableSlots.filter((slot)=>(sessionById.get(slot.session_id)?.booking_category||"general")===category).map((slot)=>({id:slot.id,startsAt:slot.starts_at,label:formatSlot(slot,sessionById.get(slot.session_id))}));return choices.length?<AuditionSlotSelector fieldKey={field.field_key} required={field.required} choices={choices} sameDayAs={field.settings?.same_day_as} condition={field.conditional_logic}/>:<p className="setup-warning">No available {category.replace(/_/g," ")} times are currently published.</p>;}
+    if (field.field_type === "slot_selector") {const category=field.settings?.booking_category||"general";const choices=availableSlots.filter((slot)=>(sessionById.get(slot.session_id)?.booking_category||"general")===category).map((slot)=>({id:slot.id,sessionId:slot.session_id,startsAt:slot.starts_at,label:formatSlot(slot,sessionById.get(slot.session_id))}));return choices.length?<AuditionSlotSelector fieldKey={field.field_key} required={field.required} choices={choices} sameDayAs={field.settings?.same_day_as} dependencyFilter={field.settings?.dependency_filter} sessionMap={field.settings?.session_map} condition={field.conditional_logic}/>:<p className="setup-warning">No available {category.replace(/_/g," ")} times are currently published.</p>;}
     const options = field.field_type === "yes_no" ? ["Yes", "No"] : field.options;
     const checkbox = field.field_type === "multiple_choice" || field.field_type === "acknowledgement";
     const selected = Array.isArray(saved) ? saved : saved ? [saved] : [];

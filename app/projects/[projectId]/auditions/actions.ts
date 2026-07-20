@@ -26,7 +26,7 @@ const fieldSchema = z.object({
   export_group: z.string().trim().min(1).max(80),
   sort_order: z.number().int(),
   conditional_logic:z.object({field_key:z.string().max(100).optional(),value:z.string().max(300).optional()}).optional().default({}),
-  settings:z.object({booking_category:z.string().max(80).optional(),same_day_as:z.string().max(100).optional()}).optional().default({})
+  settings:z.object({booking_category:z.string().max(80).optional(),same_day_as:z.string().max(100).optional(),dependency_filter:z.enum(["same_day","mapped_sessions"]).optional(),session_map:z.record(z.string().uuid(),z.array(z.string().uuid()).max(50)).optional()}).optional().default({})
 });
 const sectionSchema = z.object({
   id: z.string().uuid().optional(),
