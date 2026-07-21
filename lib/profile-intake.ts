@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, randomInt, randomUUID } from "node
 import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
 import { activeEmailTemplate } from "@/lib/email-template-catalog";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { profileIntakeHmacSecret } from "@/lib/profile-intake-secret";
 
 export type IntakeContext = "audition" | "technical_interest";
 export type ReusableProfile = {
@@ -16,7 +17,7 @@ const CODE_MINUTES = 10;
 const SESSION_MINUTES = 60;
 
 function secret() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "local-intake-development-secret";
+  return profileIntakeHmacSecret(process.env);
 }
 
 function codeHash(challengeId: string, code: string) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+// @ts-expect-error Node's built-in TypeScript loader requires the extension.
 import { MAX_AUDITION_UPLOAD_BYTES, auditionUploadSizeLabel, auditionUploadTooLarge } from "../lib/audition-upload.ts";
 
 test("audition uploads allow files through the configured limit", () => {

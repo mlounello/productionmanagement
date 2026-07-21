@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+// @ts-expect-error Node's built-in TypeScript loader requires the extension.
 import { AUTH_CALLBACK_PATH, PROFILE_AUTH_CALLBACK_PATH, safeAuthDestination, shouldNormalizeAuthCallback } from "../lib/auth-callback-routing.ts";
 
 test("dedicated cross-device profile callbacks are not intercepted", () => {
