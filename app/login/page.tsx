@@ -11,6 +11,22 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function safeMagicLinkError(error: unknown) {
+  if (error instanceof Error) {
+    return { name: error.name.slice(0, 80), message: error.message.slice(0, 160) };
+  }
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    return {
+      name: typeof value.name === "string" ? value.name.slice(0, 80) : "provider_error",
+      code: typeof value.code === "string" ? value.code.slice(0, 80) : undefined,
+      status: typeof value.status === "number" ? value.status : undefined,
+      message: typeof value.message === "string" ? value.message.slice(0, 160) : "unknown",
+    };
+  }
+  return { name: "unknown", message: "unknown" };
+}
+
 async function signIn(formData: FormData) {
   "use server";
 
@@ -29,9 +45,7 @@ async function signIn(formData: FormData) {
     try {
       await sendAuthorizedProductionMagicLink(email, `${origin.replace(/\/+$/, "")}/auth/callback`);
     } catch (error) {
-      console.error("[production-magic-link] Request could not be completed.", {
-        message: error instanceof Error ? error.message.slice(0, 160) : "unknown",
-      });
+      console.error("[production-magic-link] Request could not be completed.", safeMagicLinkError(error));
     }
   }
 
