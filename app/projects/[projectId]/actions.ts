@@ -20,6 +20,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   createTheatreBudgetGuestArtist,
   fetchTheatreBudgetGuestArtistById,
+  fetchTheatreBudgetProjectById,
   findTheatreBudgetGuestArtist
 } from "@/lib/theatre-budget";
 import { projectWorkspacePath, type ProjectWorkspaceKey } from "@/lib/project-routes";
@@ -158,6 +159,11 @@ const bulkBudgetAssignmentRowSchema = z.object({
 const playbillShowLinkSchema = z.object({
   projectId: projectIdSchema,
   showId: z.string().uuid()
+});
+
+const theatreBudgetProjectLinkSchema = z.object({
+  projectId: projectIdSchema,
+  budgetProjectId: z.string().uuid()
 });
 
 const playbillAssignmentSyncSchema = z.object({
@@ -1389,6 +1395,78 @@ export async function linkPlaybillShowAction(formData: FormData) {
 
   revalidatePath(`/projects/${input.projectId}`);
   redirect(projectSuccessPath(input.projectId, "Playbill show linked and existing roles pushed when writes are enabled."));
+}
+
+export async function linkTheatreBudgetProjectAction(formData: FormData) {
+  await requireUser();
+  const parsed = theatreBudgetProjectLinkSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    budgetProjectId: requiredString(formData.get("budgetProjectId"))
+  });
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid Theatre Budget project link.")}`);
+  }
+
+  let budgetProject;
+  try {
+    budgetProject = await fetchTheatreBudgetProjectById(parsed.data.budgetProjectId);
+  } catch (error) {
+    redirect(projectErrorPath(parsed.data.projectId, error instanceof Error ? error.message : "Could not read the Theatre Budget project."));
+  }
+  if (!budgetProject) redirect(projectErrorPath(parsed.data.projectId, "The selected Theatre Budget project was not found."));
+
+  const supabase = await createSupabaseServerClient();
+  const linkFilter = {
+    local_entity_type: "project",
+    local_entity_id: parsed.data.projectId,
+    external_app: "theatre_budget",
+    external_schema: "app_theatre_budget",
+    external_table: "projects"
+  };
+  const { error } = await supabase.from("external_links").upsert({
+    ...linkFilter,
+    external_id: parsed.data.budgetProjectId,
+    sync_direction: "read_only",
+    sync_status: "linked",
+    metadata: {
+      name: budgetProject.name,
+      season: budgetProject.season,
+      status: budgetProject.status,
+      linked_from: "production_management_project"
+    }
+  }, {
+    onConflict: "local_entity_type,local_entity_id,external_app,external_schema,external_table,external_id"
+  });
+  if (error) redirect(projectErrorPath(parsed.data.projectId, error.message));
+
+  const { error: cleanupError } = await supabase
+    .from("external_links")
+    .delete()
+    .match(linkFilter)
+    .neq("external_id", parsed.data.budgetProjectId);
+  if (cleanupError) redirect(projectErrorPath(parsed.data.projectId, `New Theatre Budget link saved, but the previous link needs cleanup: ${cleanupError.message}`));
+
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  redirect(projectSuccessPath(parsed.data.projectId, "Theatre Budget project linked. Eligible project-specific access will reconcile when the Production integration gate is enabled."));
+}
+
+export async function unlinkTheatreBudgetProjectAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectIdSchema.safeParse(requiredString(formData.get("projectId")));
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Invalid Theatre Budget project link.")}`);
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("external_links").delete().match({
+    local_entity_type: "project",
+    local_entity_id: parsed.data,
+    external_app: "theatre_budget",
+    external_schema: "app_theatre_budget",
+    external_table: "projects"
+  });
+  if (error) redirect(projectErrorPath(parsed.data, error.message));
+
+  revalidatePath(`/projects/${parsed.data}`);
+  redirect(projectSuccessPath(parsed.data, "Theatre Budget project unlinked. Integration-managed access is revoked when the Production integration gate is enabled."));
 }
 
 export async function unlinkPlaybillShowAction(formData: FormData) {

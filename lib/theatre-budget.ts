@@ -1,4 +1,10 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import "server-only";
+
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+function createTheatreBudgetIntegrationClient() {
+  return createSupabaseAdminClient();
+}
 
 export type TheatreBudgetGuestArtist = {
   id: string;
@@ -9,11 +15,46 @@ export type TheatreBudgetGuestArtist = {
   active: boolean;
 };
 
+export type TheatreBudgetProject = {
+  id: string;
+  name: string;
+  season: string | null;
+  status: string;
+};
+
+export async function fetchTheatreBudgetProjects(): Promise<{
+  data: TheatreBudgetProject[];
+  error: string | null;
+}> {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_theatre_budget")
+    .from("projects")
+    .select("id, name, season, status")
+    .order("start_date", { ascending: false, nullsFirst: false })
+    .order("name", { ascending: true });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as TheatreBudgetProject[], error: null };
+}
+
+export async function fetchTheatreBudgetProjectById(id: string) {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_theatre_budget")
+    .from("projects")
+    .select("id, name, season, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as TheatreBudgetProject | null;
+}
+
 export async function fetchTheatreBudgetGuestArtists(): Promise<{
   data: TheatreBudgetGuestArtist[];
   error: string | null;
 }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createTheatreBudgetIntegrationClient();
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("guest_artists")
@@ -28,7 +69,7 @@ export async function fetchTheatreBudgetGuestArtists(): Promise<{
 }
 
 export async function fetchTheatreBudgetGuestArtistById(id: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createTheatreBudgetIntegrationClient();
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("guest_artists")
@@ -44,7 +85,7 @@ export async function fetchTheatreBudgetGuestArtistById(id: string) {
 }
 
 export async function findTheatreBudgetGuestArtist(input: { displayName: string; email?: string; vendorNumber?: string }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createTheatreBudgetIntegrationClient();
   let query = supabase
     .schema("app_theatre_budget")
     .from("guest_artists")
@@ -64,7 +105,7 @@ export async function createTheatreBudgetGuestArtist(input: {
   phone?: string;
   vendorNumber?: string;
 }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createTheatreBudgetIntegrationClient();
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("guest_artists")

@@ -1,4 +1,10 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import "server-only";
+
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+function createPlaybillIntegrationClient() {
+  return createSupabaseAdminClient();
+}
 
 export type PlaybillShow = {
   id: string;
@@ -88,7 +94,7 @@ export async function fetchPlaybillShows(): Promise<{
   data: PlaybillShow[];
   error: string | null;
 }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("shows")
@@ -112,7 +118,7 @@ export async function fetchPlaybillShows(): Promise<{
 }
 
 export async function fetchPlaybillShowById(id: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("shows")
@@ -136,7 +142,7 @@ export async function fetchPlaybillShowById(id: string) {
 }
 
 export async function fetchPlaybillPersonById(id: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("people")
@@ -152,7 +158,7 @@ export async function fetchPlaybillPersonById(id: string) {
 }
 
 export async function findPlaybillPerson(input: PlaybillPersonInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   let query = supabase
     .schema("app_playbill")
     .from("people")
@@ -176,7 +182,7 @@ export async function findPlaybillPerson(input: PlaybillPersonInput) {
 }
 
 export async function createPlaybillPerson(input: PlaybillPersonInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const baseRow = {
     program_id: input.programId,
     full_name: input.fullName,
@@ -214,7 +220,7 @@ export async function createPlaybillPerson(input: PlaybillPersonInput) {
 }
 
 export async function updatePlaybillPersonIdentity(id: string, input: PlaybillPersonInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("people")
@@ -238,7 +244,7 @@ export async function updatePlaybillPersonIdentity(id: string, input: PlaybillPe
 }
 
 export async function fetchPlaybillShowRoleById(id: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -254,7 +260,7 @@ export async function fetchPlaybillShowRoleById(id: string) {
 }
 
 export async function fetchPlaybillShowRoles(showId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -267,7 +273,7 @@ export async function fetchPlaybillShowRoles(showId: string) {
 }
 
 export async function findPlaybillShowRole(input: PlaybillRoleInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   let query = supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -288,7 +294,7 @@ export async function findPlaybillShowRole(input: PlaybillRoleInput) {
 }
 
 export async function createPlaybillShowRole(input: PlaybillRoleInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -309,7 +315,7 @@ export async function createPlaybillShowRole(input: PlaybillRoleInput) {
 }
 
 export async function updatePlaybillShowRole(id: string, input: PlaybillRoleInput) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -329,7 +335,7 @@ export async function updatePlaybillShowRole(id: string, input: PlaybillRoleInpu
 }
 
 export async function ensureBioSubmissionRequest(showRoleId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data: existing, error: existingError } = await supabase
     .schema("app_playbill")
     .from("submission_requests")
@@ -377,7 +383,7 @@ export async function ensureBioSubmissionRequest(showRoleId: string) {
 }
 
 export async function markBioSubmissionRequestSource(showRoleId: string, source: "playbill" | "production_management") {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("submission_requests")
@@ -402,7 +408,7 @@ export async function updatePlaybillPersonPublicity(input: {
   bio: string;
   headshotUrl: string;
 }) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const submittedAt = new Date().toISOString();
   let { data, error } = await supabase
     .schema("app_playbill")
@@ -438,7 +444,7 @@ export async function updatePlaybillPersonPublicity(input: {
 }
 
 export async function markPlaybillBioRequestSubmitted(requestId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   let { error } = await supabase
     .schema("app_playbill")
     .from("submission_requests")
@@ -453,7 +459,7 @@ export async function markPlaybillBioRequestSubmitted(requestId: string) {
 }
 
 export async function deletePlaybillSubmissionRequestsForRole(showRoleId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createPlaybillIntegrationClient();
   const { error } = await supabase
     .schema("app_playbill")
     .from("submission_requests")

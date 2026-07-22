@@ -20,6 +20,7 @@ import {
   deleteRoleAssignmentAction,
   deleteRunOfShowItemAction,
   linkPlaybillShowAction,
+  linkTheatreBudgetProjectAction,
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
@@ -27,6 +28,7 @@ import {
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
   unlinkPlaybillShowAction,
+  unlinkTheatreBudgetProjectAction,
   unlinkTheatreBudgetGuestArtistAction,
   updateProjectRoleAction,
   updateRoleAssignmentAction
@@ -41,7 +43,7 @@ import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetGuestArtists, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 
@@ -496,7 +498,7 @@ export default async function ProjectWorkspacePage({
         .in("local_entity_id", roles.map((role) => role.id))
     : { data: [] };
   const needsPlaybillWorkspace = workspace === "roles" || workspace === "integrations";
-  const [{ data: playbillLinks }, theatreBudgetGuestArtists, playbillShows] = await Promise.all([
+  const [{ data: playbillLinks }, { data: budgetProjectLinks }, theatreBudgetGuestArtists, playbillShows, theatreBudgetProjects] = await Promise.all([
     needsPlaybillWorkspace ? supabase
       .from("external_links")
       .select("id, external_id, sync_status, metadata")
@@ -505,8 +507,19 @@ export default async function ProjectWorkspacePage({
       .eq("external_app", "playbill")
       .eq("external_schema", "app_playbill")
       .eq("external_table", "shows") : Promise.resolve({ data: [] }),
+    needsPlaybillWorkspace ? supabase
+      .from("external_links")
+      .select("id, external_id, sync_status, metadata")
+      .eq("local_entity_type", "project")
+      .eq("local_entity_id", typedProject.id)
+      .eq("external_app", "theatre_budget")
+      .eq("external_schema", "app_theatre_budget")
+      .eq("external_table", "projects")
+      .order("created_at", { ascending: false })
+      .limit(1) : Promise.resolve({ data: [] }),
     workspace === "roles" ? fetchTheatreBudgetGuestArtists() : Promise.resolve({ data: [], error: null }),
-    needsPlaybillWorkspace ? fetchPlaybillShows() : Promise.resolve({ data: [], error: null })
+    needsPlaybillWorkspace ? fetchPlaybillShows() : Promise.resolve({ data: [], error: null }),
+    workspace === "integrations" ? fetchTheatreBudgetProjects() : Promise.resolve({ data: [], error: null })
   ]);
   const notes = (personNotes ?? []) as PersonNote[];
   const playbillLink = ((playbillLinks ?? []) as Array<Pick<ExternalLink, "id" | "external_id" | "sync_status" | "metadata">>)[0];
@@ -514,6 +527,10 @@ export default async function ProjectWorkspacePage({
     ? playbillShows.data.find((show) => show.id === playbillLink.external_id) ?? null
     : null;
   const linkedPlaybillMetadata = playbillLink?.metadata ?? {};
+  const budgetProjectLink = ((budgetProjectLinks ?? []) as Array<Pick<ExternalLink, "id" | "external_id" | "sync_status" | "metadata">>)[0];
+  const linkedBudgetProject = budgetProjectLink
+    ? theatreBudgetProjects.data.find((project) => project.id === budgetProjectLink.external_id) ?? null
+    : null;
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
@@ -770,6 +787,39 @@ export default async function ProjectWorkspacePage({
             <button type="submit">Link Playbill show</button>
           </form>
         )}
+        <div className="integration-panel">
+          <div>
+            <strong>Theatre Budget project</strong>
+            <p className="muted">Use an explicit project link before any Lighting Designer receives project-specific Budget viewer access.</p>
+          </div>
+          {theatreBudgetProjects.error ? <p className="setup-warning">{theatreBudgetProjects.error}</p> : null}
+          {budgetProjectLink ? (
+            <div className="linked-record">
+              <div>
+                <strong>{linkedBudgetProject?.name ?? String(budgetProjectLink.metadata.name ?? "Linked Theatre Budget project")}</strong>
+                <span>{linkedBudgetProject?.season ?? String(budgetProjectLink.metadata.season ?? "")}{linkedBudgetProject?.status ? ` · ${linkedBudgetProject.status}` : ""}</span>
+              </div>
+              <form action={unlinkTheatreBudgetProjectAction}>
+                <input name="projectId" type="hidden" value={typedProject.id} />
+                <button className="button secondary" type="submit">Unlink</button>
+              </form>
+            </div>
+          ) : (
+            <form action={linkTheatreBudgetProjectAction} className="guest-artist-link-form">
+              <input name="projectId" type="hidden" value={typedProject.id} />
+              <label className="field">
+                <span>Existing Theatre Budget project</span>
+                <select name="budgetProjectId" defaultValue="" required>
+                  <option value="">Choose existing Theatre Budget project</option>
+                  {theatreBudgetProjects.data.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}{project.season ? ` · ${project.season}` : ""}{project.status ? ` · ${project.status}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">Link Theatre Budget project</button>
+            </form>
+          )}
+        </div>
         <div className="integration-panel">
           <div>
             <strong>Role Operations and Integration</strong>
