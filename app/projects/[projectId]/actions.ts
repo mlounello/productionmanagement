@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { assignExistingBudgetGuestArtistToRole } from "@/lib/budget-role-assignment";
 import { removeAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { beginAssignmentOnboarding } from "@/lib/role-acceptance";
-import { ENABLE_BUDGET_WRITES, ENABLE_PLAYBILL_WRITES } from "@/lib/config";
+import { ENABLE_BUDGET_WRITES, ENABLE_PLAYBILL_WRITES, ENABLE_ROLE_BUDGET_ACCESS_BRIDGE } from "@/lib/config";
 import { fetchPlaybillShowById } from "@/lib/playbill";
 import {
   markAssignmentPlaybillSyncFailed,
@@ -164,6 +164,12 @@ const playbillShowLinkSchema = z.object({
 const theatreBudgetProjectLinkSchema = z.object({
   projectId: projectIdSchema,
   budgetProjectId: z.string().uuid()
+});
+
+const roleBudgetAccessSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid(),
+  categoryIds: z.array(z.string().uuid()).max(24)
 });
 
 const playbillAssignmentSyncSchema = z.object({
@@ -1448,6 +1454,52 @@ export async function linkTheatreBudgetProjectAction(formData: FormData) {
 
   revalidatePath(`/projects/${parsed.data.projectId}`);
   redirect(projectSuccessPath(parsed.data.projectId, "Theatre Budget project linked. Eligible project-specific access will reconcile when the Production integration gate is enabled."));
+}
+
+export async function saveRoleAssignmentBudgetAccessAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = roleBudgetAccessSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    categoryIds: formData.getAll("budgetCategoryIds").map((value) => String(value))
+  });
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid Budget access selection.")}`);
+  }
+  if (!ENABLE_ROLE_BUDGET_ACCESS_BRIDGE) {
+    redirect(projectErrorPath(parsed.data.projectId, "Role-based Budget access saving is disabled in this environment."));
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: assignment, error } = await supabase
+    .from("role_assignments")
+    .select("id, project_id")
+    .eq("id", parsed.data.assignmentId)
+    .eq("project_id", parsed.data.projectId)
+    .maybeSingle();
+  if (error) redirect(projectErrorPath(parsed.data.projectId, error.message));
+  if (!assignment) redirect(projectErrorPath(parsed.data.projectId, "Role assignment not found or not manageable."));
+
+  const { data: resultData, error: configurationError } = await supabase
+    .schema("app_production_management")
+    .rpc("configure_role_assignment_budget_access", {
+      target_assignment_id: parsed.data.assignmentId,
+      target_category_ids: parsed.data.categoryIds,
+      actor_user_id: user.id
+    });
+  if (configurationError) {
+    redirect(projectErrorPath(parsed.data.projectId, configurationError.message));
+  }
+  const result = (resultData ?? {}) as Record<string, unknown>;
+  const configuredCount = Number(result.configured_count ?? parsed.data.categoryIds.length);
+  const status = String(result.status ?? "updated");
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  redirect(projectSuccessPath(
+    parsed.data.projectId,
+    configuredCount === 0
+      ? "View-only Budget access removed from this role assignment."
+      : `${configuredCount} view-only Budget department${configuredCount === 1 ? "" : "s"} saved (${status.replaceAll("_", " ")}).`
+  ));
 }
 
 export async function unlinkTheatreBudgetProjectAction(formData: FormData) {

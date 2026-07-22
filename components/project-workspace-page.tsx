@@ -24,6 +24,7 @@ import {
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
+  saveRoleAssignmentBudgetAccessAction,
   syncAllProjectIntegrationsAction,
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
@@ -41,9 +42,10 @@ import { ProjectSwitcher } from "@/components/project-switcher";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
 import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ENABLE_ROLE_BUDGET_ACCESS_BRIDGE } from "@/lib/config";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetCategories, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 
@@ -110,6 +112,12 @@ type ProjectRole = {
   department: string;
   playbill_sync_status: string;
   sync_notes: string;
+};
+
+type RoleBudgetAccessRow = {
+  role_assignment_id: string;
+  production_category_id: string;
+  active: boolean;
 };
 
 type Person = {
@@ -249,6 +257,10 @@ function compareRunOfShowItems(left: CalendarItem, right: CalendarItem) {
 
 function normalizeMatchValue(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeBudgetDepartment(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function suggestedGuestArtistMatches(person: Person | undefined, guestArtists: TheatreBudgetGuestArtist[]) {
@@ -497,8 +509,15 @@ export default async function ProjectWorkspacePage({
         .eq("external_table", "show_roles")
         .in("local_entity_id", roles.map((role) => role.id))
     : { data: [] };
+  const { data: roleBudgetAccessRows } = ENABLE_ROLE_BUDGET_ACCESS_BRIDGE && workspace === "roles" && assignmentRows.length
+    ? await supabase
+        .from("role_assignment_budget_access")
+        .select("role_assignment_id, production_category_id, active")
+        .in("role_assignment_id", assignmentRows.map((assignment) => assignment.id))
+        .eq("active", true)
+    : { data: [] };
   const needsPlaybillWorkspace = workspace === "roles" || workspace === "integrations";
-  const [{ data: playbillLinks }, { data: budgetProjectLinks }, theatreBudgetGuestArtists, playbillShows, theatreBudgetProjects] = await Promise.all([
+  const [{ data: playbillLinks }, { data: budgetProjectLinks }, theatreBudgetGuestArtists, playbillShows, theatreBudgetProjects, theatreBudgetCategories] = await Promise.all([
     needsPlaybillWorkspace ? supabase
       .from("external_links")
       .select("id, external_id, sync_status, metadata")
@@ -519,7 +538,8 @@ export default async function ProjectWorkspacePage({
       .limit(1) : Promise.resolve({ data: [] }),
     workspace === "roles" ? fetchTheatreBudgetGuestArtists() : Promise.resolve({ data: [], error: null }),
     needsPlaybillWorkspace ? fetchPlaybillShows() : Promise.resolve({ data: [], error: null }),
-    workspace === "integrations" ? fetchTheatreBudgetProjects() : Promise.resolve({ data: [], error: null })
+    workspace === "integrations" ? fetchTheatreBudgetProjects() : Promise.resolve({ data: [], error: null }),
+    workspace === "roles" ? fetchTheatreBudgetCategories() : Promise.resolve({ data: [], error: null })
   ]);
   const notes = (personNotes ?? []) as PersonNote[];
   const playbillLink = ((playbillLinks ?? []) as Array<Pick<ExternalLink, "id" | "external_id" | "sync_status" | "metadata">>)[0];
@@ -533,6 +553,12 @@ export default async function ProjectWorkspacePage({
     : null;
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
+  const budgetCategoryIdsByAssignment = new Map<string, Set<string>>();
+  for (const row of (roleBudgetAccessRows ?? []) as RoleBudgetAccessRow[]) {
+    const current = budgetCategoryIdsByAssignment.get(row.role_assignment_id) ?? new Set<string>();
+    current.add(row.production_category_id);
+    budgetCategoryIdsByAssignment.set(row.role_assignment_id, current);
+  }
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
   const playbillRoleLinksByRoleId = new Map(
     ((projectRolePlaybillLinks ?? []) as ExternalLink[]).map((link) => [link.local_entity_id, link])
@@ -1352,6 +1378,18 @@ export default async function ProjectWorkspacePage({
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
+              const savedBudgetCategoryIds = budgetCategoryIdsByAssignment.get(assignment.id) ?? new Set<string>();
+              const normalizedRoleDepartment = normalizeBudgetDepartment(role?.department ?? "");
+              const normalizedRoleName = normalizeBudgetDepartment(role?.name ?? "");
+              const suggestedBudgetCategory = theatreBudgetCategories.data.find((category) => {
+                const normalizedCategory = normalizeBudgetDepartment(category.name);
+                return normalizedCategory === normalizedRoleDepartment
+                  || normalizedRoleName === normalizedCategory
+                  || normalizedRoleName.startsWith(`${normalizedCategory} `);
+              });
+              const displayedBudgetCategoryIds = savedBudgetCategoryIds.size > 0
+                ? savedBudgetCategoryIds
+                : new Set(suggestedBudgetCategory ? [suggestedBudgetCategory.id] : []);
 
               return (
                 <details className="assignment-card" key={assignment.id}>
@@ -1398,6 +1436,44 @@ export default async function ProjectWorkspacePage({
                       </div>
                     ) : (
                       <p className="setup-warning">Link this project to a Playbill show before syncing assignments.</p>
+                    )}
+                  </div>
+                  <div className="integration-panel">
+                    <div>
+                      <strong>Theatre Budget View-only Access</strong>
+                      <p className="muted">
+                        Choose one or more Budget departments for this person&apos;s role on the linked project. Access remains Viewer-only and project-specific.
+                      </p>
+                    </div>
+                    {!budgetProjectLink ? (
+                      <p className="setup-warning">Link this Production project to a Theatre Budget project before granting access.</p>
+                    ) : theatreBudgetCategories.error ? (
+                      <p className="setup-warning">{theatreBudgetCategories.error}</p>
+                    ) : (
+                      <form action={saveRoleAssignmentBudgetAccessAction} className="guest-artist-link-form">
+                        <input name="projectId" type="hidden" value={typedProject.id} />
+                        <input name="assignmentId" type="hidden" value={assignment.id} />
+                        <fieldset className="checkbox-card" disabled={!ENABLE_ROLE_BUDGET_ACCESS_BRIDGE}>
+                          <legend>View-only Budget departments</legend>
+                          {theatreBudgetCategories.data.map((category) => (
+                            <label key={category.id}>
+                              <input
+                                name="budgetCategoryIds"
+                                type="checkbox"
+                                value={category.id}
+                                defaultChecked={displayedBudgetCategoryIds.has(category.id)}
+                              />
+                              <span>{category.name}{suggestedBudgetCategory?.id === category.id && savedBudgetCategoryIds.size === 0 ? " · suggested" : ""}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                        {!ENABLE_ROLE_BUDGET_ACCESS_BRIDGE ? (
+                          <p className="muted">Preview display only. Saving remains disabled until the Production gate.</p>
+                        ) : null}
+                        <button type="submit" disabled={!ENABLE_ROLE_BUDGET_ACCESS_BRIDGE}>
+                          Save view-only Budget access
+                        </button>
+                      </form>
                     )}
                   </div>
                   {assignment.is_guest_artist ? (

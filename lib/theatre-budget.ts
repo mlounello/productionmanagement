@@ -22,6 +22,38 @@ export type TheatreBudgetProject = {
   status: string;
 };
 
+export type TheatreBudgetCategory = {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
+};
+
+export async function fetchTheatreBudgetCategories(): Promise<{
+  data: TheatreBudgetCategory[];
+  error: string | null;
+}> {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_theatre_budget")
+    .from("production_categories")
+    .select("id, name, sort_order, active")
+    .eq("active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as TheatreBudgetCategory[], error: null };
+}
+
+export async function reconcileRoleAssignmentBudgetAccess(assignmentId: string) {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_production_management")
+    .rpc("reconcile_role_assignment_budget_access", { target_assignment_id: assignmentId });
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown>;
+}
+
 export async function fetchTheatreBudgetProjects(): Promise<{
   data: TheatreBudgetProject[];
   error: string | null;

@@ -34,7 +34,8 @@ test("project actions authenticate before linking or manually syncing Playbill",
     "syncAllProjectIntegrationsAction",
     "syncRoleAssignmentToPlaybillAction",
     "linkTheatreBudgetProjectAction",
-    "unlinkTheatreBudgetProjectAction"
+    "unlinkTheatreBudgetProjectAction",
+    "saveRoleAssignmentBudgetAccessAction"
   ]) {
     const start = projectActions.indexOf(`export async function ${actionName}`);
     assert.notEqual(start, -1, `${actionName} is missing`);
@@ -42,4 +43,11 @@ test("project actions authenticate before linking or manually syncing Playbill",
     const body = projectActions.slice(start, nextAction === -1 ? undefined : nextAction);
     assert.match(body, /await requireUser\(\)/, `${actionName} must require a signed-in user`);
   }
+});
+
+test("role-based Budget access is explicitly feature-gated and Viewer-only", () => {
+  assert.match(projectActions, /ENABLE_ROLE_BUDGET_ACCESS_BRIDGE/);
+  assert.match(projectActions, /configure_role_assignment_budget_access/);
+  assert.match(projectActions, /createSupabaseServerClient/);
+  assert.doesNotMatch(projectActions, /budgetAccessRole:\s*["']project_manager["']/);
 });

@@ -7,6 +7,7 @@ export const APP_SCHEMA =
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
 export const ENABLE_PLAYBILL_WRITES = process.env.ENABLE_PLAYBILL_WRITES?.trim().toLowerCase() === "true";
 export const ENABLE_BUDGET_WRITES = process.env.ENABLE_BUDGET_WRITES?.trim().toLowerCase() === "true";
+export const ENABLE_ROLE_BUDGET_ACCESS_BRIDGE = process.env.ENABLE_ROLE_BUDGET_ACCESS_BRIDGE?.trim().toLowerCase() === "true";
 export const ENABLE_GOOGLE_GROUP_SYNC = process.env.ENABLE_GOOGLE_GROUP_SYNC?.trim().toLowerCase() === "true";
 export const ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK = process.env.ENABLE_GOOGLE_GROUP_MEMBERSHIP_CHECK?.trim().toLowerCase() === "true";
 export const ENABLE_GOOGLE_GROUP_AUTO_CREATE = process.env.ENABLE_GOOGLE_GROUP_AUTO_CREATE?.trim().toLowerCase() === "true";
