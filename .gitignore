@@ -7,3 +7,4 @@ tsconfig.tsbuildinfo
 vercel.json.local
 supabase/.temp
 .vercel
+.env*

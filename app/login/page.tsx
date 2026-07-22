@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { hasSupabaseEnv, SITE_URL } from "@/lib/config";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/auth";
 import { GoogleLoginButton } from "@/app/login/google-login-button";
 import Link from "next/link";
+import {
+  allowProductionMagicLinkRequest,
+  sendAuthorizedProductionMagicLink,
+} from "@/lib/branded-magic-link";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +19,18 @@ async function signIn(formData: FormData) {
     redirect("/login?error=Email%20is%20required");
   }
 
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${SITE_URL}/auth/callback`
-    }
-  });
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
+  const origin = host ? `${protocol}://${host}` : SITE_URL;
+  const clientAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
-  if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  if (allowProductionMagicLinkRequest(email, clientAddress)) {
+    try {
+      await sendAuthorizedProductionMagicLink(email, `${origin.replace(/\/+$/, "")}/auth/callback`);
+    } catch {
+      console.error("[production-magic-link] Request could not be completed.");
+    }
   }
 
   redirect("/login?sent=true");
@@ -53,7 +59,7 @@ export default async function LoginPage({
           </div>
         ) : null}
         {params?.error ? <p className="setup-warning">{params.error}</p> : null}
-        {params?.sent ? <p>Check your email for the sign-in link.</p> : null}
+        {params?.sent ? <p>If this email has active Production Management access, a sign-in link is on its way.</p> : null}
         <GoogleLoginButton />
         <form action={signIn} className="form-grid">
           <div className="field">
