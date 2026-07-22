@@ -32,6 +32,13 @@ const showSelect =
 const legacyShowSelect =
   "id, title, slug, status, is_published, start_date, end_date, venue, season_tag, program_id, programs(id, title, slug, theatre_name, show_dates)";
 
+type PlaybillShowContractRow = Omit<PlaybillShow, "programs"> & {
+  program_title: string | null;
+  program_slug: string | null;
+  theatre_name: string | null;
+  show_dates: string | null;
+};
+
 function withDefaultIntakeMode<T extends Record<string, unknown>>(row: T) {
   return { ...row, bio_intake_mode: row.bio_intake_mode ?? "playbill_standalone" } as unknown as PlaybillShow;
 }
@@ -41,6 +48,35 @@ function isMissingColumnError(error: { code?: string; message?: string } | null,
   const message = String(error.message ?? "").toLowerCase();
   return ["42703", "PGRST204"].includes(String(error.code ?? ""))
     && columns.some((column) => message.includes(column.toLowerCase()));
+}
+
+function isMissingReadContractError(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  return ["42883", "PGRST202"].includes(String(error.code ?? ""));
+}
+
+function showFromContract(row: PlaybillShowContractRow): PlaybillShow {
+  const hasProgram = Boolean(row.program_id);
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    status: row.status,
+    is_published: row.is_published,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    venue: row.venue,
+    season_tag: row.season_tag,
+    program_id: row.program_id,
+    bio_intake_mode: row.bio_intake_mode ?? "playbill_standalone",
+    programs: hasProgram ? {
+      id: String(row.program_id),
+      title: row.program_title ?? "",
+      slug: row.program_slug ?? "",
+      theatre_name: row.theatre_name ?? "",
+      show_dates: row.show_dates ?? ""
+    } : null
+  };
 }
 
 export type PlaybillPersonInput = {
@@ -95,6 +131,20 @@ export async function fetchPlaybillShows(): Promise<{
   error: string | null;
 }> {
   const supabase = createPlaybillIntegrationClient();
+  const contract = await supabase
+    .schema("app_playbill")
+    .rpc("production_management_shows", { p_show_id: null });
+
+  if (!contract.error) {
+    return {
+      data: ((contract.data ?? []) as PlaybillShowContractRow[]).map(showFromContract),
+      error: null
+    };
+  }
+  if (!isMissingReadContractError(contract.error)) {
+    return { data: [], error: `Playbill server authorization failed: ${contract.error.message}` };
+  }
+
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("shows")
@@ -119,6 +169,17 @@ export async function fetchPlaybillShows(): Promise<{
 
 export async function fetchPlaybillShowById(id: string) {
   const supabase = createPlaybillIntegrationClient();
+  const contract = await supabase
+    .schema("app_playbill")
+    .rpc("production_management_shows", { p_show_id: id });
+  if (!contract.error) {
+    const row = ((contract.data ?? []) as PlaybillShowContractRow[])[0];
+    return row ? showFromContract(row) : null;
+  }
+  if (!isMissingReadContractError(contract.error)) {
+    throw new Error(`Playbill server authorization failed: ${contract.error.message}`);
+  }
+
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("shows")
@@ -245,6 +306,16 @@ export async function updatePlaybillPersonIdentity(id: string, input: PlaybillPe
 
 export async function fetchPlaybillShowRoleById(id: string) {
   const supabase = createPlaybillIntegrationClient();
+  const contract = await supabase
+    .schema("app_playbill")
+    .rpc("production_management_show_roles", { p_show_id: null, p_role_id: id });
+  if (!contract.error) {
+    return (((contract.data ?? []) as PlaybillShowRole[])[0] ?? null);
+  }
+  if (!isMissingReadContractError(contract.error)) {
+    throw new Error(`Playbill server authorization failed: ${contract.error.message}`);
+  }
+
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -261,6 +332,14 @@ export async function fetchPlaybillShowRoleById(id: string) {
 
 export async function fetchPlaybillShowRoles(showId: string) {
   const supabase = createPlaybillIntegrationClient();
+  const contract = await supabase
+    .schema("app_playbill")
+    .rpc("production_management_show_roles", { p_show_id: showId, p_role_id: null });
+  if (!contract.error) return (contract.data ?? []) as PlaybillShowRole[];
+  if (!isMissingReadContractError(contract.error)) {
+    throw new Error(`Playbill server authorization failed: ${contract.error.message}`);
+  }
+
   const { data, error } = await supabase
     .schema("app_playbill")
     .from("show_roles")
@@ -273,24 +352,12 @@ export async function fetchPlaybillShowRoles(showId: string) {
 }
 
 export async function findPlaybillShowRole(input: PlaybillRoleInput) {
-  const supabase = createPlaybillIntegrationClient();
-  let query = supabase
-    .schema("app_playbill")
-    .from("show_roles")
-    .select("id, show_id, person_id, role_name, category")
-    .eq("show_id", input.showId)
-    .eq("role_name", input.roleName)
-    .eq("category", input.category)
-    .limit(1);
-
-  query = input.personId ? query.eq("person_id", input.personId) : query.is("person_id", null);
-  const { data, error } = await query.maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data as PlaybillShowRole | null;
+  const contractRoles = await fetchPlaybillShowRoles(input.showId);
+  return contractRoles.find((role) =>
+    role.role_name === input.roleName
+      && role.category === input.category
+      && (role.person_id ?? null) === (input.personId ?? null)
+  ) ?? null;
 }
 
 export async function createPlaybillShowRole(input: PlaybillRoleInput) {
