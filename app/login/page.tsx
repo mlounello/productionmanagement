@@ -28,8 +28,10 @@ async function signIn(formData: FormData) {
   if (allowProductionMagicLinkRequest(email, clientAddress)) {
     try {
       await sendAuthorizedProductionMagicLink(email, `${origin.replace(/\/+$/, "")}/auth/callback`);
-    } catch {
-      console.error("[production-magic-link] Request could not be completed.");
+    } catch (error) {
+      console.error("[production-magic-link] Request could not be completed.", {
+        message: error instanceof Error ? error.message.slice(0, 160) : "unknown",
+      });
     }
   }
 
