@@ -11,7 +11,7 @@ export function renderTemplate(template: string, variables: TemplateVariables, h
   return template.replace(/{{\s*([a-z0-9_]+)\s*}}/gi, (_match, key: string) => html ? escapeHtml(variables[key] ?? "") : variables[key] ?? "");
 }
 
-export type HtmlEmailInput = { to: string; subject: string; html: string };
+export type HtmlEmailInput = { to: string; subject: string; html: string; from?: string };
 
 export class OutboundEmailError extends Error {
   constructor(message: string, readonly status: number, readonly retryable: boolean) {
@@ -71,7 +71,8 @@ async function requestResend(path: string, body: unknown, idempotencyKey: string
 }
 
 export async function sendHtmlEmail(input: HtmlEmailInput, options: { idempotencyKey?: string } = {}) {
-  const { from } = providerCredentials();
+  const { from: configuredFrom } = providerCredentials();
+  const from = input.from?.trim() || configuredFrom;
   const payload = await requestResend("/emails", { from, to: [input.to], subject: input.subject, html: input.html }, options.idempotencyKey ?? `pm-email-${crypto.randomUUID()}`);
   return { id: String(payload.id ?? "") };
 }
@@ -79,8 +80,8 @@ export async function sendHtmlEmail(input: HtmlEmailInput, options: { idempotenc
 export async function sendHtmlEmailBatch(inputs: HtmlEmailInput[], options: { idempotencyKey?: string } = {}) {
   if (!inputs.length) return [];
   if (inputs.length > 100) throw new Error("Resend batches cannot contain more than 100 emails.");
-  const { from } = providerCredentials();
-  const body = inputs.map((input) => ({ from, to: [input.to], subject: input.subject, html: input.html }));
+  const { from: configuredFrom } = providerCredentials();
+  const body = inputs.map((input) => ({ from: input.from?.trim() || configuredFrom, to: [input.to], subject: input.subject, html: input.html }));
   const payload = await requestResend("/emails/batch", body, options.idempotencyKey ?? `pm-batch-${crypto.randomUUID()}`);
   const data = Array.isArray(payload.data) ? payload.data as Array<Record<string, unknown>> : [];
   if (data.length !== inputs.length) throw new OutboundEmailError("Resend returned an incomplete batch response. Recipient statuses were preserved for review.", 502, true);

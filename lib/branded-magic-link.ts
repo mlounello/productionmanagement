@@ -101,6 +101,7 @@ export async function sendAuthorizedProductionMagicLink(email: string, redirectT
   const link = await createDirectLink(normalized, redirectTo);
   await sendHtmlEmail(
     {
+      from: process.env.MAGIC_LINK_FROM_EMAIL?.trim() || "Production Management <noreply@mlounello.com>",
       to: normalized,
       subject: "Your Production Management sign-in link",
       html:
