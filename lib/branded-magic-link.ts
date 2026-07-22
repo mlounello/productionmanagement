@@ -56,27 +56,17 @@ async function findAuthUserId(email: string) {
 
 async function hasStaffAccess(userId: string) {
   const admin = createSupabaseAdminClient();
-  const [coreMembership, projectMembership] = await Promise.all([
-    admin
-      .schema("core")
-      .from("app_memberships")
-      .select("user_id")
-      .eq("user_id", userId)
-      .eq("app_id", APP_ID)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle(),
-    admin
-      .from("project_memberships")
-      .select("user_id")
-      .eq("user_id", userId)
-      .eq("active", true)
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const coreMembership = await admin
+    .schema("core")
+    .from("app_memberships")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("app_id", APP_ID)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
   if (coreMembership.error) throw coreMembership.error;
-  if (projectMembership.error) throw projectMembership.error;
-  return Boolean(coreMembership.data || projectMembership.data);
+  return Boolean(coreMembership.data);
 }
 
 async function createDirectLink(email: string, redirectTo: string) {
