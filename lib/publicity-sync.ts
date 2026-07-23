@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { ENABLE_PLAYBILL_WRITES } from "@/lib/config";
+import { ENABLE_PLAYBILL_OUTBOX, ENABLE_PLAYBILL_WRITES } from "@/lib/config";
+import { requestPlaybillOutboxDrain } from "@/lib/playbill-outbox";
 import { publicitySyncBlockReason, publicityWritesDisabledReason, type PlaybillPublicityWriteState } from "@/lib/publicity-sync-policy";
 import { stripRichTextToPlain } from "@/lib/rich-text";
 
@@ -41,6 +42,15 @@ export async function syncApprovedPublicityToPlaybill(submissionId: string) {
   if (stateError) throw new PublicitySyncError(stateError.message);
   const blockReason = publicitySyncBlockReason(writeState as PlaybillPublicityWriteState | null);
   if (blockReason) throw new PublicitySyncError(blockReason);
+
+  if (ENABLE_PLAYBILL_OUTBOX) {
+    const { error: enqueueError } = await supabase.rpc("enqueue_playbill_publicity_event", {
+      target_submission_id: submissionId,
+    });
+    if (enqueueError) throw new PublicitySyncError(enqueueError.message);
+    await requestPlaybillOutboxDrain();
+    return;
+  }
 
   const { error } = await supabase.rpc("push_publicity_to_playbill", { target_submission_id: submissionId });
   if (error) throw new PublicitySyncError(error.message);

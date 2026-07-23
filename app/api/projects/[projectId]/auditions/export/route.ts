@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { readAuditionFileBytes } from "@/lib/audition-file-storage";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     supabase.from("audition_form_fields").select("form_id, field_key, label, sensitivity, export_group, sort_order").order("sort_order"),
     supabase.from("project_roles").select("id, name").eq("project_id", projectId).order("name")
   ]);
-  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data)").eq("project_id", projectId).is("cancelled_at", null);
+  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data, storage_bucket, storage_path, sha256)").eq("project_id", projectId).is("cancelled_at", null);
   if (!allApplicants) submissionQuery = submissionQuery.in("id", selectedIds);
   const { data: submissions, error } = await submissionQuery; if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const formMap = new Map((forms ?? []).map((form) => [String(form.id), String(form.title)]));
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const person = row.people as Record<string,unknown>|null; const name = clean(person?.preferred_name||person?.full_name||"Applicant"); const answers=(row.answers??{}) as Record<string,unknown>;
       let page=pdf.addPage([PAGE.width,PAGE.height]); let y=header(page,titleFont,bodyFont,String(project?.title??"Production"),`${exportType==="supplement"?"Selective Supplement":"Director Audition Packet"} · ${name} · ${index+1}/${rows.length}`,sensitiveIncluded);
       const files=(row.audition_files as Array<Record<string,unknown>>|null)??[]; const headshot=files.find((file)=>file.field_key==="headshot"&&["image/png","image/jpeg","image/jpg"].includes(String(file.content_type).toLowerCase()));
-      if(included.includes("headshot")&&headshot){try{const raw=String(headshot.file_data??"").replace(/^\\x/,"");const imageBytes=Buffer.from(raw,"hex");const embedded=String(headshot.content_type).toLowerCase()==="image/png"?await pdf.embedPng(imageBytes):await pdf.embedJpg(imageBytes);const scale=Math.min(95/embedded.width,112/embedded.height);page.drawImage(embedded,{x:475,y:575,width:embedded.width*scale,height:embedded.height*scale});}catch{/* A corrupt image should not block the rest of the packet. */}}
+      if(included.includes("headshot")&&headshot){try{const imageBytes=await readAuditionFileBytes(headshot);const embedded=String(headshot.content_type).toLowerCase()==="image/png"?await pdf.embedPng(imageBytes):await pdf.embedJpg(imageBytes);const scale=Math.min(95/embedded.width,112/embedded.height);page.drawImage(embedded,{x:475,y:575,width:embedded.width*scale,height:embedded.height*scale});}catch{/* A missing or corrupt image should not block the rest of the packet. */}}
       const identity = [`Name: ${name}`,`Email: ${clean(person?.email)}`,`Pronouns: ${clean(person?.pronouns)}`].filter(Boolean).join("   |   "); for(const line of wrap(identity,titleFont,10,headshot&&included.includes("headshot")?410:528)){page.drawText(line,{x:PAGE.margin,y,font:titleFont,size:10});y-=13;} y-=11;if(headshot&&included.includes("headshot"))y=Math.min(y,560);
       if(included.includes("resume")){const resume=files.find((file)=>file.field_key==="resume");if(resume){const result=drawAnswer(page,titleFont,bodyFont,y,"Résumé Upload",String(resume.file_name));y=result.y;}}
       const formFields=(fields??[]).filter((field)=>String(field.form_id)===String(row.form_id)&&included.includes(String(field.export_group)));
