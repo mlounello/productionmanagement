@@ -11,28 +11,33 @@ const workspace = await readFile(
   "utf8"
 );
 
-test("person creation confirms the inserted row before reporting success", () => {
+test("person creation uses the atomic project-roster RPC before reporting success", () => {
   const action = actions.match(
     /export async function createPersonAction[\s\S]*?\n}\n\nexport async function createRoleAssignmentAction/
   )?.[0] ?? "";
 
-  assert.match(action, /\.insert\(\{[\s\S]*?\}\)[\s\S]*?\.select\("id"\)[\s\S]*?\.single\(\)/);
+  assert.match(action, /\.rpc\("create_project_person"/);
   assert.match(action, /if \(error \|\| !createdPerson\)/);
 });
 
-test("person creation returns to People with an assignment-aware success message", () => {
+test("person creation returns to People with an unassigned roster message", () => {
   const action = actions.match(
     /export async function createPersonAction[\s\S]*?\n}\n\nexport async function createRoleAssignmentAction/
   )?.[0] ?? "";
 
   assert.match(action, /revalidatePath\("\/people"\)/);
   assert.match(action, /projectSuccessPath\([\s\S]*?"people"[\s\S]*?\)/);
-  assert.match(action, /ready to assign to a project role/);
+  assert.match(action, /added to this project with an unassigned role/);
 });
 
-test("the Add Person form explains when profiles enter the project directory", () => {
+test("the Add Person form explains immediate project roster visibility", () => {
   assert.match(
     workspace,
-    /A new profile becomes visible in this project directory after it is assigned to its first project role\./
+    /A manually added person appears in this project directory immediately as Unassigned\./
   );
+});
+
+test("budget-access saves return to the same assignment card", () => {
+  assert.match(actions, /projectAssignmentDetailSuccessPath/);
+  assert.match(workspace, /id=\{`assignment-\$\{assignment\.id\}`\}/);
 });

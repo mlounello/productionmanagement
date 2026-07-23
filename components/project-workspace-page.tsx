@@ -454,12 +454,21 @@ export default async function ProjectWorkspacePage({
   const roles = (projectRoles ?? []) as ProjectRole[];
   const peopleRows = (people ?? []) as Person[];
   const assignmentRows = (roleAssignments ?? []) as RoleAssignment[];
+  const { data: projectPeople } = workspace === "people"
+    ? await supabase
+        .from("project_people")
+        .select("person_id")
+        .eq("project_id", typedProject.id)
+    : { data: [] };
   const { data: projectOptions } = await supabase
     .from("projects")
     .select("id, title")
     .order("title", { ascending: true });
   const reusableRoleProjects = (projectOptions ?? []).filter((project) => project.id !== typedProject.id);
-  const projectPersonIds = Array.from(new Set(assignmentRows.map((assignment) => assignment.person_id)));
+  const projectPersonIds = Array.from(new Set([
+    ...assignmentRows.map((assignment) => assignment.person_id),
+    ...(projectPeople ?? []).map((row) => String(row.person_id))
+  ]));
   const { data: personNotes } = workspace === "people" && projectPersonIds.length
     ? await supabase
         .from("person_notes")
@@ -1205,7 +1214,7 @@ export default async function ProjectWorkspacePage({
             <div>
               <p className="eyebrow">People Files</p>
               <h2>Add Person</h2>
-              <p className="muted">Create durable profiles that can later connect to Playbill, auditions, and recognition. A new profile becomes visible in this project directory after it is assigned to its first project role.</p>
+              <p className="muted">Create durable profiles that can later connect to Playbill, auditions, and recognition. A manually added person appears in this project directory immediately as Unassigned.</p>
             </div>
           </div>
           <form action={createPersonAction} className="stacked-form">
@@ -1392,7 +1401,7 @@ export default async function ProjectWorkspacePage({
                 : new Set(suggestedBudgetCategory ? [suggestedBudgetCategory.id] : []);
 
               return (
-                <details className="assignment-card" key={assignment.id}>
+                <details className="assignment-card" id={`assignment-${assignment.id}`} key={assignment.id}>
                   <summary>
                     <div>
                       <strong>{person?.full_name ?? "Unknown person"}</strong>

@@ -281,6 +281,14 @@ function projectAssignmentSuccessPath(projectId: string, message: string) {
   return `${projectSuccessPath(projectId, message, "roles")}#assignments`;
 }
 
+function projectAssignmentDetailErrorPath(projectId: string, assignmentId: string, message: string) {
+  return `${projectErrorPath(projectId, message, "roles")}#assignment-${assignmentId}`;
+}
+
+function projectAssignmentDetailSuccessPath(projectId: string, assignmentId: string, message: string) {
+  return `${projectSuccessPath(projectId, message, "roles")}#assignment-${assignmentId}`;
+}
+
 function slugify(value: string) {
   return value
     .trim()
@@ -660,21 +668,20 @@ export async function createPersonAction(formData: FormData) {
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data: createdPerson, error } = await supabase
-    .from("people")
-    .insert({
-      first_name: input.firstName ?? "",
-      last_name: input.lastName ?? "",
-      preferred_name: input.preferredName ?? "",
-      full_name: input.fullName,
-      email: input.email ?? "",
-      vendor_number: input.vendorNumber ?? "",
-      phone: input.phone ?? "",
-      pronouns: input.pronouns ?? "",
-      affiliation: input.affiliation ?? "",
-      person_type: input.personType
-    })
-    .select("id")
-    .single();
+    .schema("app_production_management")
+    .rpc("create_project_person", {
+      p_project_id: input.projectId,
+      p_first_name: input.firstName ?? "",
+      p_last_name: input.lastName ?? "",
+      p_preferred_name: input.preferredName ?? "",
+      p_full_name: input.fullName,
+      p_email: input.email ?? "",
+      p_vendor_number: input.vendorNumber ?? "",
+      p_phone: input.phone ?? "",
+      p_pronouns: input.pronouns ?? "",
+      p_affiliation: input.affiliation ?? "",
+      p_person_type: input.personType
+    });
 
   if (error || !createdPerson) {
     redirect(projectErrorPath(input.projectId, error?.message ?? "Person creation returned no record."));
@@ -684,7 +691,7 @@ export async function createPersonAction(formData: FormData) {
   revalidatePath("/people");
   redirect(projectSuccessPath(
     input.projectId,
-    `${input.fullName} was created and is ready to assign to a project role. New profiles appear in this project directory after their first assignment.`,
+    `${input.fullName} was added to this project with an unassigned role.`,
     "people"
   ));
 }
@@ -1477,7 +1484,11 @@ export async function saveRoleAssignmentBudgetAccessAction(formData: FormData) {
     redirect(`/projects?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid Budget access selection.")}`);
   }
   if (!ENABLE_ROLE_BUDGET_ACCESS_BRIDGE) {
-    redirect(projectErrorPath(parsed.data.projectId, "Role-based Budget access saving is disabled in this environment."));
+    redirect(projectAssignmentDetailErrorPath(
+      parsed.data.projectId,
+      parsed.data.assignmentId,
+      "Role-based Budget access saving is disabled in this environment."
+    ));
   }
 
   const supabase = await createSupabaseServerClient();
@@ -1487,8 +1498,12 @@ export async function saveRoleAssignmentBudgetAccessAction(formData: FormData) {
     .eq("id", parsed.data.assignmentId)
     .eq("project_id", parsed.data.projectId)
     .maybeSingle();
-  if (error) redirect(projectErrorPath(parsed.data.projectId, error.message));
-  if (!assignment) redirect(projectErrorPath(parsed.data.projectId, "Role assignment not found or not manageable."));
+  if (error) redirect(projectAssignmentDetailErrorPath(parsed.data.projectId, parsed.data.assignmentId, error.message));
+  if (!assignment) redirect(projectAssignmentDetailErrorPath(
+    parsed.data.projectId,
+    parsed.data.assignmentId,
+    "Role assignment not found or not manageable."
+  ));
 
   const { data: resultData, error: configurationError } = await supabase
     .schema("app_production_management")
@@ -1498,14 +1513,19 @@ export async function saveRoleAssignmentBudgetAccessAction(formData: FormData) {
       actor_user_id: user.id
     });
   if (configurationError) {
-    redirect(projectErrorPath(parsed.data.projectId, configurationError.message));
+    redirect(projectAssignmentDetailErrorPath(
+      parsed.data.projectId,
+      parsed.data.assignmentId,
+      configurationError.message
+    ));
   }
   const result = (resultData ?? {}) as Record<string, unknown>;
   const configuredCount = Number(result.configured_count ?? parsed.data.categoryIds.length);
   const status = String(result.status ?? "updated");
   revalidatePath(`/projects/${parsed.data.projectId}`);
-  redirect(projectSuccessPath(
+  redirect(projectAssignmentDetailSuccessPath(
     parsed.data.projectId,
+    parsed.data.assignmentId,
     configuredCount === 0
       ? "View-only Budget access removed from this role assignment."
       : `${configuredCount} view-only Budget department${configuredCount === 1 ? "" : "s"} saved (${status.replaceAll("_", " ")}).`
