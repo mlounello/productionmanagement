@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createOrAdoptGoogleGroup, generateGoogleGroupEmail } from "@/lib/google-groups";
 import { testGoogleGroupMembershipAccess } from "@/lib/google-group-membership";
-import { checkAssignmentGoogleMembership, resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
+import { resendAssignmentWelcome, syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { renderTemplate, sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SITE_URL } from "@/lib/config";
@@ -111,7 +111,19 @@ export async function sendRoleGroupWelcomeTestAction(formData: FormData) {
 
 export async function retryAssignmentGoogleSyncAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const assignmentId = uuid.parse(formData.get("assignmentId")); const { user } = await context(projectId);
-  const result = await checkAssignmentGoogleMembership(projectId, assignmentId, user.id); redirect(route(projectId, result.skipped ? "That assignment is skipped." : result.warnings.length ? result.warnings.join(" ") : result.status === "verified" ? "Google Group membership verified." : `Membership check status: ${result.status.replace(/_/g, " ")}.`, result.warnings.length > 0));
+  const result = await syncAssignmentGoogleAutomation(projectId, assignmentId, user.id);
+  if (result.assignmentSkipped) redirect(route(projectId, "That assignment is skipped."));
+  if (result.membershipStatus !== "verified") {
+    redirect(route(projectId, result.warnings.join(" ") || `Membership check status: ${result.membershipStatus.replace(/_/g, " ")}.`, true));
+  }
+  const welcomeMessage = result.welcomeStatus === "sent"
+    ? " Membership verified and the pending welcome email was sent."
+    : result.welcomeStatus === "already_sent"
+      ? " Membership verified; the welcome email had already been sent."
+      : result.warnings.length
+        ? ` Membership verified, but the welcome needs attention: ${result.warnings.join(" ")}`
+        : ` Membership verified. Welcome status: ${result.welcomeStatus.replace(/_/g, " ")}.`;
+  redirect(route(projectId, welcomeMessage.trim(), result.warnings.length > 0));
 }
 
 export async function recheckRoleGroupMembershipsAction(formData: FormData) {
@@ -121,13 +133,19 @@ export async function recheckRoleGroupMembershipsAction(formData: FormData) {
   const roleIds = (roles ?? []).map((role) => String(role.id));
   const { data: assignments, error } = roleIds.length ? await supabase.from("role_assignments").select("id").eq("project_id", projectId).in("role_id", roleIds) : { data: [], error: null };
   if (error) redirect(route(projectId, error.message, true));
-  let verified = 0; let needsAttention = 0; let skipped = 0;
+  let completed = 0; let needsAttention = 0; let skipped = 0; let welcomesSent = 0;
   for (const assignment of assignments ?? []) {
-    try { const result = await checkAssignmentGoogleMembership(projectId, String(assignment.id), user.id); if (result.skipped || !["verified", "missing", "failed"].includes(result.status)) skipped += 1; else if (result.warnings.length) needsAttention += 1; else verified += 1; }
+    try {
+      const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id);
+      if (result.membershipStatus === "skipped" || !["verified", "missing", "failed"].includes(result.membershipStatus)) skipped += 1;
+      else if (result.membershipStatus !== "verified" || result.warnings.length) needsAttention += 1;
+      else completed += 1;
+      if (result.welcomeStatus === "sent") welcomesSent += 1;
+    }
     catch { needsAttention += 1; }
   }
   revalidatePath(route(projectId));
-  redirect(route(projectId, `${roleGroupSlug.replace(/_/g, " ")}: ${verified} verified; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
+  redirect(route(projectId, `${roleGroupSlug.replace(/_/g, " ")}: ${completed} verified and continued; ${welcomesSent} pending welcome${welcomesSent === 1 ? "" : "s"} sent; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
 }
 
 export async function sendRoleGroupWelcomesAction(formData: FormData) {
@@ -153,13 +171,19 @@ export async function recheckAllGoogleMembershipsAction(formData: FormData) {
   const projectId = uuid.parse(formData.get("projectId")); const { user, supabase } = await context(projectId);
   const { data: assignments, error } = await supabase.from("role_assignments").select("id").eq("project_id", projectId);
   if (error) redirect(route(projectId, error.message, true));
-  let verified = 0; let needsAttention = 0; let skipped = 0;
+  let completed = 0; let needsAttention = 0; let skipped = 0; let welcomesSent = 0;
   for (const assignment of assignments ?? []) {
-    try { const result = await checkAssignmentGoogleMembership(projectId, String(assignment.id), user.id); if (result.skipped || !["verified", "missing", "failed"].includes(result.status)) skipped += 1; else if (result.warnings.length) needsAttention += 1; else verified += 1; }
+    try {
+      const result = await syncAssignmentGoogleAutomation(projectId, String(assignment.id), user.id);
+      if (result.membershipStatus === "skipped" || !["verified", "missing", "failed"].includes(result.membershipStatus)) skipped += 1;
+      else if (result.membershipStatus !== "verified" || result.warnings.length) needsAttention += 1;
+      else completed += 1;
+      if (result.welcomeStatus === "sent") welcomesSent += 1;
+    }
     catch { needsAttention += 1; }
   }
   revalidatePath(route(projectId));
-  redirect(route(projectId, `All groups: ${verified} verified; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
+  redirect(route(projectId, `All groups: ${completed} verified and continued; ${welcomesSent} pending welcome${welcomesSent === 1 ? "" : "s"} sent; ${needsAttention} need attention; ${skipped} skipped.`, needsAttention > 0));
 }
 
 export async function setAssignmentGoogleAutomationSkippedAction(formData: FormData) {

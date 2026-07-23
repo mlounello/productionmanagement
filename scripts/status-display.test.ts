@@ -10,6 +10,8 @@ assert.equal(statusTone("submitted"), "info");
 assert.equal(statusTone("linked"), "success");
 assert.equal(statusTone("vacant"), "info");
 assert.equal(statusTone("offered"), "warning");
+assert.equal(statusTone("awaiting_membership"), "warning");
 assert.equal(statusTone("accepted"), "success");
 assert.match(statusDescription("missing", "google-membership"), /not found/i);
+assert.match(statusDescription("awaiting_membership", "welcome-email"), /held/i);
 assert.match(statusDescription("locked", "playbill"), /read-only/i);
