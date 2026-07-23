@@ -659,24 +659,34 @@ export async function createPersonAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("people").insert({
-    first_name: input.firstName ?? "",
-    last_name: input.lastName ?? "",
-    preferred_name: input.preferredName ?? "",
-    full_name: input.fullName,
-    email: input.email ?? "",
-    vendor_number: input.vendorNumber ?? "",
-    phone: input.phone ?? "",
-    pronouns: input.pronouns ?? "",
-    affiliation: input.affiliation ?? "",
-    person_type: input.personType
-  });
+  const { data: createdPerson, error } = await supabase
+    .from("people")
+    .insert({
+      first_name: input.firstName ?? "",
+      last_name: input.lastName ?? "",
+      preferred_name: input.preferredName ?? "",
+      full_name: input.fullName,
+      email: input.email ?? "",
+      vendor_number: input.vendorNumber ?? "",
+      phone: input.phone ?? "",
+      pronouns: input.pronouns ?? "",
+      affiliation: input.affiliation ?? "",
+      person_type: input.personType
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    redirect(projectErrorPath(input.projectId, error.message));
+  if (error || !createdPerson) {
+    redirect(projectErrorPath(input.projectId, error?.message ?? "Person creation returned no record."));
   }
 
   revalidatePath(`/projects/${input.projectId}`);
+  revalidatePath("/people");
+  redirect(projectSuccessPath(
+    input.projectId,
+    `${input.fullName} was created and is ready to assign to a project role. New profiles appear in this project directory after their first assignment.`,
+    "people"
+  ));
 }
 
 export async function createRoleAssignmentAction(formData: FormData) {

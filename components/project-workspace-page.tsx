@@ -1205,7 +1205,7 @@ export default async function ProjectWorkspacePage({
             <div>
               <p className="eyebrow">People Files</p>
               <h2>Add Person</h2>
-              <p className="muted">Create durable profiles that can later connect to Playbill, auditions, and recognition.</p>
+              <p className="muted">Create durable profiles that can later connect to Playbill, auditions, and recognition. A new profile becomes visible in this project directory after it is assigned to its first project role.</p>
             </div>
           </div>
           <form action={createPersonAction} className="stacked-form">

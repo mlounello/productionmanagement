@@ -21,6 +21,7 @@
     "test:audition-upload": "node --experimental-strip-types --test scripts/audition-upload.test.ts",
     "test:credential-config": "node --experimental-strip-types --test scripts/credential-config.test.ts",
     "test:phase5a-integrations": "node --test scripts/phase5a-integration-boundaries.test.mjs",
+    "test:phase6-person-creation": "node --test scripts/phase6-person-creation.test.mjs",
     "verify:admin-credential": "node --experimental-strip-types scripts/verify-admin-credential.ts"
   },
   "dependencies": {
