@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { availableActorRoleNames } from "@/lib/audition-director-notes";
 import { readAuditionFileBytes } from "@/lib/audition-file-storage";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
@@ -47,13 +48,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     supabase.from("projects").select("title").eq("id", projectId).single(),
     supabase.from("audition_forms").select("id, title").eq("project_id", projectId),
     supabase.from("audition_form_fields").select("form_id, field_key, label, sensitivity, export_group, sort_order").order("sort_order"),
-    supabase.from("project_roles").select("id, name").eq("project_id", projectId).order("name")
+    supabase.from("project_roles").select("id, name, role_group, role_assignments(status)").eq("project_id", projectId).order("name")
   ]);
   let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots!audition_submissions_slot_id_fkey(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data, storage_bucket, storage_path, sha256)").eq("project_id", projectId).is("cancelled_at", null);
   if (!allApplicants) submissionQuery = submissionQuery.in("id", selectedIds);
   const { data: submissions, error } = await submissionQuery; if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const formMap = new Map((forms ?? []).map((form) => [String(form.id), String(form.title)]));
   const roleNameById = new Map((roles ?? []).map((role) => [String(role.id), String(role.name)]));
+  const directorNotesRoles = [
+    ...availableActorRoleNames(roles ?? []),
+    "Ensemble",
+  ];
   const rows = [...(submissions ?? [])] as Array<Record<string, unknown>>;
   rows.sort((a,b) => {
     const pa = a.people as Record<string,unknown>|null; const pb = b.people as Record<string,unknown>|null;
@@ -76,7 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const formFields=(fields??[]).filter((field)=>String(field.form_id)===String(row.form_id)&&included.includes(String(field.export_group)));
       for(const field of formFields){const raw=answers[String(field.field_key)];const value=String(field.field_key)==="role_interests"?(Array.isArray(raw)?raw:[raw]).filter(Boolean).map((id)=>roleNameById.get(String(id))??String(id)).join(", "):clean(raw);if(hideBlank&&!value)continue;let result=drawAnswer(page,titleFont,bodyFont,y,String(field.label),value);if(result.overflow){page=pdf.addPage([PAGE.width,PAGE.height]);y=header(page,titleFont,bodyFont,String(project?.title??"Production"),`${name} · continued`,sensitiveIncluded);result=drawAnswer(page,titleFont,bodyFont,y,String(field.label),value);}y=result.y;if(compact)y+=5;}
       if(included.includes("reviewer_notes")){const independent=(row.audition_reviews as Array<Record<string,unknown>>|null)??[];const reviewText=[clean(row.private_notes),...independent.map((review)=>`${clean(review.recommendation)}${review.notes?`\n${clean(review.notes)}`:""}`)].filter(Boolean).join("\n\n");const result=drawAnswer(page,titleFont,bodyFont,y,"Reviewer Notes",reviewText);y=result.y;}
-      if(notesPage){const notes=pdf.addPage([PAGE.width,PAGE.height]);let ny=header(notes,titleFont,bodyFont,String(project?.title??"Production"),`Director Notes · ${name}`,false);notes.drawText("ROLE CONSIDERATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=18;(roles??[]).slice(0,24).forEach((role,roleIndex)=>{const col=roleIndex%2;const rowIndex=Math.floor(roleIndex/2);const x=PAGE.margin+col*260;const yy=ny-rowIndex*18;notes.drawRectangle({x,y:yy-2,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(String(role.name),{x:x+15,y:yy-1,font:bodyFont,size:9});});ny-=Math.ceil(Math.min((roles??[]).length,24)/2)*18+12;notes.drawText("RECOMMENDATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=20;["Callback","Considering","Cast","Not cast","Needs discussion"].forEach((label,i)=>{notes.drawRectangle({x:PAGE.margin+i*100,y:ny,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(label,{x:PAGE.margin+i*100+14,y:ny+1,font:bodyFont,size:8});});ny-=30;notes.drawText("NOTES",{x:PAGE.margin,y:ny,font:titleFont,size:10});for(let line=0;line<22;line++){ny-=24;notes.drawLine({start:{x:PAGE.margin,y:ny},end:{x:570,y:ny},thickness:.5,color:rgb(.72,.76,.73)});}}
+      if(notesPage){const notes=pdf.addPage([PAGE.width,PAGE.height]);let ny=header(notes,titleFont,bodyFont,String(project?.title??"Production"),`Director Notes · ${name}`,false);notes.drawText("ROLE CONSIDERATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=18;directorNotesRoles.slice(0,24).forEach((roleName,roleIndex)=>{const col=roleIndex%2;const rowIndex=Math.floor(roleIndex/2);const x=PAGE.margin+col*260;const yy=ny-rowIndex*18;notes.drawRectangle({x,y:yy-2,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(roleName,{x:x+15,y:yy-1,font:bodyFont,size:9});});ny-=Math.ceil(Math.min(directorNotesRoles.length,24)/2)*18+12;notes.drawText("RECOMMENDATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=20;["Callback","Considering","Cast","Not cast","Needs discussion"].forEach((label,i)=>{notes.drawRectangle({x:PAGE.margin+i*100,y:ny,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(label,{x:PAGE.margin+i*100+14,y:ny+1,font:bodyFont,size:8});});ny-=30;notes.drawText("NOTES",{x:PAGE.margin,y:ny,font:titleFont,size:10});for(let line=0;line<22;line++){ny-=24;notes.drawLine({start:{x:PAGE.margin,y:ny},end:{x:570,y:ny},thickness:.5,color:rgb(.72,.76,.73)});}}
     }
   }
   await supabase.from("audition_export_audit").insert({ project_id: projectId, generated_by: user.id, export_type: exportType, submission_ids: rows.map((row)=>String(row.id)), included_fields: included, settings: { notes_page: notesPage, hide_blank: hideBlank, compact, sensitive_included: sensitiveIncluded } });
