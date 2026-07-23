@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:google-groups": "node --test scripts/google-group-naming.test.mjs",
     "test:google-welcome-policy": "node --experimental-strip-types --test scripts/google-group-welcome-policy.test.ts",
+    "test:welcome-email-layout": "node --experimental-strip-types --test scripts/role-group-welcome-email.test.ts",
     "test:publicity-safety": "node --experimental-strip-types --test scripts/publicity-sync-policy.test.ts",
     "test:operations-dashboard": "node --experimental-strip-types --test scripts/operations-dashboard.test.ts",
     "test:project-routes": "node --experimental-strip-types --test scripts/project-routes.test.ts",

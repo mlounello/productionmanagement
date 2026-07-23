@@ -7,6 +7,7 @@ import {
   AWAITING_GOOGLE_MEMBERSHIP_MESSAGE,
   shouldHoldAutomaticWelcome,
 } from "@/lib/google-group-welcome-policy";
+import { formatRoleGroupWelcomeEmail } from "@/lib/role-group-welcome-email";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 type Context = {
@@ -61,8 +62,15 @@ async function sendWelcome(supabase: Client, context: Context, settings: Record<
   }
   const profileAccess = await createProfileAccessUrl({ id: context.personId, email: context.personEmail }, actorUserId);
   const variables = { person_name: context.personName, project_title: context.projectTitle, role_name: context.roleName, role_group: context.roleGroup.replace(/_/g, " "), google_group_email: String(settings.active_google_group_email ?? ""), propared_rolegroup_link: String(settings.propared_role_group_link ?? ""), profile_access_url: profileAccess.url };
-  const subject = renderTemplate(String(template.subject_template), variables); let html = renderTemplate(String(template.body_template), variables, true);
-  if(!String(template.body_template).includes("{{profile_access_url}}")) html += `<hr style="margin:28px 0;border:0;border-top:1px solid #d7e2dc"><h2>Complete your public production profile</h2><p>Use Production Management to review your contact information, add a reusable headshot, and prepare your show-specific biography for Playbill.</p><p style="margin:24px 0"><a href="${profileAccess.url}" style="background:#006b54;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Open My Production Profile</a></p><p>This private link is already connected to the email address where this message was delivered. No account setup or email re-entry is required, and the link should not be shared.</p>`;
+  const subject = renderTemplate(String(template.subject_template), variables);
+  const templateSource = String(template.body_template);
+  const html = formatRoleGroupWelcomeEmail({
+    bodyHtml: renderTemplate(templateSource, variables, true),
+    templateSource,
+    projectTitle: context.projectTitle,
+    roleGroup: context.roleGroup,
+    profileAccessUrl: profileAccess.url,
+  });
   const { data: message } = await supabase.from("email_messages").insert({ project_id: context.projectId, person_id: context.personId, template_id: template.id, message_type: "role_group_welcome", to_email: context.personEmail, subject, body: html, status: "queued", created_by: actorUserId }).select("id").single();
   try {
     const provider = await sendHtmlEmail({ to: context.personEmail, subject, html });
