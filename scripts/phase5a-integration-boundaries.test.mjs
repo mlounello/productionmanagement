@@ -12,6 +12,7 @@ test("Playbill cross-app access is server-only and uses the app-held credential"
   assert.doesNotMatch(playbillSource, /createSupabaseServerClient/);
   assert.match(playbillSource, /production_management_shows/);
   assert.match(playbillSource, /production_management_show_roles/);
+  assert.match(playbillSource, /findPlaybillShowRoleSlot/);
 });
 
 test("Theatre Budget cross-app access is server-only and uses the app-held credential", () => {

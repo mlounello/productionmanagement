@@ -360,6 +360,18 @@ export async function findPlaybillShowRole(input: PlaybillRoleInput) {
   ) ?? null;
 }
 
+export async function findPlaybillShowRoleSlot(input: Omit<PlaybillRoleInput, "personId">) {
+  const contractRoles = await fetchPlaybillShowRoles(input.showId);
+  const matchingRoles = contractRoles.filter((role) =>
+    role.role_name === input.roleName && role.category === input.category
+  );
+
+  // Prefer an existing vacant slot. If an older integration already filled the
+  // slot before its local link was recorded, reuse that row instead of creating
+  // a duplicate role during relinking.
+  return matchingRoles.find((role) => !role.person_id) ?? matchingRoles[0] ?? null;
+}
+
 export async function createPlaybillShowRole(input: PlaybillRoleInput) {
   const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase

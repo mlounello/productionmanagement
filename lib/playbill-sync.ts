@@ -9,6 +9,7 @@ import {
   fetchPlaybillShowRoleById,
   findPlaybillPerson,
   findPlaybillShowRole,
+  findPlaybillShowRoleSlot,
   markBioSubmissionRequestSource,
   updatePlaybillPersonIdentity,
   updatePlaybillShowRole,
@@ -149,7 +150,7 @@ export async function syncProjectRoleToPlaybill(projectId: string, roleId: strin
   if (showRole) {
     showRole = await updatePlaybillShowRole(showRole.id, { ...input, personId: showRole.person_id });
   } else {
-    showRole = await findPlaybillShowRole(input);
+    showRole = await findPlaybillShowRoleSlot(input);
     if (!showRole) showRole = await createPlaybillShowRole(input);
   }
 
