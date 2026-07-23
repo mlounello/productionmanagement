@@ -4,6 +4,11 @@ import { deleteGoogleCalendarEvent, upsertGoogleCalendarEvent } from "@/lib/goog
 
 type SlotRow={id:string;starts_at:string;ends_at:string|null;google_calendar_event_id:string|null;audition_sessions:{title:string;location:string;project_id:string}|null};
 const uniqueEmails=(values:string[])=>Array.from(new Set(values.map((value)=>value.trim().toLowerCase()).filter((value)=>value.includes("@"))));
+const errorMessage=(error:unknown,fallback:string)=>{
+  if(error instanceof Error&&error.message)return error.message;
+  if(error&&typeof error==="object"&&"message" in error&&typeof error.message==="string"&&error.message.trim())return error.message;
+  return fallback;
+};
 
 export async function syncAuditionCalendarSlots(projectId:string,slotIds:string[]){
   const admin=createSupabaseAdminClient();
@@ -43,7 +48,7 @@ export async function syncAuditionCalendarSlots(projectId:string,slotIds:string[
       const result=await upsertGoogleCalendarEvent({calendarId:settings.calendar_id,eventId:slot.google_calendar_event_id,title:`${project?.title??"Production"} – ${session?.title??"Audition"}`,description:"Audition appointment managed by Production Management. Please contact the production team if you need assistance.",location:session?.location??"",startsAt:slot.starts_at,endsAt:slot.ends_at??fallbackEnd,guestEmails});
       await admin.from("audition_slots").update({google_calendar_event_id:String(result.eventId??slot.google_calendar_event_id??""),google_calendar_sync_status:"synced",google_calendar_sync_error:"",google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);
       submissionIds.forEach((id)=>submissionResults.set(id,{failed:submissionResults.get(id)?.failed??[],synced:true}));
-    }catch(error){const message=error instanceof Error?error.message:"Calendar sync failed.";warnings.push(message);submissionIds.forEach((id)=>{const current=submissionResults.get(id)??{failed:[],synced:false};submissionResults.set(id,{...current,failed:[...current.failed,message]});});await admin.from("audition_slots").update({google_calendar_sync_status:"failed",google_calendar_sync_error:message,google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);}
+    }catch(error){const message=errorMessage(error,"Calendar sync failed.");warnings.push(message);submissionIds.forEach((id)=>{const current=submissionResults.get(id)??{failed:[],synced:false};submissionResults.set(id,{...current,failed:[...current.failed,message]});});await admin.from("audition_slots").update({google_calendar_sync_status:"failed",google_calendar_sync_error:message,google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);}
   }
   const syncedAt=new Date().toISOString();
   for(const [submissionId,result] of submissionResults){

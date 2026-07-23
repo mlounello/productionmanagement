@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     supabase.from("audition_form_fields").select("form_id, field_key, label, sensitivity, export_group, sort_order").order("sort_order"),
     supabase.from("project_roles").select("id, name").eq("project_id", projectId).order("name")
   ]);
-  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data, storage_bucket, storage_path, sha256)").eq("project_id", projectId).is("cancelled_at", null);
+  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots!audition_submissions_slot_id_fkey(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data, storage_bucket, storage_path, sha256)").eq("project_id", projectId).is("cancelled_at", null);
   if (!allApplicants) submissionQuery = submissionQuery.in("id", selectedIds);
   const { data: submissions, error } = await submissionQuery; if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const formMap = new Map((forms ?? []).map((form) => [String(form.id), String(form.title)]));
