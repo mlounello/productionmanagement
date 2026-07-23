@@ -19,6 +19,9 @@ test("Theatre Budget cross-app access is server-only and uses the app-held crede
   assert.match(theatreBudgetSource, /import "server-only"/);
   assert.match(theatreBudgetSource, /createSupabaseAdminClient/);
   assert.doesNotMatch(theatreBudgetSource, /createSupabaseServerClient/);
+  assert.match(theatreBudgetSource, /production_management_guest_artists/);
+  assert.match(theatreBudgetSource, /production_management_create_guest_artist/);
+  assert.match(theatreBudgetSource, /isMissingGuestArtistContractError/);
 });
 
 test("Playbill writes retain an explicit disabled-by-default feature gate", () => {
