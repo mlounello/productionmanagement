@@ -111,8 +111,8 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
       </div>
 
       <section className="panel workspace-section">
-        <div className="section-heading"><div><p className="eyebrow">Setup</p><h2>Production copies</h2><p className="muted">Preparing is safe to run again: existing edited or approved copies are never overwritten.</p></div>
-          <form action={prepareProjectPublicityAction}><input type="hidden" name="projectId" value={projectId} /><button type="submit">Prepare missing copies</button></form>
+        <div className="section-heading"><div><p className="eyebrow">Setup</p><h2>Production copies</h2><p className="muted">A show-specific copy is created automatically when someone is assigned to this project. The repair action is safe to run: existing edited, approved, or locked copies are never overwritten.</p></div>
+          <form action={prepareProjectPublicityAction}><input type="hidden" name="projectId" value={projectId} /><button type="submit">Repair any missing copies</button></form>
         </div>
         {!playbillLink ? <p className="setup-warning">This project is not linked to a Playbill show. You can prepare and approve copy now, then sync after linking.</p> : null}
       </section>

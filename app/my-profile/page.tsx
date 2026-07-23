@@ -158,7 +158,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             {locked ? <p className="muted">This final Playbill copy remains here for historical reference and can no longer be changed.</p> : null}
             </>}
           </article>;
-        }) : <p className="muted">No production publicity records yet.</p>}
+        }) : <p className="muted">No show-specific bio requests have been assigned to you yet.</p>}
       </div></section>
     </div>
   );

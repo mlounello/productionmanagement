@@ -84,7 +84,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     if (publicityProjects.has(projectId) && !publicityPersonKeys.has(personKey) && !missingPreparedPeople.has(personKey)) {
       missingPreparedPeople.add(personKey);
       const person = joined<PersonJoin>(row.people);
-      add({ id: `publicity-unprepared-${personKey}`, projectId, category: "publicity", kind: "attention", severity: "warning", title: `${personName(person)} has no publicity record`, detail: "Prepare assigned people on the Publicity dashboard before requesting approval.", href: `/projects/${projectId}/publicity`, dueAt: null });
+      add({ id: `publicity-unprepared-${personKey}`, projectId, category: "publicity", kind: "attention", severity: "warning", title: `${personName(person)} has no publicity record`, detail: "Automatic preparation needs repair. Open the Publicity dashboard and run the repair action.", href: `/projects/${projectId}/publicity`, dueAt: null });
     }
   }
 
