@@ -43,7 +43,7 @@ export default async function AuditionControlPage({ params }: { params: Promise<
   });
 
   return <div className="page audition-control-page">
-    <div className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Audition Room</h1><p className="muted">Live check-in, character reads, and reviewer decisions. Every change saves immediately.</p></div><div className="top-actions"><Link className="button secondary" href={`/projects/${projectId}/auditions#review`}>Full applicant review</Link><Link className="button secondary" href={`/projects/${projectId}/overview`}>Project overview</Link></div></div>
+    <div className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Audition Room</h1><p className="muted">Live check-in, character reads, and reviewer decisions. Every change saves immediately.</p></div><div className="top-actions"><Link className="button" href={`/projects/${projectId}/communications#compose`}>Prepare audition emails</Link><Link className="button secondary" href={`/projects/${projectId}/auditions#review`}>Full applicant review</Link><Link className="button secondary" href={`/projects/${projectId}/overview`}>Project overview</Link></div></div>
     <ProjectWorkspaceNav projectId={projectId} active="auditions"/>
     <AuditionRoomControl projectId={projectId} applicants={applicants} roles={(roles ?? []).map((role) => ({ id: String(role.id), name: String(role.name) }))}/>
   </div>;

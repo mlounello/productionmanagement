@@ -63,6 +63,7 @@ export async function sendEmailTemplateTestAction(formData: FormData) {
     propared_rolegroup_link: String(group?.propared_role_group_link ?? base),
     profile_access_url: `${base}/profile-access`,
     role_acceptance_url: base,
+    callback_response_url: `${base}/callbacks/00000000-0000-0000-0000-000000000000`,
     expires_in: "7 days",
     agreement_type: "cast",
     attendance_policy: "Attendance policy: Three unexcused absences may result in removal from the production. Each unexcused late arrival counts as one unexcused absence.",

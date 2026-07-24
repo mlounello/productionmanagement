@@ -13,7 +13,7 @@ const defaults: Record<string, { subject: string; body: string }> = {
   crew_announcement: { subject: "Welcome to the {{project_title}} team", body: "<h3>Hello {{person_name}},</h3><p>Welcome to the <strong>{{project_title}}</strong> production team.</p><p>Your role: <strong>{{role_name}}</strong></p>" },
   role_confirmation: { subject: "Please confirm your role in {{project_title}}", body: "<h3>Hello {{person_name}},</h3><p>Please review and confirm your assignment as <strong>{{role_name}}</strong> for <strong>{{project_title}}</strong>.</p>" },
   audition_reminder: { subject: "{{project_title}} audition reminder", body: "<h3>Hello {{person_name}},</h3><p>This is a reminder about your upcoming audition for <strong>{{project_title}}</strong>.</p>" },
-  audition_callback: { subject: "{{project_title}} callback invitation", body: "<h3>Hello {{person_name}},</h3><p>We would like to invite you to a callback for <strong>{{project_title}}</strong>.</p>" },
+  audition_callback: { subject: "{{project_title}} callback invitation", body: "<h3>Hello {{person_name}},</h3><p>We would like to invite you to a callback for <strong>{{project_title}}</strong>.</p><p><a href=\"{{callback_response_url}}\">Choose or accept your callback time</a></p>" },
   recognition: { subject: "Congratulations on {{recognition_title}}", body: "<h3>Congratulations, {{person_name}}!</h3><p>We are pleased to recognize you for <strong>{{recognition_title}}</strong>.</p>" },
   custom: { subject: "A message about {{project_title}}", body: "<h3>Hello {{person_name}},</h3><p></p>" },
 };
@@ -54,7 +54,7 @@ export function CommunicationComposer({ projectId, templates, roleGroups, assign
     </fieldset>
     <label className="field"><span>Subject</span><input name="subject" value={subject} onChange={(event) => setSubject(event.target.value)} required maxLength={300} /></label>
     <HtmlMessageEditor key={editorKey} name="bodyHtml" initialValue={body} label="HTML email message" />
-    <small>Variables: person_name, full_name, preferred_name, project_title, role_name, role_group. Recognition drafts also support recognition_title, recognition_issuer, recognition_date, and recognition_description.</small>
+    <small>Variables: person_name, full_name, preferred_name, project_title, role_name, role_group. Callback emails support callback_response_url. Recognition drafts also support recognition_title, recognition_issuer, recognition_date, and recognition_description.</small>
     <button type="submit">Generate review draft</button>
   </form>;
 }

@@ -82,10 +82,26 @@ export async function createCommunicationDraftAction(formData: FormData) {
   const selection = audienceFrom(formData);
   const supabase = await createSupabaseServerClient();
   const [{ data: project }, candidates] = await Promise.all([supabase.from("projects").select("title").eq("id", projectId).single(), loadCandidates(projectId)]);
-  const selected = selectCommunicationCandidates(candidates, selection);
+  const candidatePool = messageType === "audition_callback" ? candidates.filter((candidate) => candidate.auditionSubmissionId) : candidates;
+  let selected = selectCommunicationCandidates(candidatePool, selection);
   if (!selected.length) redirect(route(projectId, "error", "No recipients with email addresses matched that audience."));
   if (selected.length > 500) redirect(route(projectId, "error", "A campaign may contain at most 500 recipients. Narrow the audience and create another draft."));
-  const audienceDescription = selection.mode === "all" ? "All assigned people and audition applicants" : selection.mode === "individual" ? `${selected.length} selected people` : `${communicationTypeLabel(selection.mode)}: ${selection.value}`;
+  if (messageType === "audition_callback") {
+    const submissionIds = selected.map((candidate) => candidate.auditionSubmissionId).filter((id): id is string => Boolean(id));
+    const { data: existing } = await supabase.from("callback_invitations").select("submission_id,public_token").in("submission_id", submissionIds);
+    const existingIds = new Set((existing ?? []).map((row) => String(row.submission_id)));
+    const missing = submissionIds.filter((id) => !existingIds.has(id)).map((submissionId) => ({ project_id: projectId, submission_id: submissionId, created_by: user.id, expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() }));
+    if (missing.length) {
+      const { error: inviteError } = await supabase.from("callback_invitations").insert(missing);
+      if (inviteError) redirect(route(projectId, "error", `Callback links could not be prepared: ${inviteError.message}`));
+    }
+    const { data: invitations, error: invitationError } = await supabase.from("callback_invitations").select("submission_id,public_token").in("submission_id", submissionIds);
+    if (invitationError) redirect(route(projectId, "error", `Callback links could not be loaded: ${invitationError.message}`));
+    const tokenBySubmission = new Map((invitations ?? []).map((row) => [String(row.submission_id), String(row.public_token)]));
+    const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://productionmanagement.mlounello.com").replace(/\/+$/, "");
+    selected = selected.map((candidate) => ({ ...candidate, callbackResponseUrl: `${base}/callbacks/${tokenBySubmission.get(candidate.auditionSubmissionId ?? "")}` }));
+  }
+  const audienceDescription = selection.mode === "all" ? (messageType === "audition_callback" ? "All audition applicants" : "All assigned people and audition applicants") : selection.mode === "individual" ? `${selected.length} selected people` : `${communicationTypeLabel(selection.mode)}: ${selection.value}`;
   const { data: campaign, error } = await supabase.from("communication_campaigns").insert({ project_id: projectId, template_id: String(formData.get("templateId") || "") || null, name, message_type: messageType, subject_template: subjectTemplate, body_template: bodyTemplate, audience_description: audienceDescription, audience_filter: selection, recipient_count: selected.length, created_by: user.id }).select("id").single();
   if (error || !campaign) redirect(route(projectId, "error", error?.message ?? "Could not create campaign draft."));
   const rows = selected.map((candidate) => {
@@ -128,7 +144,7 @@ export async function sendCommunicationCampaignAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: campaign } = await supabase.from("communication_campaigns").select("id, message_type, status").eq("id", campaignId).eq("project_id", projectId).maybeSingle();
   if (!campaign || !["draft", "partial", "sending"].includes(campaign.status)) redirect(route(projectId, "error", "This campaign is not available to send.", campaignId));
-  const { data: recipients, error } = await supabase.from("communication_recipients").select("id, person_id, to_email, subject, body, status").eq("campaign_id", campaignId).in("status", ["draft", "failed", "sending"]).order("display_name");
+  const { data: recipients, error } = await supabase.from("communication_recipients").select("id, person_id, audition_submission_id, to_email, subject, body, status").eq("campaign_id", campaignId).in("status", ["draft", "failed", "sending"]).order("display_name");
   if (error) redirect(route(projectId, "error", error.message, campaignId));
   if (!recipients?.length) {
     const { data: existing } = await supabase.from("communication_recipients").select("status").eq("campaign_id", campaignId);
@@ -156,6 +172,12 @@ export async function sendCommunicationCampaignAction(formData: FormData) {
         const provider = providers[index];
         const now = new Date().toISOString();
         await Promise.all([supabase.from("email_messages").update({ status: "sent", provider_message_id: provider.id, sent_at: now }).eq("id", message.id), supabase.from("communication_recipients").update({ status: "sent", provider_message_id: provider.id, sent_at: now, error_message: "" }).eq("id", recipient.id)]);
+        if (campaign.message_type === "audition_callback" && recipient.audition_submission_id) {
+          await Promise.all([
+            supabase.from("callback_invitations").update({ status: "invited", sent_at: now, updated_at: now }).eq("submission_id", recipient.audition_submission_id).in("status", ["draft", "invited"]),
+            supabase.from("audition_submissions").update({ callback_status: "invited" }).eq("id", recipient.audition_submission_id)
+          ]);
+        }
       }));
     } catch (sendError) {
       const messageText = sendError instanceof Error ? sendError.message : "Email delivery failed.";

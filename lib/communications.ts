@@ -15,6 +15,7 @@ export function communicationVariables(candidate: CommunicationCandidate, projec
     project_title: projectTitle,
     role_name: candidate.roleName,
     role_group: candidate.roleGroup.replace(/_/g, " "),
+    callback_response_url: candidate.callbackResponseUrl ?? "",
     ...extra,
   };
 }

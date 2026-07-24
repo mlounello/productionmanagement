@@ -10,6 +10,7 @@ export type CommunicationCandidate = {
   assignmentStatus: string;
   auditionStatus: string;
   auditionRecommendations?: string[];
+  callbackResponseUrl?: string;
 };
 
 export type AudienceSelection = { mode: "all" | "role_group" | "assignment_status" | "audition_status" | "audition_recommendation" | "individual"; value?: string; personIds?: string[] };

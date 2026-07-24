@@ -1327,6 +1327,22 @@ button {
 .notification-row div > span { color: var(--muted); font-size: 13px; margin-top: 3px; }
 .notification-activity { margin-top: 14px; }
 
+.callback-public-page { max-width: 760px; }
+.callback-response-card { padding: clamp(22px, 5vw, 44px); }
+.callback-response-card h1 { margin-bottom: 10px; }
+.callback-current,
+.callback-choice {
+  background: #f1f7f3;
+  border: 1px solid #b8d0c2;
+  border-radius: 10px;
+  display: grid;
+  gap: 5px;
+  margin: 18px 0;
+  padding: 16px;
+}
+.callback-current span, .callback-choice span, .callback-choice small { color: var(--muted); }
+.callback-decline { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }
+
 @media (max-width: 800px) {
   .audition-room-toolbar { grid-template-columns: 1fr; }
   .audition-room-save-note { margin-top: 0; }
