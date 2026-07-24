@@ -9,9 +9,10 @@ export type CommunicationCandidate = {
   roleGroup: string;
   assignmentStatus: string;
   auditionStatus: string;
+  auditionRecommendations?: string[];
 };
 
-export type AudienceSelection = { mode: "all" | "role_group" | "assignment_status" | "audition_status" | "individual"; value?: string; personIds?: string[] };
+export type AudienceSelection = { mode: "all" | "role_group" | "assignment_status" | "audition_status" | "audition_recommendation" | "individual"; value?: string; personIds?: string[] };
 
 export function selectCommunicationCandidates(candidates: CommunicationCandidate[], selection: AudienceSelection) {
   const selected = candidates.filter((candidate) => {
@@ -20,6 +21,7 @@ export function selectCommunicationCandidates(candidates: CommunicationCandidate
     if (selection.mode === "role_group") return candidate.roleGroup === selection.value;
     if (selection.mode === "assignment_status") return candidate.assignmentStatus === selection.value;
     if (selection.mode === "audition_status") return candidate.auditionStatus === selection.value;
+    if (selection.mode === "audition_recommendation") return (candidate.auditionRecommendations ?? []).includes(selection.value ?? "");
     return (selection.personIds ?? []).includes(candidate.personId);
   });
   const byEmail = new Map<string, CommunicationCandidate>();

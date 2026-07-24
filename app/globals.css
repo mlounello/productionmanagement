@@ -1211,6 +1211,130 @@ button {
   font-weight: 750;
 }
 
+.audition-room {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(22, 55, 43, .08);
+  overflow: hidden;
+}
+
+.audition-room-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, .35fr) minmax(220px, .7fr);
+  padding: 16px;
+}
+
+.audition-room-toolbar .field { margin: 0; }
+.audition-room-save-note { align-self: center; margin: 22px 0 0; }
+.audition-room-table-wrap { max-height: calc(100vh - 280px); overflow: auto; }
+
+.audition-room-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 900px;
+  width: 100%;
+}
+
+.audition-room-table th,
+.audition-room-table td {
+  background: #fff;
+  border-right: 1px solid #e4ebe7;
+  border-top: 1px solid #e4ebe7;
+  padding: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.audition-room-table thead th {
+  background: #f1f6f3;
+  font-size: 12px;
+  position: sticky;
+  text-transform: uppercase;
+  top: 0;
+  z-index: 3;
+}
+
+.audition-room-table tbody th {
+  left: 0;
+  min-width: 220px;
+  position: sticky;
+  text-align: left;
+  z-index: 2;
+}
+
+.audition-room-table tbody th strong,
+.audition-room-table tbody th span,
+.audition-room-table tbody th small { display: block; }
+.audition-room-table tbody th span { color: var(--muted); font-size: 12px; font-weight: 500; margin-top: 3px; }
+.audition-room-table tbody tr:hover td,
+.audition-room-table tbody tr:hover th { background: #f9fbfa; }
+.audition-room-decision { min-width: 180px; }
+
+.room-check {
+  cursor: pointer;
+  display: inline-grid;
+  height: 32px;
+  place-items: center;
+  position: relative;
+  width: 32px;
+}
+
+.room-check input { height: 32px; inset: 0; margin: 0; opacity: 0; position: absolute; width: 32px; }
+.room-check span { border: 2px solid #9aaba2; border-radius: 7px; color: transparent; display: grid; font-weight: 900; height: 28px; place-items: center; transition: .12s ease; width: 28px; }
+.room-check input:checked + span { background: var(--siena-green); border-color: var(--siena-green); color: #fff; }
+.room-decision { font-weight: 750; min-width: 160px; }
+.room-decision-callback { background: #fff4cc; border-color: #d6ae20; }
+.room-decision-consider { background: #e7f0ff; border-color: #6d97d6; }
+.room-decision-cast { background: #e1f5e8; border-color: #5caa74; }
+.room-decision-not_cast { background: #fde8e8; border-color: #d87777; }
+.room-decision-discuss { background: #f1e7ff; border-color: #9d78ca; }
+
+.project-poster-uploader {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 150px minmax(260px, 1fr) auto;
+}
+.project-poster-uploader img,
+.poster-placeholder {
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: cover;
+  width: 150px;
+}
+.poster-placeholder { color: var(--muted); display: grid; font-size: 13px; place-items: center; text-align: center; }
+.project-poster-uploader .field { margin: 0; }
+.project-poster-uploader > p { grid-column: 2 / -1; margin: 0; }
+
+.notification-hub { display: grid; gap: 10px; }
+.notification-row {
+  align-items: center;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr auto;
+  padding: 12px 14px;
+}
+.notification-action { color: inherit; text-decoration: none; }
+.notification-action:hover { background: #f1f6f3; border-color: #8eaa9b; }
+.notification-row strong, .notification-row span { display: block; }
+.notification-row div > span { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.notification-activity { margin-top: 14px; }
+
+@media (max-width: 800px) {
+  .audition-room-toolbar { grid-template-columns: 1fr; }
+  .audition-room-save-note { margin-top: 0; }
+  .project-poster-uploader { grid-template-columns: 100px 1fr; }
+  .project-poster-uploader img, .poster-placeholder { width: 100px; }
+  .project-poster-uploader button { grid-column: 2; }
+}
+
 fieldset {
   border: 1px solid var(--line);
   border-radius: 8px;

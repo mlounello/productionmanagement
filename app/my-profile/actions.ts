@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { SITE_URL } from "@/lib/config";
 import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
+import { notifyProjectManagers } from "@/lib/project-admin-notifications";
 
 const profileSchema = z.object({
   personId: z.string().uuid(),
@@ -150,6 +151,18 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
 
   const { error } = await supabase.rpc("approve_my_project_publicity", { target_submission_id: submissionId });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
+  try {
+    const { data: approvingPerson } = await supabase.from("people").select("full_name").eq("id", submission.person_id).maybeSingle();
+    await notifyProjectManagers({
+      projectId: String(submission.project_id),
+      subject: `Bio ready for editorial review: ${approvingPerson?.full_name ?? "Production participant"}`,
+      heading: "A bio is ready for review",
+      message: `${approvingPerson?.full_name ?? "A production participant"} approved their production bio. It is now waiting for final editorial approval.`,
+      actionLabel: "Review publicity",
+      actionPath: `/projects/${submission.project_id}/publicity`,
+      idempotencyKey: `publicity-admin-approved-${submissionId}`
+    });
+  } catch {}
 
   let syncWarning = "";
   try {

@@ -36,6 +36,7 @@ import {
 import type { ProjectGanttSection } from "@/components/project-gantt";
 import { PeopleDirectory, type DirectoryPerson } from "@/components/people-directory";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
+import { ProjectPosterUploader } from "@/components/project-poster-uploader";
 import { ProjectReadinessChecklist } from "@/components/project-readiness-checklist";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
@@ -63,6 +64,7 @@ type Project = {
   status: string;
   starts_on: string | null;
   ends_on: string | null;
+  poster_image_url: string;
 };
 
 type CalendarItem = {
@@ -369,7 +371,7 @@ export default async function ProjectWorkspacePage({
   const supabase = await createSupabaseServerClient();
   const { data: project } = await supabase
     .from("projects")
-    .select("id, title, project_type, status, starts_on, ends_on")
+    .select("id, title, project_type, status, starts_on, ends_on, poster_image_url")
     .eq("id", projectId)
     .maybeSingle();
 
@@ -497,7 +499,7 @@ export default async function ProjectWorkspacePage({
         .eq("external_table", "show_roles")
         .in("local_entity_id", roles.map((role) => role.id))
     : { data: [] };
-  const needsPlaybillWorkspace = workspace === "roles" || workspace === "integrations";
+  const needsPlaybillWorkspace = workspace === "overview" || workspace === "roles" || workspace === "integrations";
   const [{ data: playbillLinks }, { data: budgetProjectLinks }, theatreBudgetGuestArtists, playbillShows, theatreBudgetProjects] = await Promise.all([
     needsPlaybillWorkspace ? supabase
       .from("external_links")
@@ -553,6 +555,11 @@ export default async function ProjectWorkspacePage({
     (assignment) => assignment.is_guest_artist && !budgetLinksByAssignmentId.has(assignment.id)
   );
   const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
+  const overviewNotifications = workspace === "overview" ? await Promise.all([
+    supabase.from("project_publicity_submissions").select("id,status,updated_at,people(full_name)").eq("project_id", typedProject.id).eq("status", "person_approved").order("updated_at", { ascending: false }),
+    supabase.from("role_acceptance_requests").select("id,status,submitted_at,people(full_name)").eq("project_id", typedProject.id).in("status", ["accepted", "declined"]).order("submitted_at", { ascending: false }).limit(8),
+    supabase.from("audition_submissions").select("id,google_calendar_sync_error,people(full_name)").eq("project_id", typedProject.id).eq("google_calendar_sync_status", "failed")
+  ]) : null;
   const playbillShowRoleLinksByAssignmentId = new Map(
     playbillAssignmentLinks
       .filter((link) => link.external_table === "show_roles")
@@ -722,7 +729,25 @@ export default async function ProjectWorkspacePage({
       </section>
 
       {workspace === "overview" ? (
-        <><ProjectReadinessChecklist readiness={readiness!} projectId={typedProject.id}/><section className="panel workspace-section">
+        <><ProjectReadinessChecklist readiness={readiness!} projectId={typedProject.id}/>
+        <section className="panel workspace-section">
+          <div className="section-heading"><div><p className="eyebrow">Needs your attention</p><h2>Project Notifications</h2><p className="muted">Items created by participant activity or an integration failure. Open a row to resolve it in the correct workspace.</p></div></div>
+          <div className="notification-hub">
+            {(overviewNotifications?.[0].data ?? []).map((item) => {
+              const person = item.people as unknown as { full_name?: string } | null;
+              return <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/publicity`} key={`bio-${item.id}`}><StatusBadge status="needs_review" label="Editorial review"/><div><strong>{person?.full_name ?? "Participant"} approved their bio</strong><span>Review and lock the final copy in Publicity.</span></div><span aria-hidden="true">→</span></Link>;
+            })}
+            {(overviewNotifications?.[2].data ?? []).map((item) => {
+              const person = item.people as unknown as { full_name?: string } | null;
+              return <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/auditions#calendar-sync`} key={`calendar-${item.id}`}><StatusBadge status="failed" label="Calendar"/><div><strong>{person?.full_name ?? "Applicant"} needs calendar follow-up</strong><span>{item.google_calendar_sync_error || "The audition invitation did not synchronize."}</span></div><span aria-hidden="true">→</span></Link>;
+            })}
+            {roleSyncFailures.length + assignmentSyncFailures.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/integrations`}><StatusBadge status="failed" label="Playbill"/><div><strong>{roleSyncFailures.length + assignmentSyncFailures.length} integration item{roleSyncFailures.length + assignmentSyncFailures.length === 1 ? "" : "s"} failed</strong><span>Open Integrations to retry or review the provider response.</span></div><span aria-hidden="true">→</span></Link> : null}
+            {unlinkedGuestAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{unlinkedGuestAssignments.length} guest artist link{unlinkedGuestAssignments.length === 1 ? "" : "s"} needed</strong><span>Connect the assignment to its Theatre Budget guest artist.</span></div><span aria-hidden="true">→</span></Link> : null}
+            {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !unlinkedGuestAssignments.length ? <p className="setup-success">No unresolved project notifications.</p> : null}
+          </div>
+          {(overviewNotifications?.[1].data ?? []).length ? <details className="notification-activity"><summary>Recent participant activity</summary><div className="compact-list">{(overviewNotifications?.[1].data ?? []).map((item) => { const person = item.people as unknown as { full_name?: string } | null; return <div className="compact-row" key={item.id}><div><strong>{person?.full_name ?? "Participant"}</strong><span>Role {item.status} · {item.submitted_at ? formatDate(item.submitted_at) : "recently"}</span></div><StatusBadge status={item.status}/></div>; })}</div></details> : null}
+        </section>
+        <section className="panel workspace-section">
           <div className="section-heading"><div><p className="eyebrow">Project At A Glance</p><h2>Choose your workspace</h2><p className="muted">Open a focused workspace above, or build reusable dashboard views from the modules you use most.</p></div><Link className="button" href={`/projects/${typedProject.id}/dashboards`}>Build a dashboard</Link></div>
           <div className="workspace-summary">
             <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>
@@ -730,6 +755,10 @@ export default async function ProjectWorkspacePage({
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Warnings</p></div>
             <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Links Needed</p></div>
           </div>
+        </section>
+        <section className="panel workspace-section">
+          <div className="section-heading"><div><p className="eyebrow">Shared artwork</p><h2>Show Poster</h2><p className="muted">Upload once here. A linked Playbill program receives the same optimized image automatically.</p></div></div>
+          <ProjectPosterUploader projectId={typedProject.id} currentUrl={typedProject.poster_image_url} playbillLinked={Boolean(playbillLink)}/>
         </section></>
       ) : null}
 

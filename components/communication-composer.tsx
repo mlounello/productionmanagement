@@ -18,7 +18,7 @@ const defaults: Record<string, { subject: string; body: string }> = {
   custom: { subject: "A message about {{project_title}}", body: "<h3>Hello {{person_name}},</h3><p></p>" },
 };
 
-export function CommunicationComposer({ projectId, templates, roleGroups, assignmentStatuses, auditionStatuses, people }: { projectId: string; templates: Template[]; roleGroups: string[]; assignmentStatuses: string[]; auditionStatuses: string[]; people: Person[] }) {
+export function CommunicationComposer({ projectId, templates, roleGroups, assignmentStatuses, auditionStatuses, auditionRecommendations, people }: { projectId: string; templates: Template[]; roleGroups: string[]; assignmentStatuses: string[]; auditionStatuses: string[]; auditionRecommendations: string[]; people: Person[] }) {
   const [messageType, setMessageType] = useState("custom");
   const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState(defaults.custom.subject);
@@ -41,14 +41,14 @@ export function CommunicationComposer({ projectId, templates, roleGroups, assign
   function applyAudience(mode: string) {
     setAudienceMode(mode); setAudienceValue("");
   }
-  const options = audienceMode === "role_group" ? roleGroups : audienceMode === "assignment_status" ? assignmentStatuses : auditionStatuses;
+  const options = audienceMode === "role_group" ? roleGroups : audienceMode === "assignment_status" ? assignmentStatuses : audienceMode === "audition_recommendation" ? auditionRecommendations : auditionStatuses;
 
   return <form action={createCommunicationDraftAction} className="stacked-form">
     <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="templateId" value={templateId} />
     {selected.map((id) => <input type="hidden" name="personId" value={id} key={id} />)}
     <div className="form-row"><label className="field"><span>Message type</span><select name="messageType" value={messageType} onChange={(event) => applyType(event.target.value)}>{Object.keys(defaults).map((type) => <option value={type} key={type}>{communicationTypeLabel(type)}</option>)}</select></label><label className="field"><span>Start from template</span><select value={templateId} onChange={(event) => applyTemplate(event.target.value)}><option value="">Siena starter for this message type</option>{templates.map((template) => <option value={template.id} key={template.id}>{template.name} · {communicationTypeLabel(template.template_type)}</option>)}</select></label></div>
     <label className="field"><span>Internal campaign name</span><input name="name" defaultValue="Production announcement" required maxLength={160} /></label>
-    <fieldset><legend>Recipients</legend><div className="choice-grid">{[["all","Everyone on the project"],["role_group","One role group"],["assignment_status","Assignment status"],["audition_status","Audition status"],["individual","Selected people"]].map(([value,label]) => <label className="checkbox-card" key={value}><input type="radio" name="audienceMode" value={value} checked={audienceMode === value} onChange={() => applyAudience(value)} /><span>{label}</span></label>)}</div>
+    <fieldset><legend>Recipients</legend><div className="choice-grid">{[["all","Everyone on the project"],["role_group","One role group"],["assignment_status","Assignment status"],["audition_status","Audition attendance"],["audition_recommendation","Audition next step"],["individual","Selected people"]].map(([value,label]) => <label className="checkbox-card" key={value}><input type="radio" name="audienceMode" value={value} checked={audienceMode === value} onChange={() => applyAudience(value)} /><span>{label}</span></label>)}</div>
       {!["all","individual"].includes(audienceMode) ? <label className="field"><span>{communicationTypeLabel(audienceMode)}</span><select name="audienceValue" value={audienceValue} onChange={(event) => setAudienceValue(event.target.value)} required><option value="">Choose one</option>{options.map((option) => <option value={option} key={option}>{communicationTypeLabel(option)}</option>)}</select></label> : <input type="hidden" name="audienceValue" value="" />}
       {audienceMode === "individual" ? <div className="recipient-picker"><label className="field"><span>Search project people</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name or email" /></label><div className="compact-list">{visiblePeople.map((person) => <label className="check-row" key={person.id}><input type="checkbox" checked={selected.includes(person.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, person.id])] : current.filter((id) => id !== person.id))} /><span><strong>{person.name}</strong> · {person.email || "No email"}</span></label>)}</div><small>{selected.length} selected. Showing up to 100 search results at a time.</small></div> : null}
     </fieldset>

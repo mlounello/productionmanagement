@@ -10,6 +10,7 @@ import { syncPersonAssignmentsToPlaybill, vacateAssignmentInPlaybill } from "@/l
 import { removeAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { sendBrandedProfileAccessLink } from "@/lib/profile-access-links";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
+import { syncAuditionCalendarSlots } from "@/lib/audition-calendar-sync";
 
 const personIdSchema = z.string().uuid();
 
@@ -231,16 +232,35 @@ export async function deletePersonPermanentlyAction(formData: FormData) {
   try { supabase = await requireAppOwner(); }
   catch (error) { redirect(peopleDeletionPath(personId.data, "error", error instanceof Error ? error.message : "Owner access is required.")); }
 
+  const admin = createSupabaseAdminClient();
+  const { data: calendarBookings } = await admin.from("audition_submissions")
+    .select("project_id,audition_submission_slots(slot_id)")
+    .eq("person_id", personId.data);
+  const calendarSlotsByProject = new Map<string, string[]>();
+  for (const booking of calendarBookings ?? []) {
+    const projectId = String(booking.project_id);
+    const slotIds = ((booking.audition_submission_slots ?? []) as Array<{ slot_id: string }>).map((row) => String(row.slot_id));
+    calendarSlotsByProject.set(projectId, [...new Set([...(calendarSlotsByProject.get(projectId) ?? []), ...slotIds])]);
+  }
+
   const { data: deletedName, error } = await supabase.rpc("delete_person_as_owner", {
     target_person_id: personId.data,
     confirmation_full_name: confirmationName
   });
   if (error) redirect(peopleDeletionPath(personId.data, "error", error.message));
 
-  const admin = createSupabaseAdminClient();
+  const calendarWarnings: string[] = [];
+  for (const [projectId, slotIds] of calendarSlotsByProject) {
+    try {
+      const result = await syncAuditionCalendarSlots(projectId, slotIds);
+      calendarWarnings.push(...result.warnings);
+    } catch (calendarError) {
+      calendarWarnings.push(calendarError instanceof Error ? calendarError.message : "Calendar cleanup failed.");
+    }
+  }
   const { error: storageError } = await admin.storage.from("profile-headshots").remove([`${personId.data}/headshot.jpg`]);
   revalidatePath("/people");
-  redirect(`/people?success=${encodeURIComponent(`${String(deletedName)} was permanently deleted.${storageError ? " The database record is gone, but the stored headshot may require manual cleanup." : ""}`)}`);
+  redirect(`/people?success=${encodeURIComponent(`${String(deletedName)} was permanently deleted.${calendarWarnings.length ? ` Calendar follow-up: ${[...new Set(calendarWarnings)].join(" ")}` : " Their audition bookings and shared-event guest lists were cleaned up."}${storageError ? " The database record is gone, but the stored headshot may require manual cleanup." : ""}`)}`);
 }
 
 const directoryProfileSchema = z.object({

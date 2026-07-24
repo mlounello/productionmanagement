@@ -32,7 +32,7 @@ async function loadCandidates(projectId: string) {
   const supabase = await createSupabaseServerClient();
   const [{ data: assignments, error: assignmentError }, { data: auditions, error: auditionError }] = await Promise.all([
     supabase.from("role_assignments").select("id, person_id, status, people(full_name, preferred_name, email), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)"),
-    supabase.from("audition_submissions").select("id, person_id, audition_status, people(full_name, preferred_name, email)").eq("project_id", projectId).not("status", "eq", "cancelled"),
+    supabase.from("audition_submissions").select("id, person_id, audition_status, people(full_name, preferred_name, email), audition_reviews(recommendation)").eq("project_id", projectId).not("status", "eq", "cancelled"),
   ]);
   if (assignmentError || auditionError) throw new Error(assignmentError?.message || auditionError?.message || "Could not load recipients.");
   const candidates: CommunicationCandidate[] = [];
@@ -43,13 +43,14 @@ async function loadCandidates(projectId: string) {
   }
   for (const row of auditions ?? []) {
     const person = row.people as unknown as { full_name: string; preferred_name: string; email: string } | null;
-    candidates.push({ personId: String(row.person_id), auditionSubmissionId: String(row.id), email: person?.email ?? "", fullName: person?.full_name ?? "", preferredName: person?.preferred_name ?? "", roleName: "Audition applicant", roleGroup: "auditions", assignmentStatus: "", auditionStatus: String(row.audition_status) });
+    const reviewRows = (row.audition_reviews ?? []) as Array<{ recommendation: string }>;
+    candidates.push({ personId: String(row.person_id), auditionSubmissionId: String(row.id), email: person?.email ?? "", fullName: person?.full_name ?? "", preferredName: person?.preferred_name ?? "", roleName: "Audition applicant", roleGroup: "auditions", assignmentStatus: "", auditionStatus: String(row.audition_status), auditionRecommendations: [...new Set(reviewRows.map((review) => String(review.recommendation)).filter(Boolean))] });
   }
   return candidates;
 }
 
 function audienceFrom(formData: FormData): AudienceSelection {
-  const mode = z.enum(["all", "role_group", "assignment_status", "audition_status", "individual"]).parse(String(formData.get("audienceMode") ?? ""));
+  const mode = z.enum(["all", "role_group", "assignment_status", "audition_status", "audition_recommendation", "individual"]).parse(String(formData.get("audienceMode") ?? ""));
   return { mode, value: String(formData.get("audienceValue") ?? ""), personIds: formData.getAll("personId").map(String) };
 }
 

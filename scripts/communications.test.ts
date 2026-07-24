@@ -19,3 +19,12 @@ test("selects an audience and deduplicates people with multiple roles", () => {
 test("individual selection excludes missing and unselected people", () => {
   assert.deepEqual(selectCommunicationCandidates(candidates, { mode: "individual", personIds: ["2"] }).map((item) => item.personId), ["2"]);
 });
+
+test("audition next-step audience selects any reviewer recommendation without emailing on status change", () => {
+  const candidates = [
+    { personId: "1", email: "callback@example.com", fullName: "Callback Person", preferredName: "", roleName: "Audition applicant", roleGroup: "auditions", assignmentStatus: "", auditionStatus: "auditioned", auditionRecommendations: ["callback", "discuss"] },
+    { personId: "2", email: "consider@example.com", fullName: "Consider Person", preferredName: "", roleName: "Audition applicant", roleGroup: "auditions", assignmentStatus: "", auditionStatus: "auditioned", auditionRecommendations: ["consider"] },
+  ];
+  const selected = selectCommunicationCandidates(candidates, { mode: "audition_recommendation", value: "callback" });
+  assert.deepEqual(selected.map((candidate) => candidate.email), ["callback@example.com"]);
+});
