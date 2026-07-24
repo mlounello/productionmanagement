@@ -18,6 +18,7 @@ import {
   type PlaybillShowRole
 } from "@/lib/playbill";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { firstAndLastName } from "@/lib/person-display-name";
 
 type PmClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -185,9 +186,12 @@ export async function markProjectRolePlaybillSyncFailed(projectId: string, roleI
     .eq("id", roleId);
 }
 
-export async function syncAssignmentToPlaybill(projectId: string, assignmentId: string) {
+async function syncAssignmentToPlaybillWithClient(
+  supabase: PmClient,
+  projectId: string,
+  assignmentId: string
+) {
   if (!ENABLE_PLAYBILL_WRITES) return null;
-  const supabase = await createSupabaseServerClient();
   const show = await getLinkedDraftShow(supabase, projectId);
   if (!show) return null;
 
@@ -330,6 +334,20 @@ export async function syncAssignmentToPlaybill(projectId: string, assignmentId: 
     .eq("id", assignmentId);
   if (updateError) throw new Error(updateError.message);
   return { show, role, person, showRole, playbillPerson, request };
+}
+
+export async function syncAssignmentToPlaybill(projectId: string, assignmentId: string) {
+  return syncAssignmentToPlaybillWithClient(await createSupabaseServerClient(), projectId, assignmentId);
+}
+
+export async function syncAssignmentToPlaybillAsSystem(projectId: string, assignmentId: string) {
+  // Automatic lifecycle work can originate from a passwordless contributor or
+  // a cron retry, neither of which should need project-management RLS grants.
+  return syncAssignmentToPlaybillWithClient(
+    createSupabaseAdminClient() as unknown as PmClient,
+    projectId,
+    assignmentId
+  );
 }
 
 export async function markAssignmentPlaybillSyncFailed(projectId: string, assignmentId: string, error: unknown) {

@@ -1158,11 +1158,11 @@ export default async function ProjectWorkspacePage({
                       </label>
                       <button type="submit">Save role</button>
                     </form>
-                    {playbillLink ? (
+                    {playbillLink && role.playbill_sync_status === "failed" ? (
                       <form action={syncProjectRoleToPlaybillAction} className="role-edit-form">
                         <input name="projectId" type="hidden" value={typedProject.id} />
                         <input name="roleId" type="hidden" value={role.id} />
-                        <button type="submit">{playbillRoleLink ? "Resync Playbill role" : "Push vacant role to Playbill"}</button>
+                        <button type="submit">Retry Playbill role sync</button>
                       </form>
                     ) : null}
                   </details>
@@ -1374,8 +1374,8 @@ export default async function ProjectWorkspacePage({
                     <div>
                       <strong>Playbill Draft Sync</strong>
                       <p className="muted">
-                        Manual sync to the linked draft Playbill show. Creates or updates the Playbill person, show role,
-                        and draft bio request for this assignment.
+                        Automatic sync creates or updates the Playbill person, show role, and draft bio request.
+                        Publicity approval repairs any missing dependency before sending the copy.
                       </p>
                     </div>
                     {playbillLink ? (
@@ -1390,11 +1390,13 @@ export default async function ProjectWorkspacePage({
                             {playbillRequestLink ? " · Bio request ready" : ""}
                           </span>
                         </div>
-                        <form action={syncRoleAssignmentToPlaybillAction}>
-                          <input name="projectId" type="hidden" value={typedProject.id} />
-                          <input name="assignmentId" type="hidden" value={assignment.id} />
-                          <button type="submit">{playbillShowRoleLink ? "Resync Playbill" : "Sync to Playbill"}</button>
-                        </form>
+                        {assignment.playbill_sync_status === "failed" ? (
+                          <form action={syncRoleAssignmentToPlaybillAction}>
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <button type="submit">Retry Playbill sync</button>
+                          </form>
+                        ) : null}
                       </div>
                     ) : (
                       <p className="setup-warning">Link this project to a Playbill show before syncing assignments.</p>
