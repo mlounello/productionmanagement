@@ -1,10 +1,22 @@
 const allowedTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a", "blockquote", "h1", "h2", "h3", "h4", "div"]);
 
+export function normalizeRichTextLinkUrl(input: string) {
+  const value = input.trim().replace(/&amp;/gi, "&");
+  if (!value) return null;
+  if (/^https?:\/\/[^\s]+$/i.test(value) || /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(value)) return value;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(value)) return `mailto:${value}`;
+  if (/^(?:www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d+)?(?:[/?#][^\s]*)?$/i.test(value)) {
+    return `https://${value}`;
+  }
+  return null;
+}
+
 function sanitizeAttributes(tagName: string, attrs: string) {
   if (tagName !== "a") return "";
   const hrefMatch = attrs.match(/href\s*=\s*(["'])(.*?)\1/i);
-  const href = hrefMatch?.[2]?.trim() ?? "";
-  if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href) && !/^\{\{[a-z0-9_]+\}\}$/i.test(href)) return "";
+  const rawHref = hrefMatch?.[2]?.trim() ?? "";
+  const href = /^\{\{[a-z0-9_]+\}\}$/i.test(rawHref) ? rawHref : normalizeRichTextLinkUrl(rawHref);
+  if (!href) return "";
   const escaped = href.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   return ` href="${escaped}" target="_blank" rel="noopener noreferrer"`;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
+import { normalizeRichTextLinkUrl, sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
 type Props = {
   name: string;
@@ -42,8 +42,14 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
         <button type="button" className="rich-tool-button" onClick={() => run("insertUnorderedList")}>Bullets</button>
         <button type="button" className="rich-tool-button" onClick={() => run("insertOrderedList")}>Numbered</button>
         <button type="button" className="rich-tool-button" onClick={() => {
-          const url = window.prompt("Link URL (https://…)");
-          if (url?.trim()) run("createLink", url.trim());
+          const enteredUrl = window.prompt("Link URL or email address");
+          if (!enteredUrl?.trim()) return;
+          const url = normalizeRichTextLinkUrl(enteredUrl);
+          if (!url) {
+            window.alert("Enter a complete web address or email address.");
+            return;
+          }
+          run("createLink", url);
         }}>Link</button>
         <button type="button" className="rich-tool-button" onClick={() => run("unlink")}>Unlink</button>
         <button type="button" className="rich-tool-button" onClick={() => run("removeFormat")}>Clear</button>

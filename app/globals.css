@@ -2544,6 +2544,14 @@ a.readiness-main:hover { color: var(--siena-green); }
   color: #0c466e;
 }
 
+.publicity-bio-preview .rich-render a {
+  color: #155b8c;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .rich-editor p,
 .rich-editor div,
 .rich-editor blockquote {
