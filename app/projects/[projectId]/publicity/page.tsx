@@ -111,7 +111,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
       </div>
       <ProjectWorkspaceNav projectId={projectId} active="publicity" />
       <FeedbackBanner error={query?.error} success={query?.success} />
-      <InlineHelp title="How profiles, approvals, and Playbill stay in sync"><p>A person’s profile holds their reusable headshot and overall bio. Each production receives its own editable copy, so someone working on several shows can approve a different bio for each one.</p><p>Person approval automatically sends eligible copy to a linked Playbill show as <strong>Submitted</strong>. Final editorial approval and locking happen in Playbill. A locked copy remains visible here for history and is no longer overwritten.</p></InlineHelp>
+      <InlineHelp title="How profiles, approvals, reminders, and Playbill stay in sync"><p>A person’s profile holds their reusable headshot and overall bio. Each production receives its own editable copy, so someone working on several shows can approve a different bio for each one.</p><p>Person approval automatically sends eligible copy to a linked Playbill show as <strong>Submitted</strong>. Final editorial approval and locking happen in Playbill. A locked copy remains visible here for history and is no longer overwritten.</p><p>Publicity reminders are currently sent manually from the status list below. Each reminder automatically names every outstanding item for that person: bio, headshot, and/or approval.</p></InlineHelp>
 
       <section className="workspace-summary" aria-label="Publicity summary">
         <div><span>{outstanding.length}</span><p>Outstanding</p></div>
@@ -133,7 +133,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           <input type="hidden" name="projectId" value={projectId} />
           <div className="form-row"><label className="field"><span>Bio due</span><input type="date" name="bioDueOn" defaultValue={publicitySettings?.bio_due_on ?? ""} /></label><label className="field"><span>Headshot due</span><input type="date" name="headshotDueOn" defaultValue={publicitySettings?.headshot_due_on ?? ""} /></label></div>
           <label className="field"><span>Show-specific bio character limit</span><input type="number" name="bioCharacterLimit" min={50} max={5000} step={1} defaultValue={publicitySettings?.bio_character_limit ?? 350} required /><small>Counts visible text only; formatting does not use the character allowance.</small></label>
-          <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow publicity reminder emails</span></label>
+          <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow manager-triggered publicity reminder emails</span></label>
           <div className="top-actions"><button type="submit">Save publicity settings</button></div>
         </form>
         <hr/>
