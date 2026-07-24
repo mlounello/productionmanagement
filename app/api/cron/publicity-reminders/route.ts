@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAutomaticPublicityReminders } from "@/lib/publicity-reminder-automation";
+import { runPublicitySyncReconciliation } from "@/lib/publicity-sync-reconciliation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   try {
-    return NextResponse.json({ ok: true, ...(await runAutomaticPublicityReminders()) });
+    const publicitySync = await runPublicitySyncReconciliation();
+    const reminders = await runAutomaticPublicityReminders();
+    return NextResponse.json({ ok: true, publicitySync, reminders });
   } catch (error) {
     return NextResponse.json({
       ok: false,
