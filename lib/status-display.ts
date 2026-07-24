@@ -14,9 +14,9 @@ export function displayStatus(value?: string | null) {
 
 export function statusTone(value?: string | null): StatusTone {
   const status = String(value || "").toLowerCase();
-  if (["failed", "error", "missing", "declined", "bounced", "no_show", "returned", "partial"].includes(status)) return "danger";
+  if (["failed", "error", "missing", "not_prepared", "declined", "bounced", "no_show", "returned", "partial"].includes(status)) return "danger";
   if (["created", "synced", "verified", "sent", "already_sent", "approved", "person_approved", "published", "confirmed", "linked", "accepted", "ready", "filled", "cast", "auditioned", "checked_in", "locked", "complete"].includes(status)) return "success";
-  if (["pending", "changes_requested", "changes_needed", "needs_review", "duplicate", "waitlist", "callback", "sending", "offered", "recommended", "invited", "considering", "acceptance_pending", "publicity_pending", "attention", "awaiting_membership"].includes(status)) return "warning";
+  if (["pending", "awaiting_person_approval", "changes_requested", "changes_needed", "needs_review", "duplicate", "waitlist", "callback", "sending", "offered", "recommended", "invited", "considering", "acceptance_pending", "publicity_pending", "attention", "awaiting_membership"].includes(status)) return "warning";
   if (["draft", "in_progress", "submitted", "scheduled", "vacant", "registered", "guest_artist", "opened", "onboarding"].includes(status)) return "info";
   return "neutral";
 }

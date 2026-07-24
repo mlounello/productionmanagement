@@ -7,6 +7,7 @@ import {
   approveMyPublicitySubmissionAction,
   connectMyProfileAction,
   requestMyEmailChangeAction,
+  setMyProjectBioRequiredAction,
   updateMyProjectPublicityBioAction,
   updateMyPublicityProfileAction
 } from "@/app/my-profile/actions";
@@ -100,7 +101,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             <label className="field"><span>Phone number</span><input name="phone" type="tel" defaultValue={typedProfile.phone} /></label>
             <details className="drawer-section"><summary>Interests, skills, and experience</summary><label className="field"><span>Technical interests (comma separated)</span><textarea name="technicalInterests" rows={3} defaultValue={typedProfile.technical_interests.join(", ")}/></label><label className="field"><span>Performance interests (comma separated)</span><textarea name="performanceInterests" rows={3} defaultValue={typedProfile.performance_interests.join(", ")}/></label><div className="form-row"><label className="field"><span>Vocal range</span><input name="vocalRange" defaultValue={typedProfile.vocal_range}/></label><label className="field"><span>Dance styles (comma separated)</span><input name="danceStyles" defaultValue={typedProfile.dance_styles.join(", ")}/></label></div><label className="field"><span>Instruments and proficiency</span><textarea name="instruments" rows={3} defaultValue={typedProfile.instruments}/></label><label className="field"><span>Special skills</span><textarea name="specialSkills" rows={3} defaultValue={typedProfile.special_skills}/></label><label className="field"><span>Performance experience</span><textarea name="performanceExperience" rows={4} defaultValue={typedProfile.performance_experience}/></label><label className="field"><span>Technical experience</span><textarea name="technicalExperience" rows={4} defaultValue={typedProfile.technical_experience}/></label><label className="field"><span>Dance and movement experience</span><textarea name="danceExperience" rows={3} defaultValue={typedProfile.dance_experience}/></label><label className="field"><span>Certifications and training</span><textarea name="certificationsTraining" rows={3} defaultValue={typedProfile.certifications_training}/></label></details>
             <PublicityBioField name="bio" label="Overall publicity bio" initialValue={typedProfile.publicity_bio} previewName={typedProfile.preferred_name || typedProfile.full_name} previewRole="Role supplied by each production" characterLimit={350} />
-            <p className="muted">Profile version {typedProfile.publicity_profile_version}. New productions begin with this reusable 350-character bio; each show then keeps its own editable copy.</p>
+            <p className="muted">New productions begin with this reusable 350-character bio. Saving it also fills any empty, unlocked show bio; a show-specific bio you already edited is never overwritten.</p>
             <button type="submit">Save my profile</button>
           </form>
 
@@ -144,8 +145,8 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
           const locked = submission.playbill_submission_status === "locked";
           const previewRole = rolesByProject.get(submission.project_id)?.join(", ") || "Production role";
           return <article className="panel" key={submission.id}>
-            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><div className="badge-row">{submission.bio_required ? <><StatusBadge status={submission.status} label={`Your approval: ${formatStatus(submission.status)}`} /><StatusBadge status={submission.playbill_submission_status} context="playbill" label={`Playbill: ${formatStatus(submission.playbill_submission_status)}`} /></> : <StatusBadge status="not_required" label="Bio not required" />}</div></div>{submission.bio_required ? <StatusBadge status={locked ? "locked" : "draft"} context="playbill" label={locked ? "Final & locked" : `v${submission.source_profile_version}`} /> : null}</div>
-            {!submission.bio_required ? <p className="muted">The production team has marked a bio as unnecessary for this production. No publicity action or reminder is required from you.</p> : <>
+            <div className="section-heading"><div><strong>{submission.projects?.title ?? "Production"}</strong><div className="badge-row">{submission.bio_required ? <><StatusBadge status={submission.status} label={`Your approval: ${formatStatus(submission.status)}`} /><StatusBadge status={submission.playbill_submission_status} context="playbill" label={`Playbill: ${formatStatus(submission.playbill_submission_status)}`} /></> : <StatusBadge status="not_required" label="Bio not required" />}</div></div>{submission.bio_required ? <StatusBadge status={locked ? "locked" : "draft"} context="playbill" label={locked ? "Final & locked" : "Editable show copy"} /> : null}</div>
+            {!submission.bio_required ? <><p className="muted">No bio is required for this production. You will not receive its publicity reminders.</p>{!locked ? <form action={setMyProjectBioRequiredAction}><input type="hidden" name="submissionId" value={submission.id}/><input type="hidden" name="bioRequired" value="true"/><button type="submit" className="button secondary">I need a bio for this production</button></form> : null}</> : <>
             <p className="muted">Bio due: {formatDate(settings?.bio_due_on ?? null)} · Headshot due: {formatDate(settings?.headshot_due_on ?? null)}</p>
             <p><strong>Credit:</strong> {submission.credited_name}</p>
             {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
@@ -155,6 +156,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             </form>}
             {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}
             {!locked && ["draft", "awaiting_person_approval", "changes_requested"].includes(submission.status) ? <form action={approveMyPublicitySubmissionAction}><input type="hidden" name="submissionId" value={submission.id} /><button type="submit">Approve &amp; submit to Playbill</button></form> : null}
+            {!locked ? <form action={setMyProjectBioRequiredAction}><input type="hidden" name="submissionId" value={submission.id}/><input type="hidden" name="bioRequired" value="false"/><button type="submit" className="button secondary">No bio needed for this production</button></form> : null}
             {locked ? <p className="muted">This final Playbill copy remains here for historical reference and can no longer be changed.</p> : null}
             </>}
           </article>;

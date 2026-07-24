@@ -5,21 +5,13 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { firstAndLastName } from "@/lib/person-display-name";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectContextSwitcher } from "@/components/project-context-switcher";
-import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
+import { PublicityDirectory, type PublicityDirectoryPerson } from "@/components/publicity-directory";
 import { FeedbackBanner } from "@/components/ui/feedback-banner";
 import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
   prepareProjectPublicityAction,
-  refreshPublicityFromProfileAction,
-  requestPublicityApprovalAction,
-  retryPublicitySyncAction,
-  savePublicitySettingsAction,
-  sendBulkPublicityRemindersAction,
-  sendPublicityReminderAction,
-  saveProjectPublicityCopyAction,
-  setBioRequiredAction
+  savePublicitySettingsAction
 } from "@/app/projects/[projectId]/publicity/actions";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +78,30 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
   const approved = requiredPublicityRows.filter((item) => item.playbill_submission_status === "approved").length;
   const locked = requiredPublicityRows.filter((item) => item.playbill_submission_status === "locked").length;
   const publicitySettings = settings as PublicitySettings | null;
+  const people = [...new Map(assignmentRows.map((assignment) => [assignment.person_id, assignment])).values()]
+    .map((assignment): PublicityDirectoryPerson => {
+      const item = submissionByPerson.get(assignment.person_id);
+      return {
+        personId: assignment.person_id,
+        submissionId: item?.id ?? null,
+        name: firstAndLastName(assignment.people ?? {}) || "Unknown person",
+        email: assignment.people?.email ?? "",
+        roles: rolesByPerson.get(assignment.person_id) ?? [],
+        profileConnected: Boolean(assignment.people?.auth_user_id),
+        profileChanged: Boolean(item && Number(assignment.people?.publicity_profile_version ?? 1) > item.source_profile_version),
+        creditedName: item?.credited_name ?? firstAndLastName(assignment.people ?? {}),
+        bio: item?.bio ?? "",
+        headshotUrl: item?.headshot_url ?? "",
+        status: item?.status ?? "not_prepared",
+        playbillStatus: item?.playbill_submission_status ?? "pending",
+        playbillSyncStatus: item?.playbill_sync_status ?? "not_ready",
+        playbillSyncError: item?.playbill_sync_error ?? "",
+        lastReminderSentAt: item?.last_reminder_sent_at ?? null,
+        reminderCount: item?.reminder_count ?? 0,
+        bioRequired: item?.bio_required ?? true
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="page workspace-page">
@@ -110,72 +126,21 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
         {exempt ? <StatusBadge status="not_required" label={`Bio not required: ${exempt}`} /> : null}
       </div>
 
-      <section className="panel workspace-section">
-        <div className="section-heading"><div><p className="eyebrow">Setup</p><h2>Production copies</h2><p className="muted">A show-specific copy is created automatically when someone is assigned to this project. The repair action is safe to run: existing edited, approved, or locked copies are never overwritten.</p></div>
-          <form action={prepareProjectPublicityAction}><input type="hidden" name="projectId" value={projectId} /><button type="submit">Repair any missing copies</button></form>
-        </div>
+      <details className="panel workspace-section publicity-settings">
+        <summary><span><strong>Publicity settings</strong><small>Deadlines, reminders, character limit, Playbill link, and repair tools</small></span></summary>
         {!playbillLink ? <p className="setup-warning">This project is not linked to a Playbill show. You can prepare and approve copy now, then sync after linking.</p> : null}
-      </section>
-
-      <section className="panel workspace-section">
-        <div className="section-heading"><div><p className="eyebrow">Deadlines</p><h2>Bio and headshot due dates</h2><p className="muted">These dates appear in each person’s secure profile and in branded reminders.</p></div></div>
         <form action={savePublicitySettingsAction} className="stacked-form">
           <input type="hidden" name="projectId" value={projectId} />
           <div className="form-row"><label className="field"><span>Bio due</span><input type="date" name="bioDueOn" defaultValue={publicitySettings?.bio_due_on ?? ""} /></label><label className="field"><span>Headshot due</span><input type="date" name="headshotDueOn" defaultValue={publicitySettings?.headshot_due_on ?? ""} /></label></div>
           <label className="field"><span>Show-specific bio character limit</span><input type="number" name="bioCharacterLimit" min={50} max={5000} step={1} defaultValue={publicitySettings?.bio_character_limit ?? 350} required /><small>Counts visible text only; formatting does not use the character allowance.</small></label>
           <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow publicity reminder emails</span></label>
-          <button type="submit">Save publicity settings</button>
+          <div className="top-actions"><button type="submit">Save publicity settings</button></div>
         </form>
-      </section>
+        <hr/>
+        <div className="section-heading"><div><strong>Automatic production copies</strong><p className="muted">Copies are created on assignment. This repair action only fills missing records and never overwrites existing edits.</p></div><form action={prepareProjectPublicityAction}><input type="hidden" name="projectId" value={projectId}/><button type="submit" className="button secondary">Repair any missing copies</button></form></div>
+      </details>
 
-      <section className="panel workspace-section">
-        <div className="section-heading"><div><p className="eyebrow">Bulk Reminders</p><h2>Send secure profile links</h2><p className="muted">Only people with missing copy, a missing headshot, or outstanding approval are listed.</p></div></div>
-        {outstanding.length ? <form action={sendBulkPublicityRemindersAction} className="stacked-form">
-          <input type="hidden" name="projectId" value={projectId} />
-          <div className="compact-list">{outstanding.map((item) => {
-            const assignment = assignmentRows.find((row) => row.person_id === item.person_id);
-            return <label className="check-row" key={item.id}><input type="checkbox" name="personId" value={item.person_id} defaultChecked /><span><strong>{firstAndLastName(assignment?.people??{})||"Unknown person"}</strong> · {!item.bio.trim() ? "Bio missing · " : ""}{!item.headshot_url.trim() ? "Headshot missing · " : ""}{label(item.status)}</span></label>;
-          })}</div>
-          <button type="submit">Send selected reminders</button>
-        </form> : <EmptyState title="Everyone is current">No publicity reminders are needed right now.</EmptyState>}
-      </section>
-
-      <div className="compact-list">
-        {[...new Map(assignmentRows.map((assignment) => [assignment.person_id, assignment])).values()].map((assignment) => {
-          const item = submissionByPerson.get(assignment.person_id);
-          if (!item) return (
-            <section className="panel" key={assignment.person_id}><strong>{firstAndLastName(assignment.people??{})||"Unknown person"}</strong><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"} · Not prepared</p></section>
-          );
-          const profileChanged = Number(assignment.people?.publicity_profile_version ?? 1) > item.source_profile_version;
-          const isLocked = item.playbill_submission_status === "locked";
-          const previewRole = rolesByPerson.get(assignment.person_id)?.join(", ") || "Production role";
-          return (
-            <section className="panel workspace-section" key={assignment.id}>
-              <div className="section-heading">
-                <div><p className="eyebrow">Production Publicity</p><h2>{firstAndLastName(assignment.people??{})||"Unknown person"}</h2><p className="muted">{rolesByPerson.get(assignment.person_id)?.join(", ") || "Role"}{item.bio_required ? ` · Person: ${label(item.status)} · Playbill: ${label(item.playbill_submission_status)}` : " · No publicity submission required"}{assignment.people?.auth_user_id ? " · Profile connected" : " · Profile not yet connected"}</p></div>
-                <div className="top-actions">{!item.bio_required ? <StatusBadge status="not_required" label="Bio not required" /> : null}{item.bio_required && profileChanged && !isLocked ? <StatusBadge status="pending" label="New profile version available" /> : null}{item.bio_required ? <StatusBadge status={isLocked ? "locked" : "draft"} context="playbill" label={isLocked ? "Final & locked" : `Snapshot v${item.source_profile_version}`} /> : null}</div>
-              </div>
-              {item.playbill_sync_error ? <p className="setup-warning">{item.playbill_sync_error}</p> : null}
-              {!item.bio_required ? <p className="muted">This person is excluded from outstanding publicity counts and will not receive publicity reminders for this project.</p> : null}
-              {item.bio_required && !isLocked ? <form action={saveProjectPublicityCopyAction} className="stacked-form">
-                <input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} />
-                <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={item.credited_name} required /></label>
-                <PublicityBioField name="bio" label="Production bio" initialValue={item.bio} previewName={item.credited_name} previewRole={previewRole} characterLimit={publicitySettings?.bio_character_limit ?? 350} compact />
-                <label className="field"><span>Production headshot URL</span><input name="headshotUrl" type="url" defaultValue={item.headshot_url} placeholder="https://…" /></label>
-                <button type="submit">Save production copy</button>
-              </form> : item.bio_required ? <PublicityBioPreview bio={item.bio} name={item.credited_name} role={previewRole} /> : null}
-              <div className="top-actions" style={{ marginTop: 12 }}>
-                {item.bio_required && !isLocked ? <form action={refreshPublicityFromProfileAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button className="button secondary" type="submit">Refresh from profile</button></form> : null}
-                {item.bio_required && !isLocked && ['draft', 'changes_requested'].includes(item.status) ? <form action={requestPublicityApprovalAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Request person approval</button></form> : null}
-                {item.bio_required && !isLocked && ["person_approved", "approved"].includes(item.status) && item.playbill_sync_status !== "synced" ? <form action={retryPublicitySyncAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><button type="submit">Retry Playbill submission</button></form> : null}
-                {item.bio_required && !isLocked && outstanding.some((row) => row.id === item.id) ? <form action={sendPublicityReminderAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="personId" value={item.person_id} /><button className="button secondary" type="submit">Send reminder</button></form> : null}
-                {!isLocked ? <form action={setBioRequiredAction}><input type="hidden" name="projectId" value={projectId} /><input type="hidden" name="submissionId" value={item.id} /><input type="hidden" name="bioRequired" value={item.bio_required ? "false" : "true"} /><button className="button secondary" type="submit">{item.bio_required ? "Mark bio not required" : "Require bio"}</button></form> : null}
-              </div>
-              {item.last_reminder_sent_at ? <p className="muted">{item.reminder_count} reminder{item.reminder_count === 1 ? "" : "s"} sent · Last {new Date(item.last_reminder_sent_at).toLocaleString("en-US")}</p> : null}
-            </section>
-          );
-        })}
-      </div>
+      <PublicityDirectory projectId={projectId} people={people} characterLimit={publicitySettings?.bio_character_limit ?? 350} remindersEnabled={publicitySettings?.reminders_enabled ?? true}/>
     </div>
   );
 }

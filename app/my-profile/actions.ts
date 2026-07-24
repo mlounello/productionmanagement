@@ -83,7 +83,7 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
 
   revalidatePath("/my-profile");
   revalidatePath(`/people/${parsed.data.personId}`);
-  redirect("/my-profile?success=Profile%20saved.%20Existing%20production%20snapshots%20were%20not%20changed.");
+  redirect("/my-profile?success=Profile%20saved.%20Your%20overall%20bio%20was%20copied%20into%20any%20empty%2C%20unlocked%20show%20bios.%20Existing%20show-specific%20edits%20were%20preserved.");
 }
 
 export async function requestMyEmailChangeAction(formData: FormData) {
@@ -185,4 +185,32 @@ export async function updateMyProjectPublicityBioAction(formData: FormData) {
   revalidatePath("/my-profile");
   revalidatePath(`/projects/${before.project_id}/publicity`);
   redirect(`/my-profile?success=${encodeURIComponent(message)}`);
+}
+
+export async function setMyProjectBioRequiredAction(formData: FormData) {
+  await requireUser();
+  const submissionId = z.string().uuid().parse(String(formData.get("submissionId") ?? ""));
+  const bioRequired = String(formData.get("bioRequired") ?? "true") === "true";
+  const supabase = await createSupabaseServerClient();
+  const { data: submission, error: readError } = await supabase
+    .from("project_publicity_submissions")
+    .select("project_id, playbill_submission_status")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (readError || !submission) {
+    redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Production publicity record not found.")}`);
+  }
+  if (submission.playbill_submission_status === "locked") {
+    redirect("/my-profile?error=This%20final%20Playbill%20record%20is%20locked.");
+  }
+  const { error } = await supabase.rpc("set_my_project_publicity_requirement", {
+    target_submission_id: submissionId,
+    new_bio_required: bioRequired
+  });
+  if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/my-profile");
+  revalidatePath(`/projects/${submission.project_id}/publicity`);
+  redirect(`/my-profile?success=${encodeURIComponent(bioRequired
+    ? "This production now requires your bio again."
+    : "Marked no bio needed for this production. You will not receive its publicity reminders.")}`);
 }
