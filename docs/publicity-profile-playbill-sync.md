@@ -10,7 +10,7 @@ Reusable and show-specific bios use a WYSIWYG editor with a live Playbill-style 
 
 The workflow is:
 
-1. Staff open **Project → Publicity** and prepare missing production records.
+1. Assigning someone to the project automatically prepares their production publicity record. The Publicity page also has a non-destructive repair action for older assignments.
 2. Staff set bio/headshot due dates and request person approval.
 3. Branded individual or bulk reminders take each person through a secure, passwordless profile link.
 4. The person edits the show-specific bio and selects **Approve & submit to Playbill**.
@@ -27,13 +27,18 @@ Show-specific contributor notes remain entirely in Playbill and continue to use 
 The project Publicity page shows outstanding, submitted, approved, and locked totals. It also provides:
 
 - Separate bio and headshot due dates
+- Automatic daily reminder checks with a configurable cadence (7 days by default)
+- Optional due-date and daily overdue reminders matching Playbill’s rules
 - A selectable bulk-reminder list
 - One-person reminder buttons
 - Reminder counts and last-sent timestamps
+- Automatic exclusion for completed, Playbill-locked, and **No bio needed** records
 - Person approval and Playbill editorial status on every record
 - Locked, read-only historical copies
 
-Customize the global reminder branding under **Settings → Profile Access Email → Bulk reminder email**. Supported variables are listed beside the editor. Project-specific templates can also be stored with `template_type = 'publicity_reminder'`; they take precedence over the global template.
+Customize reminder content under **Settings → Email Templates → Publicity reminder**. The safe preview/test drawer shows filled-in tags and sends only to the test address you enter. Project-specific templates take precedence over the global template. Production Management wraps the editable content in a consistent branded layout and always supplies secure instructions to edit, approve and submit, or mark the production bio as not needed.
+
+Automatic reminder settings live under **Project → Publicity → Publicity settings**. The scheduled job runs at the same daily time as Playbill’s reminder job. Delivery is paced through the shared Resend limiter, retries temporary provider failures, and uses both provider idempotency keys and a per-person/day dispatch record to prevent duplicates.
 
 ## Database migration order
 
@@ -49,6 +54,7 @@ In the shared Supabase project, apply these in order before deploying the new Pr
 8. Production Management `supabase/migrations/202607132330_profile_link_service_role_privileges.sql`
 9. Production Management `supabase/migrations/202607132340_formatted_publicity_bios.sql`
 10. Production Management `supabase/migrations/202607132350_project_bio_character_limits.sql`
+11. Production Management `supabase/migrations/202607231200_automatic_publicity_reminders.sql`
 
 The final migration adds deadlines, reminder tracking, the Playbill status mirror, narrow contributor RPCs, and the automatic cross-schema trigger. It also reconciles already-linked records by `production_management_approval_id`. It does not create people, projects, roles, or Playbill records.
 

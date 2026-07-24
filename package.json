@@ -19,6 +19,7 @@
     "test:communications": "node --experimental-strip-types --test scripts/communications.test.ts",
     "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts",
     "test:email-rate-limit": "node --experimental-strip-types --test scripts/resend-rate-limit.test.ts",
+    "test:publicity-reminders": "node --experimental-strip-types --test scripts/publicity-reminder-policy.test.ts scripts/publicity-reminder-email.test.ts",
     "test:auth-routing": "node --experimental-strip-types --test scripts/auth-callback-routing.test.ts",
     "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts",
     "test:audition-upload": "node --experimental-strip-types --test scripts/audition-upload.test.ts",

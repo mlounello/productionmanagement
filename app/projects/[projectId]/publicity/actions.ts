@@ -196,15 +196,24 @@ export async function savePublicitySettingsAction(formData: FormData) {
   const bioLimit = z.coerce.number().int().min(50, "The bio limit must be at least 50 characters.").max(5000, "The bio limit cannot exceed 5,000 characters.")
     .safeParse(formData.get("bioCharacterLimit"));
   if (!bioLimit.success) redirect(path(projectId, "error", bioLimit.error.issues[0]?.message ?? "Enter a valid bio character limit."));
+  const cadenceDays = z.coerce.number().int().min(1).max(30).safeParse(formData.get("reminderCadenceDays"));
+  if (!cadenceDays.success) redirect(path(projectId, "error", "Reminder cadence must be between 1 and 30 days."));
+  const dueSoonDays = z.coerce.number().int().min(1).max(30).safeParse(formData.get("reminderDueSoonDays"));
+  if (!dueSoonDays.success) redirect(path(projectId, "error", "Due-soon window must be between 1 and 30 days."));
   const { error } = await supabase.from("project_publicity_settings").upsert({
     project_id: projectId,
     bio_due_on: dateValue("bioDueOn"),
     headshot_due_on: dateValue("headshotDueOn"),
     bio_character_limit: bioLimit.data,
-    reminders_enabled: formData.get("remindersEnabled") === "on"
+    reminders_enabled: formData.get("remindersEnabled") === "on",
+    reminder_automation_enabled: formData.get("reminderAutomationEnabled") === "on",
+    reminder_cadence_days: cadenceDays.data,
+    reminder_due_soon_days: dueSoonDays.data,
+    reminder_send_last_day: formData.get("reminderSendLastDay") === "on"
   }, { onConflict: "project_id" });
   if (error) redirect(path(projectId, "error", error.message));
   revalidatePath(`/projects/${projectId}/publicity`);
+  revalidatePath(`/projects/${projectId}/overview`);
   revalidatePath("/my-profile");
   redirect(path(projectId, "success", "Publicity deadlines and reminder settings saved."));
 }

@@ -42,7 +42,17 @@ type Publicity = {
   reminder_count: number;
   bio_required: boolean;
 };
-type PublicitySettings = { bio_due_on: string | null; headshot_due_on: string | null; reminders_enabled: boolean; bio_character_limit: number };
+type PublicitySettings = {
+  bio_due_on: string | null;
+  headshot_due_on: string | null;
+  reminders_enabled: boolean;
+  reminder_automation_enabled: boolean;
+  reminder_cadence_days: number;
+  reminder_due_soon_days: number;
+  reminder_send_last_day: boolean;
+  last_automatic_reminder_run_at: string | null;
+  bio_character_limit: number;
+};
 
 function label(value: string) {
   return value.split("_").map((part) => part.slice(0, 1).toUpperCase() + part.slice(1)).join(" ");
@@ -58,7 +68,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
     supabase.from("role_assignments").select("id, person_id, status, people(full_name, first_name, last_name, email, auth_user_id, publicity_profile_version), project_roles(name, role_group)").eq("project_id", projectId).not("status", "in", "(declined,withdrawn)").order("created_at"),
     supabase.from("project_publicity_submissions").select("id, person_id, credited_name, bio, headshot_url, source_profile_version, status, person_approved_at, editorial_approved_at, playbill_sync_status, playbill_sync_error, playbill_synced_at, playbill_submission_status, playbill_locked_at, last_reminder_sent_at, reminder_count, bio_required").eq("project_id", projectId),
     supabase.from("external_links").select("id").eq("local_entity_type", "project").eq("local_entity_id", projectId).eq("external_app", "playbill").eq("external_table", "shows").maybeSingle(),
-    supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
+    supabase.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, reminder_automation_enabled, reminder_cadence_days, reminder_due_soon_days, reminder_send_last_day, last_automatic_reminder_run_at, bio_character_limit").eq("project_id", projectId).maybeSingle()
   ]);
   if (!project) notFound();
 
@@ -111,7 +121,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
       </div>
       <ProjectWorkspaceNav projectId={projectId} active="publicity" />
       <FeedbackBanner error={query?.error} success={query?.success} />
-      <InlineHelp title="How profiles, approvals, reminders, and Playbill stay in sync"><p>A person’s profile holds their reusable headshot and overall bio. Each production receives its own editable copy, so someone working on several shows can approve a different bio for each one.</p><p>Person approval automatically sends eligible copy to a linked Playbill show as <strong>Submitted</strong>. Final editorial approval and locking happen in Playbill. A locked copy remains visible here for history and is no longer overwritten.</p><p>Publicity reminders are currently sent manually from the status list below. Each reminder automatically names every outstanding item for that person: bio, headshot, and/or approval.</p></InlineHelp>
+      <InlineHelp title="How profiles, approvals, reminders, and Playbill stay in sync"><p>A person’s profile holds their reusable headshot and overall bio. Each production receives its own editable copy, so someone working on several shows can approve a different bio for each one.</p><p>Person approval automatically sends eligible copy to a linked Playbill show as <strong>Submitted</strong>. Final editorial approval and locking happen in Playbill. A locked copy remains visible here for history and is no longer overwritten.</p><p>When automatic reminders are enabled, Production Management checks once each morning and follows the same cadence rules as Playbill. Each message names every outstanding item and gives the person a secure path to edit, approve and submit, or mark their production bio as not needed. Manual reminders remain available from the status list.</p></InlineHelp>
 
       <section className="workspace-summary" aria-label="Publicity summary">
         <div><span>{outstanding.length}</span><p>Outstanding</p></div>
@@ -133,7 +143,14 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
           <input type="hidden" name="projectId" value={projectId} />
           <div className="form-row"><label className="field"><span>Bio due</span><input type="date" name="bioDueOn" defaultValue={publicitySettings?.bio_due_on ?? ""} /></label><label className="field"><span>Headshot due</span><input type="date" name="headshotDueOn" defaultValue={publicitySettings?.headshot_due_on ?? ""} /></label></div>
           <label className="field"><span>Show-specific bio character limit</span><input type="number" name="bioCharacterLimit" min={50} max={5000} step={1} defaultValue={publicitySettings?.bio_character_limit ?? 350} required /><small>Counts visible text only; formatting does not use the character allowance.</small></label>
-          <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow manager-triggered publicity reminder emails</span></label>
+          <label className="check-row"><input type="checkbox" name="remindersEnabled" defaultChecked={publicitySettings?.reminders_enabled ?? true} /><span>Allow publicity reminder emails for this project</span></label>
+          <label className="check-row"><input type="checkbox" name="reminderAutomationEnabled" defaultChecked={publicitySettings?.reminder_automation_enabled ?? true} /><span>Automatically check for and send outstanding publicity reminders each morning</span></label>
+          <div className="form-row">
+            <label className="field"><span>Reminder cadence</span><input type="number" name="reminderCadenceDays" min={1} max={30} step={1} defaultValue={publicitySettings?.reminder_cadence_days ?? 7} required /><small>Days between reminders before the due date. Playbill’s default is 7.</small></label>
+            <label className="field"><span>Due-soon reporting window</span><input type="number" name="reminderDueSoonDays" min={1} max={30} step={1} defaultValue={publicitySettings?.reminder_due_soon_days ?? 7} required /><small>How many days ahead the dashboard treats an item as due soon.</small></label>
+          </div>
+          <label className="check-row"><input type="checkbox" name="reminderSendLastDay" defaultChecked={publicitySettings?.reminder_send_last_day ?? true} /><span>Send on the due date and continue daily afterward until completed, locked, or skipped</span></label>
+          <p className="muted">The scheduler runs daily at the same time as Playbill’s reminder job. Completed, Playbill-locked, and “No bio needed” records are excluded automatically.{publicitySettings?.last_automatic_reminder_run_at ? ` Last checked ${new Date(publicitySettings.last_automatic_reminder_run_at).toLocaleString("en-US", { timeZone: "America/New_York" })}.` : ""}</p>
           <div className="top-actions"><button type="submit">Save publicity settings</button></div>
         </form>
         <hr/>

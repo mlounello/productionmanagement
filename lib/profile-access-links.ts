@@ -3,6 +3,8 @@ import { SITE_URL } from "@/lib/config";
 import { sendHtmlEmail, renderTemplate } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { activeEmailTemplate } from "@/lib/email-template-catalog";
+import { formatPublicityReminderEmail } from "@/lib/publicity-reminder-email";
+import { publicityOutstandingItems } from "@/lib/publicity-reminder-policy";
 
 const LINK_LIFETIME_DAYS = 7;
 const DEFAULT_SUBJECT = "Your secure Siena Theatre production profile link";
@@ -92,7 +94,12 @@ function dateLabel(value: string | null | undefined) {
     .format(new Date(`${value}T00:00:00Z`));
 }
 
-export async function sendPublicityReminder(personId: string, projectId: string, actorUserId: string | null) {
+export async function sendPublicityReminder(
+  personId: string,
+  projectId: string,
+  actorUserId: string | null,
+  options: { mode?: "manual" | "automatic"; idempotencyKey?: string } = {}
+) {
   const admin = createSupabaseAdminClient();
   const [{ data: person }, { data: project }, { data: submission }, { data: settings }] = await Promise.all([
     admin.from("people").select("id, full_name, preferred_name, email").eq("id", personId).maybeSingle(),
@@ -107,11 +114,14 @@ export async function sendPublicityReminder(personId: string, projectId: string,
   const email = String(person.email ?? "").trim().toLowerCase();
   if (!email) throw new Error("Add an email address before sending this reminder.");
 
-  const outstanding = [
-    !String(submission.bio ?? "").trim() ? "show-specific bio" : null,
-    !String(submission.headshot_url ?? "").trim() ? "headshot" : null,
-    !["person_approved", "approved"].includes(String(submission.status)) ? "your approval" : null
-  ].filter(Boolean) as string[];
+  const outstanding = publicityOutstandingItems({
+    bio: String(submission.bio ?? ""),
+    headshotUrl: String(submission.headshot_url ?? ""),
+    status: String(submission.status ?? "draft"),
+    playbillStatus: String(submission.playbill_submission_status ?? "pending"),
+    bioRequired: submission.bio_required !== false,
+    lastReminderSentAt: null
+  });
   if (!outstanding.length) throw new Error("This person has no outstanding publicity items.");
 
   const access = await createProfileAccessUrl({ id: String(person.id), email }, actorUserId);
@@ -126,14 +136,27 @@ export async function sendPublicityReminder(personId: string, projectId: string,
   };
   const template = await activeTemplate("publicity_reminder", projectId);
   const subject = renderTemplate(template.subject, variables);
-  const html = renderTemplate(template.body, variables, true);
+  const renderedBody = renderTemplate(template.body, variables, true);
+  const html = formatPublicityReminderEmail({
+    bodyHtml: renderedBody,
+    templateSource: template.body,
+    projectTitle: String(project.title),
+    profileAccessUrl: access.url,
+    outstandingItems: outstanding
+  });
   let delivery: { id: string };
-  try { delivery = await sendHtmlEmail({ to: email, subject, html }); }
+  try {
+    delivery = await sendHtmlEmail(
+      { to: email, subject, html },
+      options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}
+    );
+  }
   catch (error) {
     await admin.from("profile_access_links").delete().eq("id", access.accessId);
     await admin.from("email_messages").insert({
       project_id: projectId, person_id: personId, message_type: "publicity_reminder", to_email: email,
-      subject, body: html, status: "failed", created_by: actorUserId
+      subject, body: html, status: "failed", created_by: actorUserId,
+      metadata: { delivery_mode: options.mode ?? "manual" }
     });
     throw error;
   }
@@ -143,7 +166,8 @@ export async function sendPublicityReminder(personId: string, projectId: string,
   try {
     await admin.from("email_messages").insert({
       project_id: projectId, person_id: personId, message_type: "publicity_reminder", to_email: email,
-      subject, body: html, status: "sent", provider_message_id: delivery.id, sent_at: new Date().toISOString(), created_by: actorUserId
+      subject, body: html, status: "sent", provider_message_id: delivery.id, sent_at: new Date().toISOString(), created_by: actorUserId,
+      metadata: { delivery_mode: options.mode ?? "manual" }
     });
     await admin.from("project_publicity_submissions").update({
       last_reminder_sent_at: new Date().toISOString(), reminder_count: Number(submission.reminder_count ?? 0) + 1
