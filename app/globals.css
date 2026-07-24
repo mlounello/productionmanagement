@@ -1343,6 +1343,14 @@ button {
 .callback-current span, .callback-choice span, .callback-choice small { color: var(--muted); }
 .callback-decline { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }
 
+label.field:has(select[name="bookingMode"]) > small {
+  font-size: 0;
+}
+label.field:has(select[name="bookingMode"]) > small::after {
+  content: "For callbacks, Applicant chooses displays the block on the secure response page; Staff assigns keeps it hidden for production-controlled scheduling.";
+  font-size: 12px;
+}
+
 @media (max-width: 800px) {
   .audition-room-toolbar { grid-template-columns: 1fr; }
   .audition-room-save-note { margin-top: 0; }

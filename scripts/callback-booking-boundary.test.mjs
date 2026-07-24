@@ -6,6 +6,7 @@ const migration = await readFile(new URL("../supabase/migrations/202607241100_ca
 const communications = await readFile(new URL("../app/projects/[projectId]/communications/actions.ts", import.meta.url), "utf8");
 const callbackPage = await readFile(new URL("../app/callbacks/[token]/page.tsx", import.meta.url), "utf8");
 const defaults = await readFile(new URL("../lib/auditions.ts", import.meta.url), "utf8");
+const auditionActions = await readFile(new URL("../app/projects/[projectId]/auditions/actions.ts", import.meta.url), "utf8");
 
 test("required Siena audition questions are required in defaults and existing forms", () => {
   assert.match(defaults, /field_key: "intimacy_comfort".*required: true/);
@@ -26,4 +27,9 @@ test("callback emails remain manual campaigns and receive an individualized resp
   assert.match(communications, /campaign\.message_type === "audition_callback"/);
   assert.match(callbackPage, /No account or audition form is required/);
   assert.match(callbackPage, /Decline callback invitation/);
+});
+
+test("callback blocks preserve the selected booking mode", () => {
+  assert.doesNotMatch(auditionActions, /sessionType===["']callback["']\\?["']staff_assigned["']/);
+  assert.match(auditionActions, /const bookingMode=requestedBookingMode/);
 });
