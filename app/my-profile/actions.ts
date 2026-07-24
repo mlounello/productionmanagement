@@ -59,7 +59,7 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: person, error: personError } = await supabase
     .from("people")
-    .select("id")
+    .select("id, publicity_profile_version")
     .eq("id", parsed.data.personId)
     .eq("auth_user_id", user.id)
     .maybeSingle();
@@ -77,13 +77,37 @@ export async function updateMyPublicityProfileAction(formData: FormData) {
     new_publicity_bio: cleanBio
   });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
+  const { data: inheritedCopies } = await supabase
+    .from("project_publicity_submissions")
+    .select("id, project_id, status, source_profile_version, playbill_sync_status")
+    .eq("person_id", person.id)
+    .gt("source_profile_version", Number(person.publicity_profile_version ?? 1))
+    .eq("status", "person_approved")
+    .eq("playbill_sync_status", "pending");
+  const syncWarnings: string[] = [];
+  let syncedCopies = 0;
+  for (const copy of inheritedCopies ?? []) {
+    try {
+      await syncApprovedPublicityToPlaybill(String(copy.id));
+      syncedCopies += 1;
+      revalidatePath(`/projects/${copy.project_id}/publicity`);
+    } catch (syncError) {
+      syncWarnings.push(syncError instanceof Error ? syncError.message : "Unknown Playbill sync error.");
+    }
+  }
   const list=(value:string)=>value.split(",").map((item)=>item.trim()).filter(Boolean);
   const {error:enrichmentError}=await supabase.rpc("update_my_profile_enrichment",{new_performance_interests:list(parsed.data.performanceInterests),new_technical_interests:list(parsed.data.technicalInterests),new_vocal_range:parsed.data.vocalRange,new_instruments:parsed.data.instruments,new_special_skills:parsed.data.specialSkills,new_performance_experience:parsed.data.performanceExperience,new_technical_experience:parsed.data.technicalExperience,new_certifications_training:parsed.data.certificationsTraining,new_dance_styles:list(parsed.data.danceStyles),new_dance_experience:parsed.data.danceExperience});
   if(enrichmentError)redirect(`/my-profile?error=${encodeURIComponent(`Basic profile saved, but interests and experience failed: ${enrichmentError.message}`)}`);
 
   revalidatePath("/my-profile");
   revalidatePath(`/people/${parsed.data.personId}`);
-  redirect("/my-profile?success=Profile%20saved.%20Your%20overall%20bio%20was%20copied%20into%20any%20empty%2C%20unlocked%20show%20bios.%20Existing%20show-specific%20edits%20were%20preserved.");
+  if (syncWarnings.length) {
+    redirect(`/my-profile?error=${encodeURIComponent(`Profile saved, but ${syncWarnings.length} inherited show bio sync${syncWarnings.length === 1 ? "" : "s"} will retry automatically: ${syncWarnings[0]}`)}`);
+  }
+  const syncMessage = syncedCopies
+    ? ` ${syncedCopies} inherited show bio${syncedCopies === 1 ? " was" : "s were"} updated and resubmitted to Playbill.`
+    : "";
+  redirect(`/my-profile?success=${encodeURIComponent(`Profile saved.${syncMessage} Existing customized show-specific bios were preserved.`)}`);
 }
 
 export async function requestMyEmailChangeAction(formData: FormData) {
