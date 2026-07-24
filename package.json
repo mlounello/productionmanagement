@@ -23,6 +23,7 @@
     "test:callback-booking": "node --test scripts/callback-booking-boundary.test.mjs",
     "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts",
     "test:email-rate-limit": "node --experimental-strip-types --test scripts/resend-rate-limit.test.ts",
+    "test:email-branding": "node --experimental-strip-types --test scripts/email-branding.test.ts",
     "test:publicity-reminders": "node --experimental-strip-types --test scripts/publicity-reminder-policy.test.ts scripts/publicity-reminder-email.test.ts",
     "test:person-deletion": "node --test scripts/person-deletion-boundary.test.mjs",
     "test:auth-routing": "node --experimental-strip-types --test scripts/auth-callback-routing.test.ts",

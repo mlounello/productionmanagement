@@ -1,4 +1,5 @@
 import { DISABLE_OUTBOUND_EMAIL } from "./config";
+import { brandProductionManagementEmail, PRODUCTION_MANAGEMENT_FROM } from "./email-branding";
 import { isResendQuotaError, resendQuotaMessage, resendRetryDelayMs, shouldRetryResend, type ResendErrorPayload } from "./resend-rate-limit";
 
 export type TemplateVariables = Record<string, string>;
@@ -11,7 +12,7 @@ export function renderTemplate(template: string, variables: TemplateVariables, h
   return template.replace(/{{\s*([a-z0-9_]+)\s*}}/gi, (_match, key: string) => html ? escapeHtml(variables[key] ?? "") : variables[key] ?? "");
 }
 
-export type HtmlEmailInput = { to: string; subject: string; html: string; from?: string };
+export type HtmlEmailInput = { to: string; subject: string; html: string };
 
 export class OutboundEmailError extends Error {
   constructor(message: string, readonly status: number, readonly retryable: boolean) {
@@ -34,9 +35,9 @@ function wait(milliseconds: number) {
 
 function providerCredentials() {
   if (DISABLE_OUTBOUND_EMAIL) throw new Error("Outbound email is disabled.");
-  const apiKey = process.env.RESEND_API_KEY?.trim(); const from = process.env.EMAIL_FROM?.trim();
-  if (!apiKey || !from) throw new Error("Resend email credentials are not configured.");
-  return { apiKey, from };
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) throw new Error("Resend email credentials are not configured.");
+  return { apiKey };
 }
 
 async function requestResend(path: string, body: unknown, idempotencyKey: string) {
@@ -71,17 +72,26 @@ async function requestResend(path: string, body: unknown, idempotencyKey: string
 }
 
 export async function sendHtmlEmail(input: HtmlEmailInput, options: { idempotencyKey?: string } = {}) {
-  const { from: configuredFrom } = providerCredentials();
-  const from = input.from?.trim() || configuredFrom;
-  const payload = await requestResend("/emails", { from, to: [input.to], subject: input.subject, html: input.html }, options.idempotencyKey ?? `pm-email-${crypto.randomUUID()}`);
+  providerCredentials();
+  const payload = await requestResend("/emails", {
+    from: PRODUCTION_MANAGEMENT_FROM,
+    to: [input.to],
+    subject: input.subject,
+    html: brandProductionManagementEmail(input.html)
+  }, options.idempotencyKey ?? `pm-email-${crypto.randomUUID()}`);
   return { id: String(payload.id ?? "") };
 }
 
 export async function sendHtmlEmailBatch(inputs: HtmlEmailInput[], options: { idempotencyKey?: string } = {}) {
   if (!inputs.length) return [];
   if (inputs.length > 100) throw new Error("Resend batches cannot contain more than 100 emails.");
-  const { from: configuredFrom } = providerCredentials();
-  const body = inputs.map((input) => ({ from: input.from?.trim() || configuredFrom, to: [input.to], subject: input.subject, html: input.html }));
+  providerCredentials();
+  const body = inputs.map((input) => ({
+    from: PRODUCTION_MANAGEMENT_FROM,
+    to: [input.to],
+    subject: input.subject,
+    html: brandProductionManagementEmail(input.html)
+  }));
   const payload = await requestResend("/emails/batch", body, options.idempotencyKey ?? `pm-batch-${crypto.randomUUID()}`);
   const data = Array.isArray(payload.data) ? payload.data as Array<Record<string, unknown>> : [];
   if (data.length !== inputs.length) throw new OutboundEmailError("Resend returned an incomplete batch response. Recipient statuses were preserved for review.", 502, true);

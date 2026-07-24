@@ -14,7 +14,11 @@ Production Management profile access mirrors Playbill contributor access:
 - `NEXT_PUBLIC_SITE_URL=https://productionmanagement.mlounello.com`
 - `SUPABASE_SERVICE_ROLE_KEY`: the server-only service-role key for the shared Supabase project. Never prefix this variable with `NEXT_PUBLIC_`.
 - `RESEND_API_KEY`: an API key allowed to send from the configured domain.
-- `EMAIL_FROM`: the verified sender, for example `Siena Theatre Production Management <production@mlounello.com>`.
+- All Production Management delivery is enforced as `Production Management <production-management@mlounello.com>`. Verify `mlounello.com` in Resend; the application does not permit an individual workflow to substitute a different sender.
+
+The shared delivery layer wraps every outgoing HTML message in the Siena Theatre Production Management layout. Specialized welcome and publicity layouts carry the same branding marker and are not wrapped twice.
+
+Inbox avatars are controlled by each receiving email client, not by the message HTML or Resend API. For broad logo support, configure BIMI for `mlounello.com`; this requires DMARC enforcement (`p=quarantine` or `p=reject`, `pct=100`) and a compliant hosted SVG/certificate. Until then, individual providers may use a profile image attached to the exact sender address or a Gravatar entry, but display is not guaranteed.
 - `RESEND_MAX_REQUESTS_PER_SECOND=4`: optional safety override. The application will never configure itself above four requests per second, leaving room below Resend's standard five-request team limit.
 - `RESEND_MAX_RETRIES=5`: optional retry count for per-second rate limits and temporary Resend failures. Resend's `Retry-After` and rate-limit reset headers take precedence over the backoff calculation.
 - `DISABLE_OUTBOUND_EMAIL=false`

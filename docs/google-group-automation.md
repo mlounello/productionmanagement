@@ -396,7 +396,7 @@ Welcome emails are separate from Google Group membership messages.
 2. Complete Resend's DNS verification for that domain.
 3. Create a restricted API key for this application.
 4. Add the key to Vercel as `RESEND_API_KEY`.
-5. Set `EMAIL_FROM` to a verified sender, for example `Production Management <production@siena.edu>` if that address/domain is approved and verified.
+5. Verify `mlounello.com` in Resend. Production Management enforces the sender `Production Management <production-management@mlounello.com>` for every workflow.
 6. Initially keep `DISABLE_OUTBOUND_EMAIL=true`.
 7. Once a test template and recipient are ready, set `DISABLE_OUTBOUND_EMAIL=false` and redeploy.
 

@@ -60,7 +60,7 @@ export function formatRoleGroupWelcomeEmail(input: WelcomeEmailLayoutInput) {
   const styledBody = styleBodyMarkup(completedBody);
   const safeProject = escapeHtml(input.projectTitle);
   const safeGroup = escapeHtml(title(input.roleGroup));
-  return `<div style="margin:0;padding:0;background:#eef3f0">
+  return `<div data-pm-email-brand="siena" style="margin:0;padding:0;background:#eef3f0">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#eef3f0">
       <tr>
         <td align="center" style="padding:28px 14px">
