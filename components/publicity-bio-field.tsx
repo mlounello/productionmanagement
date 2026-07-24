@@ -15,6 +15,7 @@ type Props = {
 
 export function PublicityBioField({ name, initialValue, previewName, previewRole, label, characterLimit, compact = false }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const selectionRef = useRef<Range | null>(null);
   const [value, setValue] = useState(() => sanitizeRichText(initialValue));
   const plainLength = useMemo(() => stripRichTextToPlain(value).length, [value]);
   const overLimit = characterLimit ? plainLength > characterLimit : false;
@@ -23,10 +24,26 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
     if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value;
   }, [value]);
 
+  function rememberSelection() {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editorRef.current) return;
+    const range = selection.getRangeAt(0);
+    if (editorRef.current.contains(range.commonAncestorContainer)) selectionRef.current = range.cloneRange();
+  }
+
+  function restoreSelection() {
+    if (!selectionRef.current) return;
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(selectionRef.current);
+  }
+
   function run(command: string, argument?: string) {
     editorRef.current?.focus();
+    restoreSelection();
     document.execCommand(command, false, argument);
-    if (editorRef.current) setValue(editorRef.current.innerHTML);
+    rememberSelection();
+    if (editorRef.current) setValue(sanitizeRichText(editorRef.current.innerHTML));
   }
 
   return <div className={`publicity-rich-layout${compact ? " compact" : ""}`}>
@@ -35,13 +52,20 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
         <strong>{label}</strong>
         <span>Write only the biography itself. Do not include your name or role—the program adds both automatically.</span>
       </div>
-      <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}>
+      <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}
+        onMouseDown={(event) => {
+          if ((event.target as HTMLElement).closest("button")) event.preventDefault();
+        }}>
         <button type="button" className="rich-tool-button" onClick={() => run("bold")}><strong>B</strong></button>
         <button type="button" className="rich-tool-button" onClick={() => run("italic")}><em>I</em></button>
         <button type="button" className="rich-tool-button" onClick={() => run("underline")}><u>U</u></button>
         <button type="button" className="rich-tool-button" onClick={() => run("insertUnorderedList")}>Bullets</button>
         <button type="button" className="rich-tool-button" onClick={() => run("insertOrderedList")}>Numbered</button>
         <button type="button" className="rich-tool-button" onClick={() => {
+          if (!selectionRef.current || selectionRef.current.collapsed) {
+            window.alert("Select the words you want to turn into a link first.");
+            return;
+          }
           const enteredUrl = window.prompt("Link URL or email address");
           if (!enteredUrl?.trim()) return;
           const url = normalizeRichTextLinkUrl(enteredUrl);
@@ -57,7 +81,12 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
         <button type="button" className="rich-tool-button" onClick={() => run("redo")}>Redo</button>
       </div>
       <div ref={editorRef} className="rich-editor" contentEditable suppressContentEditableWarning data-placeholder="Write your bio here…"
-        onInput={() => editorRef.current && setValue(editorRef.current.innerHTML)}
+        onInput={() => {
+          rememberSelection();
+          if (editorRef.current) setValue(editorRef.current.innerHTML);
+        }}
+        onKeyUp={rememberSelection}
+        onMouseUp={rememberSelection}
         onBlur={() => setValue((current) => sanitizeRichText(current))} />
       {characterLimit ? <p className={overLimit ? "rich-counter over" : "rich-counter"}>{plainLength} / {characterLimit} visible characters</p> : null}
       <textarea className="sr-only" aria-hidden name={name} value={value} onChange={() => {}} />

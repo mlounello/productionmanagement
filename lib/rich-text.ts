@@ -39,7 +39,11 @@ export function sanitizeRichText(input: string | undefined) {
   const normalized = !/<\/?[a-z][\s\S]*>/i.test(withoutDangerousBlocks) && /[\r\n]/.test(withoutDangerousBlocks)
     ? plainTextLineBreaksToHtml(withoutDangerousBlocks)
     : withoutDangerousBlocks;
-  return normalized.replace(/<\/?([a-z0-9-]+)([^>]*)>/gi, (full, tag, attrs) => {
+  const withoutDeadAnchors = normalized.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_full, attrs, content) => {
+    const cleanAttributes = sanitizeAttributes("a", String(attrs));
+    return cleanAttributes.includes(" href=") ? `<a${cleanAttributes}>${content}</a>` : content;
+  });
+  return withoutDeadAnchors.replace(/<\/?([a-z0-9-]+)([^>]*)>/gi, (full, tag, attrs) => {
     const tagName = String(tag).toLowerCase();
     if (!allowedTags.has(tagName)) return "";
     if (full.startsWith("</")) return `</${tagName}>`;

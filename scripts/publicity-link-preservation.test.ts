@@ -22,7 +22,8 @@ test("normalizes common web and email links before saving a bio", () => {
 
 test("removes unsafe link destinations", () => {
   assert.equal(normalizeRichTextLinkUrl("javascript:alert(1)"), null);
-  assert.equal(sanitizeRichText('<a href="javascript:alert(1)">Bad link</a>'), "<a>Bad link</a>");
+  assert.equal(sanitizeRichText('<a href="javascript:alert(1)">Bad link</a>'), "Bad link");
+  assert.equal(sanitizeRichText("<p><a>Dead link</a></p>"), "<p>Dead link</p>");
 });
 
 test("the Playbill bridge transfers the formatted bio instead of flattening it", () => {
@@ -31,4 +32,12 @@ test("the Playbill bridge transfers the formatted bio instead of flattening it",
     "utf8"
   );
   assert.match(migration, /bio\s*=\s*submission\.bio/i);
+});
+
+test("the bio toolbar preserves the editor selection before creating a link", () => {
+  const field = readFileSync(new URL("../components/publicity-bio-field.tsx", import.meta.url), "utf8");
+  assert.match(field, /selectionRef/);
+  assert.match(field, /event\.preventDefault\(\)/);
+  assert.match(field, /restoreSelection\(\)/);
+  assert.match(field, /Select the words you want to turn into a link first/);
 });
