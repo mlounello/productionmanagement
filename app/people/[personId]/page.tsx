@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { sendPersonProfileAccessLinkAction, updatePersonProfileAction } from "@/app/people/actions";
+import {
+  deletePersonPermanentlyAction,
+  removePersonAssignmentForDeletionAction,
+  sendPersonProfileAccessLinkAction,
+  updatePersonProfileAction
+} from "@/app/people/actions";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
 import { PublicityBioField } from "@/components/publicity-bio-field";
 
@@ -10,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 type Person = {
   id: string;
+  auth_user_id: string | null;
   first_name: string;
   middle_name: string;
   last_name: string;
@@ -91,9 +97,9 @@ export default async function PersonPage({
   searchParams
 }: {
   params: Promise<{ personId: string }>;
-  searchParams?: Promise<{ error?: string; success?: string }>;
+  searchParams?: Promise<{ error?: string; success?: string; delete?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { personId } = await params;
   const query = await searchParams;
   const supabase = await createSupabaseServerClient();
@@ -103,12 +109,13 @@ export default async function PersonPage({
     { data: notes },
     { data: accomplishments },
     { data: personExternalLinks },
-    { data: managementDetails }
+    { data: managementDetails },
+    { data: currentRole }
   ] = await Promise.all([
     supabase
       .from("people")
       .select(
-        "id, first_name, middle_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_bio, publicity_headshot_url, publicity_profile_version"
+        "id, auth_user_id, first_name, middle_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_bio, publicity_headshot_url, publicity_profile_version"
       )
       .eq("id", personId)
       .maybeSingle(),
@@ -135,7 +142,8 @@ export default async function PersonPage({
       .select("id, external_app, external_schema, external_table, external_id, sync_direction, sync_status")
       .eq("local_entity_type", "person")
       .eq("local_entity_id", personId),
-    supabase.from("person_management_details").select("notes").eq("person_id", personId).maybeSingle()
+    supabase.from("person_management_details").select("notes").eq("person_id", personId).maybeSingle(),
+    supabase.rpc("get_user_role")
   ]);
 
   if (!person) {
@@ -158,6 +166,9 @@ export default async function PersonPage({
     ...((personExternalLinks ?? []) as ExternalLinkRow[]),
     ...((assignmentExternalLinks ?? []) as ExternalLinkRow[])
   ];
+  const isOwner = currentRole === "owner";
+  const deletionOpen = query?.delete === "1";
+  const deletingSelf = typedPerson.auth_user_id === user.id;
 
   return (
     <div className="page workspace-page">
@@ -432,6 +443,54 @@ export default async function PersonPage({
           )}
         </div>
       </section>
+
+      {isOwner ? (
+        <section className="panel workspace-section" id="delete-person">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Owner-only danger zone</p>
+              <h2>Delete Person</h2>
+              <p className="muted">Only the single Production Management owner can see or use these controls.</p>
+            </div>
+            {!deletionOpen ? <Link className="button danger" href={`/people/${typedPerson.id}?delete=1#delete-person`}>Review permanent deletion</Link> : null}
+          </div>
+          {deletionOpen ? (
+            deletingSelf ? (
+              <p className="setup-warning">Your own linked owner profile cannot be deleted.</p>
+            ) : assignmentRows.length ? (
+              <div className="stacked-form">
+                <p className="setup-warning"><strong>Deletion is blocked.</strong> {typedPerson.full_name} still has {assignmentRows.length} role assignment{assignmentRows.length === 1 ? "" : "s"}. Removing an assignment vacates its Playbill role and runs the configured Google Group removal workflow before deleting the local assignment.</p>
+                <div className="compact-list">
+                  {assignmentRows.map((assignment) => (
+                    <div className="compact-row" key={assignment.id}>
+                      <div>
+                        <strong>{assignment.project_roles?.name ?? "Unknown role"}</strong>
+                        <span>{assignment.projects?.title ?? "Unknown project"} · {titleCase(assignment.status)} · {titleCase(assignment.project_roles?.role_group ?? "role")}</span>
+                      </div>
+                      <form action={removePersonAssignmentForDeletionAction}>
+                        <input type="hidden" name="personId" value={typedPerson.id}/>
+                        <input type="hidden" name="assignmentId" value={assignment.id}/>
+                        <input type="hidden" name="projectId" value={assignment.project_id}/>
+                        <button className="button danger" type="submit">Remove assignment</button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+                <p className="muted">Remove each assignment above. This page will keep returning here until no assignments remain; only then will permanent deletion become available.</p>
+              </div>
+            ) : (
+              <form action={deletePersonPermanentlyAction} className="stacked-form">
+                <input type="hidden" name="personId" value={typedPerson.id}/>
+                <p className="setup-warning"><strong>This cannot be undone.</strong> Deleting this person also deletes their profile, audition and technical-interest submissions, publicity copies, notes, accomplishments, access links, and stored headshot. Their Production Management access is revoked. Email audit records are retained without the person attached.</p>
+                <p className="muted">Current record: {noteRows.length} note{noteRows.length === 1 ? "" : "s"}, {accomplishmentRows.length} accomplishment{accomplishmentRows.length === 1 ? "" : "s"}, and {externalLinks.length} external link{externalLinks.length === 1 ? "" : "s"}.</p>
+                <label className="field"><span>Type <strong>{typedPerson.full_name}</strong> to confirm</span><input name="confirmationName" required autoComplete="off"/></label>
+                <label className="check-row"><input type="checkbox" name="understandPermanent" required/><span>I understand this permanently deletes the person and their Production Management history.</span></label>
+                <div className="top-actions"><button className="button danger" type="submit">Permanently delete person</button><Link className="button secondary" href={`/people/${typedPerson.id}`}>Cancel</Link></div>
+              </form>
+            )
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

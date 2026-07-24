@@ -26,7 +26,7 @@ function PersonAvatar({ person, large = false }: { person: DirectoryPerson; larg
   >{person.headshotUrl ? null : (person.preferredName || person.fullName).slice(0, 1).toUpperCase()}</span>;
 }
 
-export function PeopleDirectory({ people, returnTo, projectId }: { people: DirectoryPerson[]; returnTo: string; projectId?: string }) {
+export function PeopleDirectory({ people, returnTo, projectId, canDeletePeople = false }: { people: DirectoryPerson[]; returnTo: string; projectId?: string; canDeletePeople?: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState(""); const [group, setGroup] = useState(""); const [type, setType] = useState(""); const [status, setStatus] = useState("active");
   const selected = people.find((person) => person.id === selectedId) ?? null;
@@ -70,7 +70,7 @@ export function PeopleDirectory({ people, returnTo, projectId }: { people: Direc
         </form>
         <section className="drawer-section static"><h3>{projectId ? "Project roles" : "Project history"}</h3><div className="compact-list">{selected.roles.length ? selected.roles.map((role)=><div className="compact-row" key={role.id}><div><strong>{role.name}</strong><span>{role.projectTitle ? `${role.projectTitle} · ` : ""}{label(role.group)}{role.guestArtist ? " · Guest Artist" : ""}</span></div><StatusBadge status={role.status}/></div>) : <p className="muted">No roles on file.</p>}</div></section>
         {projectId ? <section className="drawer-section static"><h3>Project notes</h3><div className="compact-list">{selected.notes.length ? selected.notes.map((note)=><div className="compact-row" key={note.id}><div><strong>{note.pinned ? "Pinned · " : ""}{note.visibility === "client_visible" ? "Client visible" : "Management only"}</strong><span>{note.note}</span></div></div>) : <p className="muted">No project notes yet.</p>}</div><form action={addPersonNoteAction} className="stacked-form"><input type="hidden" name="projectId" value={projectId}/><input type="hidden" name="personId" value={selected.id}/><label className="field"><span>Visibility</span><select name="visibility" defaultValue="internal"><option value="internal">Management only</option><option value="client_visible">Client visible</option></select></label><label className="field"><span>New note</span><textarea name="note" rows={3} required/></label><label className="check-row"><input type="checkbox" name="isPinned"/><span>Pin this note</span></label><button type="submit" className="button secondary">Add note</button></form></section> : <section className="drawer-section static"><h3>Record summary</h3><p className="muted">{selected.roles.length} role{selected.roles.length===1?"":"s"} · {selected.projectCount} project{selected.projectCount===1?"":"s"} · {selected.noteCount} note{selected.noteCount===1?"":"s"}</p></section>}
-        <div className="drawer-footer"><Link className="button secondary" href={`/people/${selected.id}`}>Open full profile, bio & headshot</Link></div>
+        <div className="drawer-footer"><Link className="button secondary" href={`/people/${selected.id}`}>Open full profile, bio & headshot</Link>{canDeletePeople ? <Link className="button danger" href={`/people/${selected.id}?delete=1#delete-person`}>Delete person…</Link> : null}</div>
       </div>
     </aside> : null}
   </div>;

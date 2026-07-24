@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { syncPersonAssignmentsToPlaybill } from "@/lib/playbill-sync";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { syncPersonAssignmentsToPlaybill, vacateAssignmentInPlaybill } from "@/lib/playbill-sync";
+import { removeAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { sendBrandedProfileAccessLink } from "@/lib/profile-access-links";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 
@@ -48,6 +50,17 @@ function peopleErrorPath(personId: string, message: string) {
 
 function peopleSuccessPath(personId: string, message: string) {
   return `/people/${personId}?success=${encodeURIComponent(message)}`;
+}
+
+function peopleDeletionPath(personId: string, kind: "error" | "success", message: string) {
+  return `/people/${personId}?delete=1&${kind}=${encodeURIComponent(message)}#delete-person`;
+}
+
+async function requireAppOwner() {
+  const supabase = await createSupabaseServerClient();
+  const { data: role, error } = await supabase.rpc("get_user_role");
+  if (error || role !== "owner") throw new Error("Only the Production Management owner can permanently delete people or remove assignments from this deletion workflow.");
+  return supabase;
 }
 
 export async function updatePersonProfileAction(formData: FormData) {
@@ -143,6 +156,91 @@ export async function sendPersonProfileAccessLinkAction(formData: FormData) {
     redirect(peopleErrorPath(personId, error instanceof Error ? error.message : "Could not send secure profile access."));
   }
   redirect(peopleSuccessPath(personId, `Secure profile access sent to ${email}.`));
+}
+
+const assignmentDeletionSchema = z.object({
+  personId: personIdSchema,
+  assignmentId: z.string().uuid(),
+  projectId: z.string().uuid()
+});
+
+export async function removePersonAssignmentForDeletionAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = assignmentDeletionSchema.safeParse({
+    personId: requiredString(formData.get("personId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    projectId: requiredString(formData.get("projectId"))
+  });
+  const personId = requiredString(formData.get("personId"));
+  if (!parsed.success) redirect(peopleDeletionPath(personId, "error", "Invalid role assignment."));
+
+  let supabase;
+  try { supabase = await requireAppOwner(); }
+  catch (error) { redirect(peopleDeletionPath(parsed.data.personId, "error", error instanceof Error ? error.message : "Owner access is required.")); }
+  const { data: assignment, error: assignmentError } = await supabase.from("role_assignments")
+    .select("id,person_id,project_id,project_roles(name),projects(title)")
+    .eq("id", parsed.data.assignmentId)
+    .eq("person_id", parsed.data.personId)
+    .eq("project_id", parsed.data.projectId)
+    .maybeSingle();
+  if (assignmentError || !assignment) {
+    redirect(peopleDeletionPath(parsed.data.personId, "error", assignmentError?.message ?? "Assignment not found."));
+  }
+
+  try {
+    await vacateAssignmentInPlaybill(parsed.data.projectId, parsed.data.assignmentId);
+  } catch (error) {
+    redirect(peopleDeletionPath(parsed.data.personId, "error", `Could not vacate the linked Playbill role: ${error instanceof Error ? error.message : "Unknown error."}`));
+  }
+  let googleWarning = "";
+  try {
+    const result = await removeAssignmentGoogleAutomation(parsed.data.projectId, parsed.data.assignmentId, user.id);
+    googleWarning = result.warnings.join(" ");
+  } catch (error) {
+    googleWarning = error instanceof Error ? error.message : "Google Group cleanup needs attention.";
+  }
+  const { error: linkError } = await supabase.from("external_links")
+    .delete()
+    .eq("local_entity_type", "role_assignment")
+    .eq("local_entity_id", parsed.data.assignmentId);
+  if (linkError) redirect(peopleDeletionPath(parsed.data.personId, "error", `The role was vacated, but its integration link could not be removed: ${linkError.message}`));
+  const { error: deleteError } = await supabase.from("role_assignments")
+    .delete()
+    .eq("id", parsed.data.assignmentId)
+    .eq("person_id", parsed.data.personId)
+    .eq("project_id", parsed.data.projectId);
+  if (deleteError) redirect(peopleDeletionPath(parsed.data.personId, "error", deleteError.message));
+
+  revalidatePath("/people");
+  revalidatePath(`/people/${parsed.data.personId}`);
+  revalidatePath(`/projects/${parsed.data.projectId}`);
+  const role = Array.isArray(assignment.project_roles) ? assignment.project_roles[0] : assignment.project_roles;
+  const project = Array.isArray(assignment.projects) ? assignment.projects[0] : assignment.projects;
+  redirect(peopleDeletionPath(parsed.data.personId, "success", `${String(role?.name ?? "Role")} removed from ${String(project?.title ?? "project")}.${googleWarning ? ` Google follow-up: ${googleWarning}` : ""}`));
+}
+
+export async function deletePersonPermanentlyAction(formData: FormData) {
+  await requireUser();
+  const personId = personIdSchema.safeParse(requiredString(formData.get("personId")));
+  if (!personId.success) redirect("/people?error=Invalid%20person.");
+  if (formData.get("understandPermanent") !== "on") {
+    redirect(peopleDeletionPath(personId.data, "error", "Confirm that you understand this permanently deletes the person and their history."));
+  }
+  const confirmationName = requiredString(formData.get("confirmationName")).trim();
+  let supabase;
+  try { supabase = await requireAppOwner(); }
+  catch (error) { redirect(peopleDeletionPath(personId.data, "error", error instanceof Error ? error.message : "Owner access is required.")); }
+
+  const { data: deletedName, error } = await supabase.rpc("delete_person_as_owner", {
+    target_person_id: personId.data,
+    confirmation_full_name: confirmationName
+  });
+  if (error) redirect(peopleDeletionPath(personId.data, "error", error.message));
+
+  const admin = createSupabaseAdminClient();
+  const { error: storageError } = await admin.storage.from("profile-headshots").remove([`${personId.data}/headshot.jpg`]);
+  revalidatePath("/people");
+  redirect(`/people?success=${encodeURIComponent(`${String(deletedName)} was permanently deleted.${storageError ? " The database record is gone, but the stored headshot may require manual cleanup." : ""}`)}`);
 }
 
 const directoryProfileSchema = z.object({

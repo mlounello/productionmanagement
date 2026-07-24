@@ -30,11 +30,12 @@ export default async function PeoplePage({
   await requireUser();
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
-  const [{ data: people, error }, { data: assignments }, { data: notes }, { data: managementDetails }] = await Promise.all([
+  const [{ data: people, error }, { data: assignments }, { data: notes }, { data: managementDetails }, { data: currentRole }] = await Promise.all([
     supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, status, publicity_headshot_url, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience").order("full_name", { ascending: true }),
     supabase.from("role_assignments").select("id, person_id, project_id, status, is_guest_artist, projects(title), project_roles(name, role_group)"),
     supabase.from("person_notes").select("person_id"),
-    supabase.from("person_management_details").select("person_id, notes")
+    supabase.from("person_management_details").select("person_id, notes"),
+    supabase.rpc("get_user_role")
   ]);
 
   const assignmentRows = (assignments ?? []) as unknown as AssignmentRow[];
@@ -92,7 +93,7 @@ export default async function PeoplePage({
       {params?.success ? <p className="setup-success">{params.success}</p> : null}
       {error ? <p className="setup-warning">{error.message}</p> : null}
       <section className="panel workspace-section people-directory-panel">
-        <PeopleDirectory people={directoryPeople} returnTo="/people" />
+        <PeopleDirectory people={directoryPeople} returnTo="/people" canDeletePeople={currentRole === "owner"} />
       </section>
     </div>
   );
