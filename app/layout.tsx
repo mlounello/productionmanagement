@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -6,7 +7,7 @@ import { AppSidebarNav } from "@/components/app-sidebar-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Production Management",
+  title: "ProdMind | Production Management",
   description: "Siena production operations platform"
 };
 
@@ -25,13 +26,31 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <div className={hasInternalAccess ? "app-shell" : "public-shell"}>
           {hasInternalAccess ? (
             <aside className="app-sidebar">
-              <Link className="sidebar-brand" href="/dashboard"><span>PM</span><strong>Production Management</strong></Link>
+              <Link className="sidebar-brand" href="/dashboard" aria-label="ProdMind dashboard">
+                <Image
+                  src="/brand/prodmind-horizontal.png"
+                  alt="ProdMind — Optimize Your Production"
+                  width={2200}
+                  height={654}
+                  priority
+                />
+              </Link>
               <AppSidebarNav />
             </aside>
           ) : null}
           <div className="app-content">
             <header className="site-header">
-              {!hasInternalAccess ? <Link className="brand" href={user ? "/my-profile" : "/"}>Production Management</Link> : <span className="site-context">Siena Production Operations</span>}
+              {!hasInternalAccess ? (
+                <Link className="brand" href={user ? "/my-profile" : "/"} aria-label="ProdMind home">
+                  <Image
+                    src="/brand/prodmind-horizontal.png"
+                    alt="ProdMind — Optimize Your Production"
+                    width={2200}
+                    height={654}
+                    priority
+                  />
+                </Link>
+              ) : <span className="site-context">Siena Production Operations</span>}
               <nav aria-label="Account navigation">
                 {user ? <Link href="/my-profile">My Profile</Link> : null}
                 {user ? (

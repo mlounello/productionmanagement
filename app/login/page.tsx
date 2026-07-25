@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { hasSupabaseEnv, SITE_URL } from "@/lib/config";
 import { getCurrentUser } from "@/lib/auth";
 import { GoogleLoginButton } from "@/app/login/google-login-button";
+import Image from "next/image";
 import Link from "next/link";
 import {
   allowProductionMagicLinkRequest,
@@ -66,6 +67,14 @@ export default async function LoginPage({
   return (
     <div className="page">
       <section className="panel" style={{ maxWidth: 520 }}>
+        <Image
+          className="login-brand"
+          src="/brand/prodmind-square.png"
+          alt="ProdMind — Optimize Your Production"
+          width={1400}
+          height={1119}
+          priority
+        />
         <p className="eyebrow">Siena Production Operations</p>
         <h1>Sign in</h1>
         <p className="muted">Staff may use a Siena Google account or staff magic link. Production contributors can use the secure profile link sent to the email address stored on their profile, including a personal address.</p>

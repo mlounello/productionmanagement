@@ -53,28 +53,15 @@ body {
 }
 
 .sidebar-brand {
-  align-items: center;
-  display: flex;
-  gap: 10px;
+  display: block;
   margin: 0 8px 28px;
 }
 
-.sidebar-brand > span {
-  align-items: center;
-  background: var(--siena-gold);
-  border-radius: 8px;
-  color: #173d31;
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
-  height: 36px;
-  justify-content: center;
-  width: 36px;
-}
-
-.sidebar-brand > strong {
-  font-size: 14px;
-  line-height: 1.2;
+.sidebar-brand img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 190px;
 }
 
 .app-sidebar nav {
@@ -138,9 +125,24 @@ textarea {
 }
 
 .brand {
-  color: var(--siena-green);
-  font-size: 18px;
-  font-weight: 750;
+  display: block;
+  flex: 0 1 240px;
+  min-width: 0;
+}
+
+.brand img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 220px;
+}
+
+.login-brand {
+  display: block;
+  height: auto;
+  margin: 0 auto 24px;
+  max-width: 100%;
+  width: 300px;
 }
 
 .site-header nav {
@@ -2987,6 +2989,29 @@ a.readiness-main:hover { color: var(--siena-green); }
 }
 
 @media (max-width: 560px) {
+  .site-header {
+    gap: 14px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .brand {
+    flex-basis: 160px;
+  }
+
+  .brand img {
+    width: 160px;
+  }
+
+  .site-header nav {
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .login-brand {
+    width: 260px;
+  }
+
   .audition-public-page {
     padding-bottom: 48px;
     padding-left: 12px;
