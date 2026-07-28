@@ -5,6 +5,7 @@ export const APP_SCHEMA =
   "app_production_management";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+export const THEATRE_BUDGET_SITE_URL = process.env.NEXT_PUBLIC_THEATRE_BUDGET_SITE_URL?.trim() || "https://theatrebudgetapp.mlounello.com";
 export const ENABLE_PLAYBILL_WRITES = process.env.ENABLE_PLAYBILL_WRITES?.trim().toLowerCase() === "true";
 export const ENABLE_BUDGET_WRITES = process.env.ENABLE_BUDGET_WRITES?.trim().toLowerCase() === "true";
 export const ENABLE_GOOGLE_GROUP_SYNC = process.env.ENABLE_GOOGLE_GROUP_SYNC?.trim().toLowerCase() === "true";

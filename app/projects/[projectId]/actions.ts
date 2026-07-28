@@ -1010,6 +1010,15 @@ export async function setTheatreBudgetLinkRequirementAction(formData: FormData) 
     : link
       ? "synced"
       : "not_ready";
+  if (input.requirement === "not_required" && link) {
+    const { error: unlinkError } = await supabase
+      .from("external_links")
+      .delete()
+      .eq("id", link.id);
+    if (unlinkError) {
+      redirect(projectAssignmentErrorPath(input.projectId, unlinkError.message, `assignment-${input.id}`));
+    }
+  }
   const { error } = await supabase
     .from("role_assignments")
     .update({ guest_artist_sync_status: nextStatus })
@@ -1024,7 +1033,7 @@ export async function setTheatreBudgetLinkRequirementAction(formData: FormData) 
   redirect(projectAssignmentSuccessPath(
     input.projectId,
     input.requirement === "not_required"
-      ? "Marked as a guest artist who does not require Theatre Budget access."
+      ? "The Theatre Budget link was removed and marked not required for this guest artist."
       : link
         ? "The existing Theatre Budget link is recognized."
         : "Theatre Budget linking is required again.",

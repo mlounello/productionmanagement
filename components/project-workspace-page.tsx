@@ -49,6 +49,7 @@ import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetGuestArtists, fet
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 import { displayStatus } from "@/lib/status-display";
+import { THEATRE_BUDGET_SITE_URL } from "@/lib/config";
 
 const ProjectCalendar = nextDynamic(() => import("@/components/project-calendar").then((module) => module.ProjectCalendar));
 const ProjectGantt = nextDynamic(() => import("@/components/project-gantt").then((module) => module.ProjectGantt));
@@ -1464,7 +1465,7 @@ export default async function ProjectWorkspacePage({
                       ) : assignment.guest_artist_sync_status === "disabled" ? (
                         <div className="linked-record">
                           <div>
-                            <strong>Budget access not required</strong>
+                            <strong>Theatre Budget link not required</strong>
                             <span>This person remains a guest artist and is excluded from missing-link reports.</span>
                           </div>
                           <form action={setTheatreBudgetLinkRequirementAction}>
@@ -1477,21 +1478,30 @@ export default async function ProjectWorkspacePage({
                       ) : linkedGuestArtist ? (
                         <div className="linked-record">
                           <div>
-                            <strong>{linkedGuestArtist.display_name}</strong>
+                            <strong>Linked Theatre Budget record</strong>
+                            <span><b>{linkedGuestArtist.display_name}</b></span>
                             <span>
                               {linkedGuestArtist.email ?? "No email"}
                               {linkedGuestArtist.vendor_number ? ` · Vendor ${linkedGuestArtist.vendor_number}` : ""}
                               {!linkedGuestArtist.active ? " · Inactive" : ""}
                               {budgetContract ? ` · Contract: ${displayStatus(budgetContract.workflow_status)}` : " · No contract for this project"}
                             </span>
+                            <span>Budget record ID: {linkedGuestArtist.id}</span>
                           </div>
-                          <form action={unlinkTheatreBudgetGuestArtistAction}>
-                            <input name="projectId" type="hidden" value={typedProject.id} />
-                            <input name="assignmentId" type="hidden" value={assignment.id} />
-                            <button className="button secondary" type="submit">
-                              Unlink
-                            </button>
-                          </form>
+                          <div className="top-actions">
+                            <a className="button secondary" href={`${THEATRE_BUDGET_SITE_URL.replace(/\/+$/, "")}/guest-artists`} target="_blank" rel="noreferrer">Open in Theatre Budget</a>
+                            <form action={unlinkTheatreBudgetGuestArtistAction}>
+                              <input name="projectId" type="hidden" value={typedProject.id} />
+                              <input name="assignmentId" type="hidden" value={assignment.id} />
+                              <button className="button secondary" type="submit">Unlink</button>
+                            </form>
+                            <form action={setTheatreBudgetLinkRequirementAction}>
+                              <input name="projectId" type="hidden" value={typedProject.id} />
+                              <input name="assignmentId" type="hidden" value={assignment.id} />
+                              <input name="requirement" type="hidden" value="not_required" />
+                              <button className="button secondary" type="submit">Unlink &amp; mark not required</button>
+                            </form>
+                          </div>
                         </div>
                       ) : (
                         <form action={linkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
@@ -1531,7 +1541,7 @@ export default async function ProjectWorkspacePage({
                           <input name="projectId" type="hidden" value={typedProject.id} />
                           <input name="assignmentId" type="hidden" value={assignment.id} />
                           <input name="requirement" type="hidden" value="not_required" />
-                          <button className="button secondary" type="submit">No Budget access required</button>
+                          <button className="button secondary" type="submit">No Theatre Budget link required</button>
                         </form>
                       ) : null}
                       {!linkedGuestArtist && assignment.guest_artist_sync_status !== "disabled" ? (
