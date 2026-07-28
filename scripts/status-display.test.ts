@@ -4,6 +4,7 @@ import { displayStatus, statusDescription, statusTone } from "../lib/status-disp
 
 assert.equal(displayStatus("person_approved"), "Person approved");
 assert.equal(displayStatus("not_attempted"), "Not attempted");
+assert.equal(displayStatus("contract_signed_returned"), "Contract Signed + Returned");
 assert.equal(statusTone("synced"), "success");
 assert.equal(statusTone("missing"), "danger");
 assert.equal(statusTone("submitted"), "info");
@@ -12,6 +13,8 @@ assert.equal(statusTone("vacant"), "info");
 assert.equal(statusTone("offered"), "warning");
 assert.equal(statusTone("awaiting_membership"), "warning");
 assert.equal(statusTone("accepted"), "success");
+assert.equal(statusTone("contract_sent"), "warning");
+assert.equal(statusTone("siena_signed"), "success");
 assert.match(statusDescription("missing", "google-membership"), /not found/i);
 assert.match(statusDescription("awaiting_membership", "welcome-email"), /held/i);
 assert.match(statusDescription("locked", "playbill"), /read-only/i);

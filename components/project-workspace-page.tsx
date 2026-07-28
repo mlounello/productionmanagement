@@ -44,9 +44,10 @@ import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
+import { displayStatus } from "@/lib/status-display";
 
 const ProjectCalendar = nextDynamic(() => import("@/components/project-calendar").then((module) => module.ProjectCalendar));
 const ProjectGantt = nextDynamic(() => import("@/components/project-gantt").then((module) => module.ProjectGantt));
@@ -464,7 +465,7 @@ export default async function ProjectWorkspacePage({
         .select("person_id, notes")
         .in("person_id", projectPersonIds)
     : { data: [] };
-  const { data: guestArtistLinks } = ["overview", "roles", "integrations"].includes(workspace) && assignmentRows.length
+  const { data: guestArtistLinks } = ["overview", "roles", "people", "integrations"].includes(workspace) && assignmentRows.length
     ? await supabase
         .from("external_links")
         .select("id, local_entity_id, external_id, sync_status, metadata")
@@ -500,6 +501,7 @@ export default async function ProjectWorkspacePage({
         .in("local_entity_id", roles.map((role) => role.id))
     : { data: [] };
   const needsPlaybillWorkspace = workspace === "overview" || workspace === "roles" || workspace === "integrations";
+  const needsBudgetWorkspace = needsPlaybillWorkspace || workspace === "people";
   const [{ data: playbillLinks }, { data: budgetProjectLinks }, theatreBudgetGuestArtists, playbillShows, theatreBudgetProjects] = await Promise.all([
     needsPlaybillWorkspace ? supabase
       .from("external_links")
@@ -509,7 +511,7 @@ export default async function ProjectWorkspacePage({
       .eq("external_app", "playbill")
       .eq("external_schema", "app_playbill")
       .eq("external_table", "shows") : Promise.resolve({ data: [] }),
-    needsPlaybillWorkspace ? supabase
+    needsBudgetWorkspace ? supabase
       .from("external_links")
       .select("id, external_id, sync_status, metadata")
       .eq("local_entity_type", "project")
@@ -533,6 +535,9 @@ export default async function ProjectWorkspacePage({
   const linkedBudgetProject = budgetProjectLink
     ? theatreBudgetProjects.data.find((project) => project.id === budgetProjectLink.external_id) ?? null
     : null;
+  const theatreBudgetContracts = budgetProjectLink && ["roles", "people"].includes(workspace)
+    ? await fetchTheatreBudgetContractStatuses(String(budgetProjectLink.external_id))
+    : { data: [], error: null };
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
@@ -571,6 +576,9 @@ export default async function ProjectWorkspacePage({
       .map((link) => [link.local_entity_id, link])
   );
   const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
+  const budgetContractByGuestArtistId = new Map(
+    theatreBudgetContracts.data.map((contract) => [contract.guest_artist_id, contract])
+  );
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
   const filledRoleIds = new Set(
@@ -616,11 +624,14 @@ export default async function ProjectWorkspacePage({
       projectCount: 1,
       roles: personAssignments.map((assignment) => {
         const role = rolesById.get(assignment.role_id);
+        const budgetLink = budgetLinksByAssignmentId.get(assignment.id);
+        const budgetContract = budgetLink ? budgetContractByGuestArtistId.get(budgetLink.external_id) : null;
         return {
           id: assignment.id,
           name: role?.name ?? "Unknown role",
           group: role?.role_group ?? "other",
-          status: assignment.status,
+          status: budgetContract?.workflow_status ?? assignment.status,
+          statusLabel: budgetContract ? `Contract: ${displayStatus(budgetContract.workflow_status)}` : undefined,
           projectTitle: typedProject.title,
           guestArtist: assignment.is_guest_artist
         };
@@ -705,7 +716,7 @@ export default async function ProjectWorkspacePage({
         </div>
       </div>
 
-      <FeedbackBanner error={query?.error} success={query?.success} />
+      <FeedbackBanner error={query?.error} success={query?.success} floating />
 
       <ProjectWorkspaceNav projectId={typedProject.id} active={workspace} />
 
@@ -1378,12 +1389,13 @@ export default async function ProjectWorkspacePage({
               const person = peopleById.get(assignment.person_id);
               const budgetLink = budgetLinksByAssignmentId.get(assignment.id);
               const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
+              const budgetContract = budgetLink ? budgetContractByGuestArtistId.get(budgetLink.external_id) : null;
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
 
               return (
-                <details className="assignment-card" key={assignment.id}>
+                <details className="assignment-card" id={`assignment-${assignment.id}`} key={assignment.id}>
                   <summary>
                     <div>
                       <strong>{person?.full_name ?? "Unknown person"}</strong>
@@ -1392,7 +1404,10 @@ export default async function ProjectWorkspacePage({
                       </span>
                     </div>
                     <div className="badge-row">
-                      <StatusBadge status={assignment.status} label={titleCase(assignment.status)} />
+                      <StatusBadge
+                        status={budgetContract?.workflow_status ?? assignment.status}
+                        label={budgetContract ? `Contract: ${displayStatus(budgetContract.workflow_status)}` : titleCase(assignment.status)}
+                      />
                       <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
@@ -1441,6 +1456,8 @@ export default async function ProjectWorkspacePage({
                       </div>
                       {theatreBudgetGuestArtists.error ? (
                         <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
+                      ) : theatreBudgetContracts.error ? (
+                        <p className="setup-warning">Contract status is unavailable: {theatreBudgetContracts.error}</p>
                       ) : linkedGuestArtist ? (
                         <div className="linked-record">
                           <div>
@@ -1449,6 +1466,7 @@ export default async function ProjectWorkspacePage({
                               {linkedGuestArtist.email ?? "No email"}
                               {linkedGuestArtist.vendor_number ? ` · Vendor ${linkedGuestArtist.vendor_number}` : ""}
                               {!linkedGuestArtist.active ? " · Inactive" : ""}
+                              {budgetContract ? ` · Contract: ${displayStatus(budgetContract.workflow_status)}` : " · No contract for this project"}
                             </span>
                           </div>
                           <form action={unlinkTheatreBudgetGuestArtistAction}>
@@ -1531,14 +1549,22 @@ export default async function ProjectWorkspacePage({
                     <input name="roleId" type="hidden" value={assignment.role_id} />
                     <input name="personId" type="hidden" value={assignment.person_id} />
                     <label className="field">
-                      <span>Status</span>
-                      <select name="status" defaultValue={assignment.status}>
-                        <option value="draft">Draft</option>
-                        <option value="offered">Offered</option>
-                        <option value="accepted">Accepted</option>
-                        <option value="declined">Declined</option>
-                        <option value="withdrawn">Withdrawn</option>
-                      </select>
+                      <span>{budgetContract ? "Contract status (from Theatre Budget)" : "Status"}</span>
+                      {budgetContract ? (
+                        <>
+                          <input name="status" type="hidden" value={assignment.status} />
+                          <input value={displayStatus(budgetContract.workflow_status)} readOnly />
+                          <small>This status is read-only here and updates from the linked Theatre Budget contract.</small>
+                        </>
+                      ) : (
+                        <select name="status" defaultValue={assignment.status}>
+                          <option value="draft">Draft</option>
+                          <option value="offered">Offered</option>
+                          <option value="accepted">Accepted</option>
+                          <option value="declined">Declined</option>
+                          <option value="withdrawn">Withdrawn</option>
+                        </select>
+                      )}
                     </label>
                     <label className="field">
                       <span>Confirmation</span>

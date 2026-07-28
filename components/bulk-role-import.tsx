@@ -55,7 +55,7 @@ export function BulkRoleImport({
             rows={8}
             value={raw}
             onChange={(event) => setRaw(event.target.value)}
-            placeholder={"Sarah Brown | cast | Cast\nMusic Director | creative_team | Music\nStage Manager | production_team | Production"}
+            placeholder={"Sarah Brown | cast | Cast\nMusic Director | creative_team | Music\nStage Manager | stage_management | Production"}
           />
           <small>Format: Role name | role group | department. Group and department are optional.</small>
         </label>

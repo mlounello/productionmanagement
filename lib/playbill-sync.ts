@@ -27,6 +27,7 @@ function categoryForRoleGroup(roleGroup: string): "cast" | "creative" | "product
   if (roleGroup === "cast") return "cast";
   if (roleGroup === "music_band") return "band";
   if (["creative_team", "directorial_team", "administrative"].includes(roleGroup)) return "creative";
+  if (roleGroup === "stage_management") return "production";
   return "production";
 }
 

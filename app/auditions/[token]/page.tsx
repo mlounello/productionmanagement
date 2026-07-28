@@ -15,7 +15,7 @@ type Role = { id: string; name: string; role_group: string };
 type Slot = { id: string; session_id: string; starts_at: string; ends_at: string | null; capacity: number; booked: number; label: string; slot_type: string };
 type Session = { id: string; title: string; location: string; instructions: string; booking_mode: string; booking_category:string; session_type: string; starts_at: string; ends_at: string | null };
 
-const roleGroupOrder=["cast","directorial_team","creative_team","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
+const roleGroupOrder=["cast","directorial_team","creative_team","stage_management","production_team","administrative","front_of_house","music_band","crew","designer","department_head","staff","guest_artist"];
 function roleGroupLabel(value:string){return value.replace(/_/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());}
 function fieldHelpText(field:Field){if(field.field_type!=="file")return field.help_text;const base=field.help_text.replace(/\s*maximum\s+\d+(?:\.\d+)?\s*mb\.?/ig,"").trim();return `${base}${base?" ":""}Maximum ${auditionUploadSizeLabel()}.`;}
 

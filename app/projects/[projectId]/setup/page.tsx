@@ -14,7 +14,7 @@ const stepOrder = ["workflow", "roles", "onboarding", "communications", "integra
 type Step = typeof stepOrder[number];
 const stepLabels: Record<Step, string> = { workflow: "1. Workflow", roles: "2. Roles", onboarding: "3. Onboarding", communications: "4. Communications", integrations: "5. Integrations", review: "6. Review" };
 const groups = [
-  ["cast", "Cast"], ["creative_team", "Creative Team"], ["directorial_team", "Directorial Team"], ["production_team", "Production Team"],
+  ["cast", "Cast"], ["creative_team", "Creative Team"], ["directorial_team", "Directorial Team"], ["production_team", "Production Team"], ["stage_management", "Stage Management"],
   ["administrative", "Administrative"], ["front_of_house", "Front of House"], ["music_band", "Band"], ["crew", "Crew"],
   ["designer", "Designers"], ["department_head", "Department Heads"], ["staff", "Staff"], ["guest_artist", "Guest Artists"]
 ] as const;
@@ -43,7 +43,7 @@ export default async function ProjectSetupPage({ params, searchParams }: { param
     supabase.from("role_assignments").select("id", { count: "exact", head: true }).eq("project_id", projectId).eq("is_guest_artist", true).not("status", "in", "(declined,withdrawn)")
   ]);
   if (!project) notFound();
-  const defaults: Preferences = { setup_status: "in_progress", current_step: "workflow", uses_role_acceptance: true, uses_google_groups: true, uses_propared: true, uses_playbill: true, uses_publicity: true, uses_auditions: true, uses_budget: true, selected_role_groups: groups.slice(0, 7).map(([value]) => value) };
+  const defaults: Preferences = { setup_status: "in_progress", current_step: "workflow", uses_role_acceptance: true, uses_google_groups: true, uses_propared: true, uses_playbill: true, uses_publicity: true, uses_auditions: true, uses_budget: true, selected_role_groups: groups.slice(0, 8).map(([value]) => value) };
   const preferences = { ...defaults, ...(saved as Preferences | null ?? {}) };
   const requestedStep = stepOrder.includes(query?.step as Step) ? query?.step as Step : preferences.current_step;
   const roleCounts = new Map<string, number>();

@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const uuid = z.string().uuid();
 const steps = z.enum(["workflow", "roles", "onboarding", "communications", "integrations", "review"]);
-const roleGroups = z.enum(["cast", "creative_team", "directorial_team", "production_team", "administrative", "front_of_house", "music_band", "crew", "designer", "department_head", "staff", "guest_artist"]);
+const roleGroups = z.enum(["cast", "creative_team", "directorial_team", "production_team", "stage_management", "administrative", "front_of_house", "music_band", "crew", "designer", "department_head", "staff", "guest_artist"]);
 
 function route(projectId: string, step: z.infer<typeof steps>, error = "") {
   return `/projects/${projectId}/setup?step=${step}${error ? `&error=${encodeURIComponent(error)}` : ""}`;

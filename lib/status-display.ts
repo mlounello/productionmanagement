@@ -5,6 +5,8 @@ const LABELS: Record<string, string> = {
   not_attempted: "Not attempted", already_sent: "Already sent", person_approved: "Person approved",
   changes_requested: "Changes requested", no_show: "No show", in_progress: "In progress",
   not_checked: "Not checked", not_prepared: "Not prepared", awaiting_membership: "Awaiting membership",
+  w9_requested: "W9 Requested", contract_sent: "Contract Sent",
+  contract_signed_returned: "Contract Signed + Returned", siena_signed: "Siena Signed",
 };
 
 export function displayStatus(value?: string | null) {
@@ -15,8 +17,8 @@ export function displayStatus(value?: string | null) {
 export function statusTone(value?: string | null): StatusTone {
   const status = String(value || "").toLowerCase();
   if (["failed", "error", "missing", "not_prepared", "declined", "bounced", "no_show", "returned", "partial"].includes(status)) return "danger";
-  if (["created", "synced", "verified", "sent", "already_sent", "approved", "person_approved", "published", "confirmed", "linked", "accepted", "ready", "filled", "cast", "auditioned", "checked_in", "locked", "complete"].includes(status)) return "success";
-  if (["pending", "awaiting_person_approval", "changes_requested", "changes_needed", "needs_review", "duplicate", "waitlist", "callback", "sending", "offered", "recommended", "invited", "considering", "acceptance_pending", "publicity_pending", "attention", "awaiting_membership"].includes(status)) return "warning";
+  if (["created", "synced", "verified", "sent", "already_sent", "approved", "person_approved", "published", "confirmed", "linked", "accepted", "ready", "filled", "cast", "auditioned", "checked_in", "locked", "complete", "contract_signed_returned", "siena_signed"].includes(status)) return "success";
+  if (["pending", "awaiting_person_approval", "changes_requested", "changes_needed", "needs_review", "duplicate", "waitlist", "callback", "sending", "offered", "recommended", "invited", "considering", "acceptance_pending", "publicity_pending", "attention", "awaiting_membership", "contract_sent"].includes(status)) return "warning";
   if (["draft", "in_progress", "submitted", "scheduled", "vacant", "registered", "guest_artist", "opened", "onboarding"].includes(status)) return "info";
   return "neutral";
 }

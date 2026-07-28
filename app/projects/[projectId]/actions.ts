@@ -28,7 +28,7 @@ import { projectWorkspacePath, type ProjectWorkspaceKey } from "@/lib/project-ro
 const projectIdSchema = z.string().uuid();
 const assignmentKindSchema = z.enum(["primary", "shared", "understudy", "alternate"]);
 const supportedRoleGroups = new Set([
-  "creative_team", "production_team", "cast", "directorial_team", "administrative",
+  "creative_team", "production_team", "stage_management", "cast", "directorial_team", "administrative",
   "front_of_house", "music_band", "crew", "designer", "department_head", "staff", "guest_artist"
 ]);
 
@@ -66,6 +66,7 @@ const projectRoleSchema = z.object({
   roleGroup: z.enum([
     "creative_team",
     "production_team",
+    "stage_management",
     "cast",
     "directorial_team",
     "administrative",
@@ -82,6 +83,7 @@ const projectRoleUpdateSchema = z.object({
   roleGroup: z.enum([
     "creative_team",
     "production_team",
+    "stage_management",
     "cast",
     "directorial_team",
     "administrative",
@@ -267,12 +269,12 @@ function projectSuccessPath(projectId: string, message: string, workspace?: Proj
   return projectWorkspacePath(projectId, workspace, { success: message });
 }
 
-function projectAssignmentErrorPath(projectId: string, message: string) {
-  return `${projectErrorPath(projectId, message, "roles")}#assignments`;
+function projectAssignmentErrorPath(projectId: string, message: string, anchor = "assignments") {
+  return `${projectErrorPath(projectId, message, "roles")}#${anchor}`;
 }
 
-function projectAssignmentSuccessPath(projectId: string, message: string) {
-  return `${projectSuccessPath(projectId, message, "roles")}#assignments`;
+function projectAssignmentSuccessPath(projectId: string, message: string, anchor = "assignments") {
+  return `${projectSuccessPath(projectId, message, "roles")}#${anchor}`;
 }
 
 function slugify(value: string) {
@@ -918,7 +920,7 @@ export async function updateRoleAssignmentAction(formData: FormData) {
       });
 
     if (unlinkError) {
-      redirect(projectErrorPath(input.projectId, unlinkError.message));
+      redirect(projectAssignmentErrorPath(input.projectId, unlinkError.message, `assignment-${input.id}`));
     }
   }
 
@@ -938,18 +940,18 @@ export async function updateRoleAssignmentAction(formData: FormData) {
     .eq("person_id", input.personId);
 
   if (error) {
-    redirect(projectErrorPath(input.projectId, error.message));
+    redirect(projectAssignmentErrorPath(input.projectId, error.message, `assignment-${input.id}`));
   }
 
   try {
     await syncAssignmentToPlaybill(input.projectId, input.id);
   } catch (syncError) {
     await markAssignmentPlaybillSyncFailed(input.projectId, input.id, syncError);
-    redirect(projectErrorPath(input.projectId, `Assignment saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`));
+    redirect(projectAssignmentErrorPath(input.projectId, `Assignment saved, but Playbill sync failed: ${syncError instanceof Error ? syncError.message : "Unknown error"}`, `assignment-${input.id}`));
   }
 
   revalidatePath(`/projects/${input.projectId}`);
-  redirect(projectAssignmentSuccessPath(input.projectId, "Assignment saved."));
+  redirect(projectAssignmentSuccessPath(input.projectId, "Assignment saved.", `assignment-${input.id}`));
 }
 
 export async function deleteRoleAssignmentAction(formData: FormData) {

@@ -22,6 +22,14 @@ export type TheatreBudgetProject = {
   status: string;
 };
 
+export type TheatreBudgetContractStatus = {
+  id: string;
+  project_id: string;
+  guest_artist_id: string;
+  workflow_status: "w9_requested" | "contract_sent" | "contract_signed_returned" | "siena_signed";
+  updated_at: string;
+};
+
 export async function fetchTheatreBudgetProjects(): Promise<{
   data: TheatreBudgetProject[];
   error: string | null;
@@ -48,6 +56,19 @@ export async function fetchTheatreBudgetProjectById(id: string) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data as TheatreBudgetProject | null;
+}
+
+export async function fetchTheatreBudgetContractStatuses(projectId: string): Promise<{
+  data: TheatreBudgetContractStatus[];
+  error: string | null;
+}> {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_theatre_budget")
+    .rpc("production_management_contract_statuses", { target_project_id: projectId });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as TheatreBudgetContractStatus[], error: null };
 }
 
 export async function fetchTheatreBudgetGuestArtists(): Promise<{
