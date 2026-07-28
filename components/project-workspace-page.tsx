@@ -45,7 +45,7 @@ import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetContractSummaries, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 import { displayStatus } from "@/lib/status-display";
@@ -542,6 +542,15 @@ export default async function ProjectWorkspacePage({
     : { data: [], error: null };
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
+  const theatreBudgetContractSummaries = workspace === "roles" && budgetLinks.length
+    ? await fetchTheatreBudgetContractSummaries([...new Set(budgetLinks.map((link) => link.external_id))])
+    : { data: [], error: null };
+  const budgetContractsByGuestArtistId = new Map<string, typeof theatreBudgetContractSummaries.data>();
+  for (const contract of theatreBudgetContractSummaries.data) {
+    const rows = budgetContractsByGuestArtistId.get(contract.guest_artist_id) ?? [];
+    rows.push(contract);
+    budgetContractsByGuestArtistId.set(contract.guest_artist_id, rows);
+  }
   const playbillAssignmentLinks = (assignmentPlaybillLinks ?? []) as Array<ExternalLink & { external_table: string }>;
   const playbillRoleLinksByRoleId = new Map(
     ((projectRolePlaybillLinks ?? []) as ExternalLink[]).map((link) => [link.local_entity_id, link])
@@ -1394,6 +1403,7 @@ export default async function ProjectWorkspacePage({
               const budgetLink = budgetLinksByAssignmentId.get(assignment.id);
               const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
               const budgetContract = budgetLink ? budgetContractByGuestArtistId.get(budgetLink.external_id) : null;
+              const allBudgetContracts = budgetLink ? budgetContractsByGuestArtistId.get(budgetLink.external_id) ?? [] : [];
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
@@ -1455,7 +1465,7 @@ export default async function ProjectWorkspacePage({
                       <div>
                         <strong>Theatre Budget Guest Artist</strong>
                         <p className="muted">
-                          Read-only lookup. Linking stores a Production Management external link and does not edit Theatre Budget.
+                          One person links to one reusable Theatre Budget guest-artist profile. That profile may have contracts in multiple Budget projects.
                         </p>
                       </div>
                       {theatreBudgetGuestArtists.error ? (
@@ -1486,10 +1496,21 @@ export default async function ProjectWorkspacePage({
                               {!linkedGuestArtist.active ? " · Inactive" : ""}
                               {budgetContract ? ` · Contract: ${displayStatus(budgetContract.workflow_status)}` : " · No contract for this project"}
                             </span>
-                            <span>Budget record ID: {linkedGuestArtist.id}</span>
+                            <span>Matched by the friendly payee profile shown above; internal record codes are hidden.</span>
+                            <div className="compact-list">
+                              <strong>Budget projects and contracts</strong>
+                              {theatreBudgetContractSummaries.error ? <span>Contract history is unavailable: {theatreBudgetContractSummaries.error}</span> : allBudgetContracts.length ? allBudgetContracts.map((contract) => (
+                                <span key={contract.id}>
+                                  {contract.project_name}{contract.project_season ? ` · ${contract.project_season}` : ""}
+                                  {contract.contract_role ? ` · ${contract.contract_role}` : ""}
+                                  {contract.contract_number ? ` · Contract ${contract.contract_number}` : ""}
+                                  {` · ${displayStatus(contract.workflow_status)}`}
+                                </span>
+                              )) : <span>No Theatre Budget contracts are linked to this payee profile yet.</span>}
+                            </div>
                           </div>
                           <div className="top-actions">
-                            <a className="button secondary" href={`${THEATRE_BUDGET_SITE_URL.replace(/\/+$/, "")}/guest-artists`} target="_blank" rel="noreferrer">Open in Theatre Budget</a>
+                            <a className="button secondary" href={`${THEATRE_BUDGET_SITE_URL.replace(/\/+$/, "")}/guest-artists`} target="_blank" rel="noreferrer">Open Guest Artists directory</a>
                             <form action={unlinkTheatreBudgetGuestArtistAction}>
                               <input name="projectId" type="hidden" value={typedProject.id} />
                               <input name="assignmentId" type="hidden" value={assignment.id} />
@@ -1502,6 +1523,24 @@ export default async function ProjectWorkspacePage({
                               <button className="button secondary" type="submit">Unlink &amp; mark not required</button>
                             </form>
                           </div>
+                          <details style={{ gridColumn: "1 / -1" }}>
+                            <summary>Change linked Theatre Budget profile</summary>
+                            <form action={linkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
+                              <input name="projectId" type="hidden" value={typedProject.id} />
+                              <input name="assignmentId" type="hidden" value={assignment.id} />
+                              <label className="field">
+                                <span>Replacement guest-artist profile</span>
+                                <select name="guestArtistId" defaultValue={linkedGuestArtist.id} required>
+                                  {sortedBudgetGuestArtists.map((artist) => (
+                                    <option key={artist.id} value={artist.id}>
+                                      {artist.display_name}{artist.email ? ` · ${artist.email}` : ""}{artist.vendor_number ? ` · Vendor ${artist.vendor_number}` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <button type="submit">Update linked profile</button>
+                            </form>
+                          </details>
                         </div>
                       ) : (
                         <form action={linkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
