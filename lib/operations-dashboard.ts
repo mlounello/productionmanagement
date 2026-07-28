@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { severityForDate, sortOperationItems, type OperationItem, type OperationSeverity } from "@/lib/operations-dashboard-model";
+import { needsTheatreBudgetLink, severityForDate, sortOperationItems, type OperationItem, type OperationSeverity } from "@/lib/operations-dashboard-model";
 
 export type OperationsProject = {
   id: string;
@@ -32,7 +32,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
   const supabase = await createSupabaseServerClient();
   const upperDate = new Date(now.getTime() + 30 * 86400000).toISOString();
 
-  const [settingsResult, publicityResult, rolesResult, assignmentsResult, googleSettingsResult, auditionsResult, communicationsResult, calendarResult, linksResult] = await Promise.all([
+  const [settingsResult, publicityResult, rolesResult, assignmentsResult, googleSettingsResult, auditionsResult, communicationsResult, calendarResult, linksResult, budgetLinksResult] = await Promise.all([
     supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on").in("project_id", projectIds),
     supabase.from("project_publicity_submissions").select("id, project_id, person_id, credited_name, bio, headshot_url, status, playbill_sync_status, playbill_sync_error, people(full_name, preferred_name, email)").in("project_id", projectIds),
     supabase.from("project_roles").select("id, project_id, name, playbill_sync_status, sync_notes").in("project_id", projectIds),
@@ -41,10 +41,11 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     supabase.from("audition_sessions").select("id, project_id, title, starts_at, booking_closes_at, is_published").in("project_id", projectIds).eq("is_published", true).lte("starts_at", upperDate),
     supabase.from("communication_campaigns").select("id, project_id, name, status, recipient_count, sent_count, failed_count").in("project_id", projectIds).in("status", ["partial", "sending"]),
     supabase.from("calendar_items").select("id, project_id, title, item_type, status, starts_at, due_at").in("project_id", projectIds).not("status", "in", "(completed,cancelled)").or(`due_at.lte.${upperDate},starts_at.lte.${upperDate}`),
-    supabase.from("external_links").select("local_entity_type, local_entity_id").eq("external_app", "playbill").eq("external_table", "shows").in("local_entity_id", projectIds)
+    supabase.from("external_links").select("local_entity_type, local_entity_id").eq("external_app", "playbill").eq("external_table", "shows").in("local_entity_id", projectIds),
+    supabase.from("external_links").select("local_entity_id").eq("local_entity_type", "role_assignment").eq("external_app", "theatre_budget").eq("external_table", "guest_artists")
   ]);
 
-  const warnings = [settingsResult, publicityResult, rolesResult, assignmentsResult, googleSettingsResult, auditionsResult, communicationsResult, calendarResult, linksResult]
+  const warnings = [settingsResult, publicityResult, rolesResult, assignmentsResult, googleSettingsResult, auditionsResult, communicationsResult, calendarResult, linksResult, budgetLinksResult]
     .map((result) => result.error?.message)
     .filter((message): message is string => Boolean(message));
   const projectById = new Map(projects.map((project) => [project.id, project]));
@@ -89,6 +90,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
   }
 
   const playbillLinkedProjects = new Set((linksResult.data ?? []).filter((row) => row.local_entity_type === "project").map((row) => String(row.local_entity_id)));
+  const budgetLinkedAssignments = new Set((budgetLinksResult.data ?? []).map((row) => String(row.local_entity_id)));
   for (const row of rolesResult.data ?? []) {
     const status = String(row.playbill_sync_status);
     if (status === "failed" || (playbillLinkedProjects.has(String(row.project_id)) && ["not_ready", "pending"].includes(status))) add({ id: `playbill-role-${row.id}`, projectId: String(row.project_id), category: "playbill", kind: "attention", severity: status === "failed" ? "urgent" : "warning", title: `${row.name}: Playbill role sync ${status.replace(/_/g, " ")}`, detail: String(row.sync_notes || "Open integrations to sync or reconcile this role."), href: `/projects/${row.project_id}/integrations`, dueAt: null });
@@ -103,7 +105,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     const roleName = role?.name || "assigned role";
     const playbillStatus = String(row.playbill_sync_status);
     if (playbillStatus === "failed" || (playbillLinkedProjects.has(projectId) && playbillStatus === "pending")) add({ id: `playbill-assignment-${row.id}`, projectId, category: "playbill", kind: "attention", severity: playbillStatus === "failed" ? "urgent" : "warning", title: `${name}: Playbill assignment sync ${playbillStatus.replace(/_/g, " ")}`, detail: String(row.sync_notes || roleName), href: `/projects/${projectId}/integrations`, dueAt: null });
-    if (row.is_guest_artist && !["synced", "disabled"].includes(String(row.guest_artist_sync_status))) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: row.guest_artist_sync_status === "failed" ? "urgent" : "warning", title: `${name} needs a Theatre Budget link`, detail: `${roleName} · ${String(row.guest_artist_sync_status).replace(/_/g, " ")}`, href: `/projects/${projectId}/roles`, dueAt: null });
+    if (needsTheatreBudgetLink({ isGuestArtist: Boolean(row.is_guest_artist), hasSavedLink: budgetLinkedAssignments.has(String(row.id)), syncStatus: String(row.guest_artist_sync_status) })) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: row.guest_artist_sync_status === "failed" ? "urgent" : "warning", title: `${name} needs a Theatre Budget link`, detail: `${roleName} · ${String(row.guest_artist_sync_status).replace(/_/g, " ")}`, href: `/projects/${projectId}/roles#assignment-${row.id}`, dueAt: null });
     if (row.google_automation_skipped) continue;
     const groupSettings = googleSettings.get(`${projectId}:${role?.role_group ?? ""}`);
     if (groupSettings?.google_group_sync_enabled && groupSettings.active_google_group_email && ["not_attempted", "missing", "failed"].includes(String(row.google_group_sync_status))) add({ id: `google-membership-${row.id}`, projectId, category: "google", kind: "attention", severity: row.google_group_sync_status === "failed" ? "urgent" : "warning", title: `${name}: Google Group membership ${String(row.google_group_sync_status).replace(/_/g, " ")}`, detail: String(row.google_group_sync_error || groupSettings.active_google_group_email), href: `/projects/${projectId}/google-groups`, dueAt: null });

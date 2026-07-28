@@ -25,6 +25,14 @@ export type OperationFilters = {
   due: OperationDueWindow;
 };
 
+export function needsTheatreBudgetLink(input: {
+  isGuestArtist: boolean;
+  hasSavedLink: boolean;
+  syncStatus: string;
+}) {
+  return input.isGuestArtist && !input.hasSavedLink && input.syncStatus !== "disabled";
+}
+
 export function severityForDate(value: string | null, now = new Date()): OperationSeverity {
   if (!value) return "warning";
   const time = new Date(value).getTime();

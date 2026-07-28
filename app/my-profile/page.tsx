@@ -116,8 +116,11 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
         <section className="panel">
           <p className="eyebrow">Reusable Headshot</p><h2>Crop and upload</h2>
           {typedProfile.publicity_headshot_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={typedProfile.publicity_headshot_url} alt={`${typedProfile.full_name} headshot`} style={{ width: "100%", maxWidth: 360, borderRadius: 12, marginBottom: 16 }} />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={typedProfile.publicity_headshot_url} alt={`${typedProfile.full_name} headshot`} style={{ width: "100%", maxWidth: 360, borderRadius: 12, marginBottom: 16 }} />
+              <p><a className="button secondary" href={`/api/people/${typedProfile.id}/headshot/download`}>Download my headshot</a></p>
+            </>
           ) : <div className="headshot-placeholder"><span>{typedProfile.full_name.slice(0, 1).toUpperCase()}</span></div>}
           <ProfileHeadshotUploader personId={typedProfile.id} />
         </section>

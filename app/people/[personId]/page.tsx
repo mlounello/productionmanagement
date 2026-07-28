@@ -320,8 +320,11 @@ export default async function PersonPage({
             </div>
           </div>
           {typedPerson.publicity_headshot_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={typedPerson.publicity_headshot_url} alt={`${typedPerson.full_name} headshot`} style={{ width: "100%", maxWidth: 320, borderRadius: 12 }} />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={typedPerson.publicity_headshot_url} alt={`${typedPerson.full_name} headshot`} style={{ width: "100%", maxWidth: 320, borderRadius: 12, marginBottom: 16 }} />
+              <p><a className="button secondary" href={`/api/people/${typedPerson.id}/headshot/download`}>Download headshot</a></p>
+            </>
           ) : <div className="headshot-placeholder"><span>{typedPerson.full_name.slice(0, 1).toUpperCase()}</span></div>}
           <ProfileHeadshotUploader personId={typedPerson.id} />
         </section>

@@ -907,6 +907,15 @@ export async function updateRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
+  const { data: existingAssignment, error: existingAssignmentError } = await supabase
+    .from("role_assignments")
+    .select("is_guest_artist, guest_artist_sync_status")
+    .eq("project_id", input.projectId)
+    .eq("id", input.id)
+    .maybeSingle();
+  if (existingAssignmentError || !existingAssignment) {
+    redirect(projectAssignmentErrorPath(input.projectId, existingAssignmentError?.message ?? "Assignment not found.", `assignment-${input.id}`));
+  }
   if (!input.isGuestArtist) {
     const { error: unlinkError } = await supabase
       .from("external_links")
@@ -931,7 +940,11 @@ export async function updateRoleAssignmentAction(formData: FormData) {
       confirmation_status: input.confirmationStatus,
       assignment_kind: input.assignmentKind,
       is_guest_artist: input.isGuestArtist,
-      guest_artist_sync_status: input.isGuestArtist ? "not_ready" : "not_guest_artist",
+      guest_artist_sync_status: !input.isGuestArtist
+        ? "not_guest_artist"
+        : existingAssignment.is_guest_artist
+          ? existingAssignment.guest_artist_sync_status
+          : "not_ready",
       notes: input.notes ?? ""
     })
     .eq("project_id", input.projectId)
@@ -952,6 +965,71 @@ export async function updateRoleAssignmentAction(formData: FormData) {
 
   revalidatePath(`/projects/${input.projectId}`);
   redirect(projectAssignmentSuccessPath(input.projectId, "Assignment saved.", `assignment-${input.id}`));
+}
+
+export async function setTheatreBudgetLinkRequirementAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.extend({
+    requirement: z.enum(["required", "not_required"])
+  }).safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("assignmentId")),
+    requirement: requiredString(formData.get("requirement"))
+  });
+  if (!parsed.success) {
+    redirect(`/projects?error=${encodeURIComponent("Invalid Theatre Budget link requirement.")}`);
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("role_assignments")
+    .select("id, is_guest_artist")
+    .eq("project_id", input.projectId)
+    .eq("id", input.id)
+    .maybeSingle();
+  if (assignmentError || !assignment?.is_guest_artist) {
+    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Only guest artist assignments can change this setting.", `assignment-${input.id}`));
+  }
+
+  const { data: link, error: linkError } = await supabase
+    .from("external_links")
+    .select("id")
+    .eq("local_entity_type", "role_assignment")
+    .eq("local_entity_id", input.id)
+    .eq("external_app", "theatre_budget")
+    .eq("external_schema", "app_theatre_budget")
+    .eq("external_table", "guest_artists")
+    .maybeSingle();
+  if (linkError) {
+    redirect(projectAssignmentErrorPath(input.projectId, linkError.message, `assignment-${input.id}`));
+  }
+
+  const nextStatus = input.requirement === "not_required"
+    ? "disabled"
+    : link
+      ? "synced"
+      : "not_ready";
+  const { error } = await supabase
+    .from("role_assignments")
+    .update({ guest_artist_sync_status: nextStatus })
+    .eq("project_id", input.projectId)
+    .eq("id", input.id);
+  if (error) {
+    redirect(projectAssignmentErrorPath(input.projectId, error.message, `assignment-${input.id}`));
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectAssignmentSuccessPath(
+    input.projectId,
+    input.requirement === "not_required"
+      ? "Marked as a guest artist who does not require Theatre Budget access."
+      : link
+        ? "The existing Theatre Budget link is recognized."
+        : "Theatre Budget linking is required again.",
+    `assignment-${input.id}`
+  ));
 }
 
 export async function deleteRoleAssignmentAction(formData: FormData) {

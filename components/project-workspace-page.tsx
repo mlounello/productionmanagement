@@ -24,6 +24,7 @@ import {
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
+  setTheatreBudgetLinkRequirementAction,
   syncAllProjectIntegrationsAction,
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
@@ -557,7 +558,9 @@ export default async function ProjectWorkspacePage({
   const assignmentSyncFailures = assignmentRows.filter((assignment) => assignment.playbill_sync_status === "failed");
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
   const unlinkedGuestAssignments = assignmentRows.filter(
-    (assignment) => assignment.is_guest_artist && !budgetLinksByAssignmentId.has(assignment.id)
+    (assignment) => assignment.is_guest_artist
+      && assignment.guest_artist_sync_status !== "disabled"
+      && !budgetLinksByAssignmentId.has(assignment.id)
   );
   const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
   const overviewNotifications = workspace === "overview" ? await Promise.all([
@@ -1411,7 +1414,7 @@ export default async function ProjectWorkspacePage({
                       <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
-                      {assignment.is_guest_artist ? <StatusBadge status={budgetLink ? "linked" : assignment.guest_artist_sync_status} label={`Budget ${budgetLink ? "Linked" : titleCase(assignment.guest_artist_sync_status)}`} /> : null}
+                      {assignment.is_guest_artist ? <StatusBadge status={budgetLink ? "linked" : assignment.guest_artist_sync_status} label={budgetLink ? "Budget Linked" : assignment.guest_artist_sync_status === "disabled" ? "Budget Not Required" : `Budget ${titleCase(assignment.guest_artist_sync_status)}`} /> : null}
                     </div>
                   </summary>
                   <div className="integration-panel">
@@ -1458,6 +1461,19 @@ export default async function ProjectWorkspacePage({
                         <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
                       ) : theatreBudgetContracts.error ? (
                         <p className="setup-warning">Contract status is unavailable: {theatreBudgetContracts.error}</p>
+                      ) : assignment.guest_artist_sync_status === "disabled" ? (
+                        <div className="linked-record">
+                          <div>
+                            <strong>Budget access not required</strong>
+                            <span>This person remains a guest artist and is excluded from missing-link reports.</span>
+                          </div>
+                          <form action={setTheatreBudgetLinkRequirementAction}>
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <input name="requirement" type="hidden" value="required" />
+                            <button className="button secondary" type="submit">Require Budget link</button>
+                          </form>
+                        </div>
                       ) : linkedGuestArtist ? (
                         <div className="linked-record">
                           <div>
@@ -1510,7 +1526,15 @@ export default async function ProjectWorkspacePage({
                           <button type="submit">Link existing artist</button>
                         </form>
                       )}
-                      {!linkedGuestArtist ? (
+                      {!linkedGuestArtist && assignment.guest_artist_sync_status !== "disabled" ? (
+                        <form action={setTheatreBudgetLinkRequirementAction}>
+                          <input name="projectId" type="hidden" value={typedProject.id} />
+                          <input name="assignmentId" type="hidden" value={assignment.id} />
+                          <input name="requirement" type="hidden" value="not_required" />
+                          <button className="button secondary" type="submit">No Budget access required</button>
+                        </form>
+                      ) : null}
+                      {!linkedGuestArtist && assignment.guest_artist_sync_status !== "disabled" ? (
                         <details>
                           <summary>Create a new Theatre Budget guest artist</summary>
                           <form action={createAndLinkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
