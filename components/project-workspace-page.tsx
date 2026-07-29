@@ -594,8 +594,11 @@ export default async function ProjectWorkspacePage({
     rows.push(access);
     budgetAccessByAssignmentId.set(access.role_assignment_id, rows);
   }
+  const budgetRequiredRoleIds = new Set(
+    roles.filter((role) => role.budget_access_expected).map((role) => role.id)
+  );
   const missingBudgetAccessAssignments = assignmentRows.filter(
-    (assignment) => rolesById.get(assignment.role_id)?.budget_access_expected
+    (assignment) => budgetRequiredRoleIds.has(assignment.role_id)
       && !(budgetAccessByAssignmentId.get(assignment.id)?.length)
   );
   const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
