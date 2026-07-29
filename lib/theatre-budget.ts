@@ -79,13 +79,13 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("contracts")
-    .select("id, project_id, production_project_id, guest_artist_id, contract_number, contract_role, workflow_status, updated_at, projects(name, season), production_project:projects!contracts_production_project_id_fkey(name, season)")
+    .select("id, project_id, production_project_id, guest_artist_id, contract_number, contract_role, workflow_status, updated_at, accounting_project:projects!contracts_project_id_fkey(name, season), production_project:projects!contracts_production_project_id_fkey(name, season)")
     .in("guest_artist_id", guestArtistIds)
     .order("updated_at", { ascending: false });
   if (error) return { data: [], error: error.message };
   return {
     data: (data ?? []).map((row) => {
-      const projectRelation = row.projects as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
+      const projectRelation = row.accounting_project as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
       const project = Array.isArray(projectRelation) ? projectRelation[0] : projectRelation;
       const productionProjectRelation = row.production_project as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
       const productionProject = Array.isArray(productionProjectRelation) ? productionProjectRelation[0] : productionProjectRelation;
