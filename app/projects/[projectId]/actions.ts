@@ -123,7 +123,7 @@ const roleAssignmentSchema = z.object({
   roleId: z.string().uuid(),
   personId: z.string().uuid(),
   status: z.enum(["draft", "offered", "accepted", "declined", "withdrawn"]),
-  confirmationStatus: z.enum(["not_sent", "sent", "accepted", "declined", "bounced"]),
+  confirmationStatus: z.enum(["not_sent", "sent", "accepted", "declined", "bounced", "not_required"]),
   assignmentKind: z.enum(["primary", "shared", "understudy", "alternate"]),
   isGuestArtist: z.boolean(),
   notes: z.string().trim().max(2000).optional()

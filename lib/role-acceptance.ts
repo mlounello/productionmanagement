@@ -5,12 +5,22 @@ import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { syncAssignmentToPlaybillAsSystem } from "@/lib/playbill-sync";
 import { firstAndLastName } from "@/lib/person-display-name";
+import { assignmentConfirmationExempt, assignmentUsesStudentAcceptance } from "@/lib/assignment-lifecycle";
 
 export async function ensureRoleAcceptanceRequest(projectId:string, assignmentId:string, actorUserId:string|null, send=true, respectAutoSend=false){
   const admin=createSupabaseAdminClient();
-  const {data:assignment,error}=await admin.from("role_assignments").select("id,person_id,status,people(full_name,preferred_name,email,person_type),project_roles(name,role_group),projects(title)").eq("id",assignmentId).eq("project_id",projectId).maybeSingle();
+  const {data:assignment,error}=await admin.from("role_assignments").select("id,person_id,status,is_guest_artist,people(full_name,preferred_name,email,person_type,is_siena_employee),project_roles(name,role_group),projects(title)").eq("id",assignmentId).eq("project_id",projectId).maybeSingle();
   if(error||!assignment) throw new Error(error?.message??"Assignment not found.");
-  const person=assignment.people as unknown as {full_name:string;preferred_name:string;email:string;person_type:string}|null; const role=assignment.project_roles as unknown as {name:string;role_group:string}|null; const project=assignment.projects as unknown as {title:string}|null;
+  const person=assignment.people as unknown as {full_name:string;preferred_name:string;email:string;person_type:string;is_siena_employee:boolean}|null; const role=assignment.project_roles as unknown as {name:string;role_group:string}|null; const project=assignment.projects as unknown as {title:string}|null;
+  if(assignmentConfirmationExempt({isGuestArtist:Boolean(assignment.is_guest_artist),isSienaEmployee:Boolean(person?.is_siena_employee)})){
+    await admin.from("role_assignments").update({
+      status: person?.is_siena_employee ? "accepted" : assignment.status,
+      confirmation_status: "not_required",
+      acceptance_required: false
+    }).eq("id",assignmentId);
+    await admin.from("role_acceptance_requests").update({status:"waived"}).eq("role_assignment_id",assignmentId).not("status","in","(accepted,declined,waived)");
+    return {status:"not_required",warnings:[] as string[]};
+  }
   if(person?.person_type!=="student") return {status:"not_required",warnings:[] as string[]};
   const type=role?.role_group==="cast"?"cast":"crew";
   const {data:template}=await admin.from("role_acceptance_templates").select("*").eq("template_type",type).eq("active",true).order("version",{ascending:false}).limit(1).maybeSingle();
@@ -31,8 +41,8 @@ export async function ensureRoleAcceptanceRequest(projectId:string, assignmentId
 }
 
 export async function beginAssignmentOnboarding(projectId:string, assignmentId:string, actorUserId:string|null){
-  const admin=createSupabaseAdminClient();const {data}=await admin.from("role_assignments").select("people(person_type)").eq("id",assignmentId).eq("project_id",projectId).maybeSingle();const person=data?.people as unknown as {person_type:string}|null;
-  if(person?.person_type==="student"){const result=await ensureRoleAcceptanceRequest(projectId,assignmentId,actorUserId,true,true);return {...result,deferPlaybill:true};}
+  const admin=createSupabaseAdminClient();const {data}=await admin.from("role_assignments").select("is_guest_artist,people(person_type,is_siena_employee)").eq("id",assignmentId).eq("project_id",projectId).maybeSingle();const person=data?.people as unknown as {person_type:string;is_siena_employee:boolean}|null;
+  if(assignmentUsesStudentAcceptance({personType:String(person?.person_type??""),isGuestArtist:Boolean(data?.is_guest_artist),isSienaEmployee:Boolean(person?.is_siena_employee)})){const result=await ensureRoleAcceptanceRequest(projectId,assignmentId,actorUserId,true,true);return {...result,deferPlaybill:true};}
   const result=await syncAssignmentGoogleAutomation(projectId,assignmentId,actorUserId);return {status:"onboarding",warnings:result.warnings,deferPlaybill:false};
 }
 

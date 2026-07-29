@@ -56,6 +56,7 @@ const ProjectCalendar = nextDynamic(() => import("@/components/project-calendar"
 const ProjectGantt = nextDynamic(() => import("@/components/project-gantt").then((module) => module.ProjectGantt));
 const BulkRoleImport = nextDynamic(() => import("@/components/bulk-role-import").then((module) => module.BulkRoleImport));
 const BulkAssignmentForms = nextDynamic(() => import("@/components/bulk-assignment-forms").then((module) => module.BulkAssignmentForms));
+const AssignmentCreateForm = nextDynamic(() => import("@/components/assignment-create-form").then((module) => module.AssignmentCreateForm));
 
 export const dynamic = "force-dynamic";
 
@@ -1374,73 +1375,16 @@ export default async function ProjectWorkspacePage({
         {theatreBudgetGuestArtists.error ? <p className="setup-warning">{theatreBudgetGuestArtists.error}</p> : null}
         <details className="integration-panel">
           <summary><strong>Detailed single assignment</strong><span>Use this form when you need status, confirmation, or notes immediately.</span></summary>
-        <form action={createRoleAssignmentAction} className="assignment-create-form">
-          <input name="projectId" type="hidden" value={typedProject.id} />
-          <label className="field">
-            <span>Role</span>
-            <select name="roleId" defaultValue="" required>
-              <option value="">Choose role</option>
-              {availableAssignmentRoles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name} ({titleCase(role.role_group)})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Person</span>
-            <select name="personId" defaultValue="" required>
-              <option value="">Choose person</option>
-              {sortedPeople.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.full_name}{assignedPersonIds.has(person.id) ? " *" : ""}
-                  {person.email ? ` · ${person.email}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Status</span>
-            <select name="status" defaultValue="draft">
-              <option value="draft">Draft</option>
-              <option value="offered">Offered</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="withdrawn">Withdrawn</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Assignment type</span>
-            <select name="assignmentKind" defaultValue="primary">
-              <option value="primary">Primary</option>
-              <option value="shared">Shared role</option>
-              <option value="understudy">Understudy</option>
-              <option value="alternate">Alternate</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Confirmation</span>
-            <select name="confirmationStatus" defaultValue="not_sent">
-              <option value="not_sent">Not sent</option>
-              <option value="sent">Sent</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="bounced">Bounced</option>
-            </select>
-          </label>
-          <label className="checkbox-card">
-            <input name="isGuestArtist" type="checkbox" />
-            <span>
-              <strong>Is Guest Artist</strong>
-              <small>Prepare this assignment for Theatre Budget guest artist sync.</small>
-            </span>
-          </label>
-          <label className="field assignment-notes-field">
-            <span>Assignment notes</span>
-            <textarea name="notes" rows={2} />
-          </label>
-          <button type="submit">Assign person</button>
-        </form>
+        <AssignmentCreateForm
+          action={createRoleAssignmentAction}
+          projectId={typedProject.id}
+          roles={availableAssignmentRoles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
+          people={sortedPeople.map((person) => ({
+            id: person.id,
+            label: `${person.full_name}${assignedPersonIds.has(person.id) ? " *" : ""}${person.email ? ` · ${person.email}` : ""}`,
+            isSienaEmployee: Boolean(person.is_siena_employee)
+          }))}
+        />
         </details>
 
         <div className="assignment-list">
@@ -1458,6 +1402,7 @@ export default async function ProjectWorkspacePage({
               const budgetAccessPending = departmentAccess.some((access) => access.status === "pending_account");
               const budgetAccessEligible = Boolean(person?.is_siena_employee || role?.budget_access_expected);
               const budgetAccessDecisionRequired = Boolean(role?.budget_access_expected);
+              const confirmationExempt = Boolean(assignment.is_guest_artist || person?.is_siena_employee);
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
@@ -1476,7 +1421,7 @@ export default async function ProjectWorkspacePage({
                         status={budgetContract?.workflow_status ?? assignment.status}
                         label={budgetContract ? `Contract: ${displayStatus(budgetContract.workflow_status)}` : titleCase(assignment.status)}
                       />
-                      <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
+                      {!confirmationExempt ? <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} /> : null}
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
                       {person?.is_siena_employee ? <StatusBadge status="linked" label="Siena Employee" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
@@ -1700,6 +1645,18 @@ export default async function ProjectWorkspacePage({
                           <input value={displayStatus(budgetContract.workflow_status)} readOnly />
                           <small>This status is read-only here and updates from the linked Theatre Budget contract.</small>
                         </>
+                      ) : person?.is_siena_employee ? (
+                        <>
+                          <input name="status" type="hidden" value="accepted" />
+                          <input value="Accepted — Siena employment" readOnly />
+                          <small>Siena employees hold this role as part of their job, so no offer is required.</small>
+                        </>
+                      ) : assignment.is_guest_artist ? (
+                        <>
+                          <input name="status" type="hidden" value={assignment.status} />
+                          <input value="Awaiting Theatre Budget contract status" readOnly />
+                          <small>The assignment becomes accepted when the linked contract is signed and returned.</small>
+                        </>
                       ) : (
                         <select name="status" defaultValue={assignment.status}>
                           <option value="draft">Draft</option>
@@ -1710,16 +1667,25 @@ export default async function ProjectWorkspacePage({
                         </select>
                       )}
                     </label>
-                    <label className="field">
-                      <span>Confirmation</span>
-                      <select name="confirmationStatus" defaultValue={assignment.confirmation_status}>
-                        <option value="not_sent">Not sent</option>
-                        <option value="sent">Sent</option>
-                        <option value="accepted">Accepted</option>
-                        <option value="declined">Declined</option>
-                        <option value="bounced">Bounced</option>
-                      </select>
-                    </label>
+                    {confirmationExempt ? (
+                      <label className="field">
+                        <span>Role confirmation</span>
+                        <input name="confirmationStatus" type="hidden" value="not_required" />
+                        <input value="Not required" readOnly />
+                        <small>{assignment.is_guest_artist ? "The Theatre Budget contract is the acceptance record." : "Siena employment is the acceptance record."}</small>
+                      </label>
+                    ) : (
+                      <label className="field">
+                        <span>Confirmation</span>
+                        <select name="confirmationStatus" defaultValue={assignment.confirmation_status}>
+                          <option value="not_sent">Not sent</option>
+                          <option value="sent">Sent</option>
+                          <option value="accepted">Accepted</option>
+                          <option value="declined">Declined</option>
+                          <option value="bounced">Bounced</option>
+                        </select>
+                      </label>
+                    )}
                     <label className="field">
                       <span>Assignment type</span>
                       <select name="assignmentKind" defaultValue={assignment.assignment_kind}>

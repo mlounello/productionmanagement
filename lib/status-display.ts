@@ -5,6 +5,7 @@ const LABELS: Record<string, string> = {
   not_attempted: "Not attempted", already_sent: "Already sent", person_approved: "Person approved",
   changes_requested: "Changes requested", no_show: "No show", in_progress: "In progress",
   not_checked: "Not checked", not_prepared: "Not prepared", awaiting_membership: "Awaiting membership",
+  not_required: "Not required",
   w9_requested: "W9 Requested", contract_sent: "Contract Sent",
   contract_signed_returned: "Contract Signed + Returned", siena_signed: "Siena Signed",
 };
