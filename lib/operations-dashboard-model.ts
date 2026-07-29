@@ -26,10 +26,10 @@ export type OperationFilters = {
 };
 
 export function needsTheatreBudgetAccessDecision(input: {
-  isGuestArtist: boolean;
+  requiresBudgetAccess: boolean;
   hasAccessDecision: boolean;
 }) {
-  return input.isGuestArtist && !input.hasAccessDecision;
+  return input.requiresBudgetAccess && !input.hasAccessDecision;
 }
 
 export function severityForDate(value: string | null, now = new Date()): OperationSeverity {

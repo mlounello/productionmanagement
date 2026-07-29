@@ -75,7 +75,8 @@ const projectRoleSchema = z.object({
     "front_of_house",
     "music_band"
   ]),
-  departmentId: z.string().uuid().optional()
+  departmentId: z.string().uuid().optional(),
+  budgetAccessExpected: z.boolean()
 });
 
 const projectRoleUpdateSchema = z.object({
@@ -98,7 +99,8 @@ const projectRoleUpdateSchema = z.object({
     "guest_artist"
   ]),
   departmentId: z.string().uuid().optional(),
-  existingDepartment: z.string().trim().max(120).optional()
+  existingDepartment: z.string().trim().max(120).optional(),
+  budgetAccessExpected: z.boolean()
 });
 
 const personSchema = z.object({
@@ -112,7 +114,8 @@ const personSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   pronouns: z.string().trim().max(80).optional(),
   affiliation: z.string().trim().max(160).optional(),
-  personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"])
+  personType: z.enum(["student", "staff", "faculty", "guest_artist", "vendor_contact", "client", "person"]),
+  isSienaEmployee: z.boolean()
 });
 
 const roleAssignmentSchema = z.object({
@@ -466,7 +469,8 @@ export async function createProjectRoleAction(formData: FormData) {
     projectId: requiredString(formData.get("projectId")),
     name: requiredString(formData.get("name")),
     roleGroup: requiredString(formData.get("roleGroup")),
-    departmentId: optionalString(formData.get("departmentId"))
+    departmentId: optionalString(formData.get("departmentId")),
+    budgetAccessExpected: formData.get("budgetAccessExpected") === "on"
   });
 
   if (!parsed.success) {
@@ -488,7 +492,8 @@ export async function createProjectRoleAction(formData: FormData) {
     project_id: input.projectId,
     name: input.name,
     role_group: input.roleGroup,
-    department: departmentName
+    department: departmentName,
+    budget_access_expected: input.budgetAccessExpected
   }).select("id").single();
 
   if (error) {
@@ -592,7 +597,8 @@ export async function updateProjectRoleAction(formData: FormData) {
     name: requiredString(formData.get("name")),
     roleGroup: requiredString(formData.get("roleGroup")),
     departmentId: optionalString(formData.get("departmentId")),
-    existingDepartment: optionalString(formData.get("existingDepartment"))
+    existingDepartment: optionalString(formData.get("existingDepartment")),
+    budgetAccessExpected: formData.get("budgetAccessExpected") === "on"
   });
 
   if (!parsed.success) {
@@ -615,7 +621,8 @@ export async function updateProjectRoleAction(formData: FormData) {
     .update({
       name: input.name,
       role_group: input.roleGroup,
-      department: departmentName
+      department: departmentName,
+      budget_access_expected: input.budgetAccessExpected
     })
     .eq("project_id", input.projectId)
     .eq("id", input.id);
@@ -648,7 +655,8 @@ export async function createPersonAction(formData: FormData) {
     phone: optionalString(formData.get("phone")),
     pronouns: optionalString(formData.get("pronouns")),
     affiliation: optionalString(formData.get("affiliation")),
-    personType: optionalString(formData.get("personType")) ?? "person"
+    personType: optionalString(formData.get("personType")) ?? "person",
+    isSienaEmployee: formData.get("isSienaEmployee") === "on"
   });
 
   if (!parsed.success) {
@@ -667,7 +675,8 @@ export async function createPersonAction(formData: FormData) {
     phone: input.phone ?? "",
     pronouns: input.pronouns ?? "",
     affiliation: input.affiliation ?? "",
-    person_type: input.personType
+    person_type: input.personType,
+    is_siena_employee: input.isSienaEmployee
   });
 
   if (error) {
@@ -991,12 +1000,15 @@ export async function saveTheatreBudgetDepartmentAccessAction(formData: FormData
   const supabase = await createSupabaseServerClient();
   const { data: assignment, error: assignmentError } = await supabase
     .from("role_assignments")
-    .select("id, is_guest_artist")
+    .select("id, is_guest_artist, people(is_siena_employee), project_roles(budget_access_expected)")
     .eq("project_id", input.projectId)
     .eq("id", input.id)
     .maybeSingle();
-  if (assignmentError || !assignment?.is_guest_artist) {
-    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Only guest artist assignments can receive department Budget access.", `assignment-${input.id}`));
+  const accessPerson = Array.isArray(assignment?.people) ? assignment?.people[0] : assignment?.people;
+  const accessRole = Array.isArray(assignment?.project_roles) ? assignment?.project_roles[0] : assignment?.project_roles;
+  const accessEligible = Boolean(assignment?.is_guest_artist || accessPerson?.is_siena_employee || accessRole?.budget_access_expected);
+  if (assignmentError || !assignment || !accessEligible) {
+    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "This assignment is not eligible for department Budget access.", `assignment-${input.id}`));
   }
 
   const admin = createSupabaseAdminClient();
@@ -1036,7 +1048,7 @@ export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: Form
   const [{ data: assignment, error: assignmentError }, { data: accessRows, error: accessError }] = await Promise.all([
     supabase
       .from("role_assignments")
-      .select("id, is_guest_artist, people(full_name, email)")
+      .select("id, is_guest_artist, people(full_name, email, is_siena_employee), project_roles(budget_access_expected)")
       .eq("project_id", input.projectId)
       .eq("id", input.id)
       .maybeSingle(),
@@ -1046,14 +1058,17 @@ export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: Form
       .eq("role_assignment_id", input.id)
       .eq("active", true)
   ]);
-  if (assignmentError || !assignment?.is_guest_artist) {
-    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Guest artist assignment not found.", `assignment-${input.id}`));
+  const invitePersonRelation = assignment?.people as unknown as { full_name?: string; email?: string; is_siena_employee?: boolean } | Array<{ full_name?: string; email?: string; is_siena_employee?: boolean }> | null;
+  const invitePerson = Array.isArray(invitePersonRelation) ? invitePersonRelation[0] : invitePersonRelation;
+  const inviteRoleRelation = assignment?.project_roles as unknown as { budget_access_expected?: boolean } | Array<{ budget_access_expected?: boolean }> | null;
+  const inviteRole = Array.isArray(inviteRoleRelation) ? inviteRoleRelation[0] : inviteRoleRelation;
+  if (assignmentError || !assignment || !(assignment.is_guest_artist || invitePerson?.is_siena_employee || inviteRole?.budget_access_expected)) {
+    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "This assignment is not eligible for department Budget access.", `assignment-${input.id}`));
   }
   if (accessError || !(accessRows ?? []).some((row) => row.status === "pending_account" && !row.access_not_required)) {
     redirect(projectAssignmentErrorPath(input.projectId, accessError?.message ?? "This assignment does not have pending department access.", `assignment-${input.id}`));
   }
-  const personRelation = assignment.people as unknown as { full_name?: string; email?: string } | Array<{ full_name?: string; email?: string }> | null;
-  const person = Array.isArray(personRelation) ? personRelation[0] : personRelation;
+  const person = invitePerson;
   let result: Awaited<ReturnType<typeof sendTheatreBudgetDepartmentAccessLink>>;
   try {
     result = await sendTheatreBudgetDepartmentAccessLink({

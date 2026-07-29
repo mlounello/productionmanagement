@@ -9,8 +9,8 @@ export type OperationsProject = {
   ends_on: string | null;
 };
 
-type PersonJoin = { full_name?: string; preferred_name?: string; email?: string } | null;
-type RoleJoin = { name?: string; role_group?: string } | null;
+type PersonJoin = { full_name?: string; preferred_name?: string; email?: string; is_siena_employee?: boolean } | null;
+type RoleJoin = { name?: string; role_group?: string; budget_access_expected?: boolean } | null;
 
 function joined<T>(value: unknown) {
   if (Array.isArray(value)) return (value[0] ?? null) as T | null;
@@ -35,8 +35,8 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
   const [settingsResult, publicityResult, rolesResult, assignmentsResult, googleSettingsResult, auditionsResult, communicationsResult, calendarResult, linksResult, budgetLinksResult] = await Promise.all([
     supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on").in("project_id", projectIds),
     supabase.from("project_publicity_submissions").select("id, project_id, person_id, credited_name, bio, headshot_url, status, playbill_sync_status, playbill_sync_error, people(full_name, preferred_name, email)").in("project_id", projectIds),
-    supabase.from("project_roles").select("id, project_id, name, playbill_sync_status, sync_notes").in("project_id", projectIds),
-    supabase.from("role_assignments").select("id, project_id, person_id, status, is_guest_artist, playbill_sync_status, guest_artist_sync_status, sync_notes, google_group_sync_status, google_group_sync_error, google_automation_skipped, welcome_email_status, welcome_email_error, people(full_name, preferred_name, email), project_roles(name, role_group)").in("project_id", projectIds).not("status", "in", "(declined,withdrawn)"),
+    supabase.from("project_roles").select("id, project_id, name, playbill_sync_status, sync_notes, budget_access_expected").in("project_id", projectIds),
+    supabase.from("role_assignments").select("id, project_id, person_id, status, is_guest_artist, playbill_sync_status, guest_artist_sync_status, sync_notes, google_group_sync_status, google_group_sync_error, google_automation_skipped, welcome_email_status, welcome_email_error, people(full_name, preferred_name, email, is_siena_employee), project_roles(name, role_group, budget_access_expected)").in("project_id", projectIds).not("status", "in", "(declined,withdrawn)"),
     supabase.from("project_role_group_google_settings").select("project_id, role_group, active_google_group_email, google_group_sync_enabled, welcome_email_enabled, welcome_email_template_id").in("project_id", projectIds),
     supabase.from("audition_sessions").select("id, project_id, title, starts_at, booking_closes_at, is_published").in("project_id", projectIds).eq("is_published", true).lte("starts_at", upperDate),
     supabase.from("communication_campaigns").select("id, project_id, name, status, recipient_count, sent_count, failed_count").in("project_id", projectIds).in("status", ["partial", "sending"]),
@@ -105,7 +105,7 @@ export async function loadOperationsDashboard(projects: OperationsProject[], now
     const roleName = role?.name || "assigned role";
     const playbillStatus = String(row.playbill_sync_status);
     if (playbillStatus === "failed" || (playbillLinkedProjects.has(projectId) && playbillStatus === "pending")) add({ id: `playbill-assignment-${row.id}`, projectId, category: "playbill", kind: "attention", severity: playbillStatus === "failed" ? "urgent" : "warning", title: `${name}: Playbill assignment sync ${playbillStatus.replace(/_/g, " ")}`, detail: String(row.sync_notes || roleName), href: `/projects/${projectId}/integrations`, dueAt: null });
-    if (needsTheatreBudgetAccessDecision({ isGuestArtist: Boolean(row.is_guest_artist), hasAccessDecision: assignmentsWithBudgetAccessDecision.has(String(row.id)) })) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: "warning", title: `${name} needs a Theatre Budget access decision`, detail: `${roleName} · choose department budgets or mark access not required`, href: `/projects/${projectId}/roles#assignment-${row.id}`, dueAt: null });
+    if (needsTheatreBudgetAccessDecision({ requiresBudgetAccess: Boolean(row.is_guest_artist || role?.budget_access_expected), hasAccessDecision: assignmentsWithBudgetAccessDecision.has(String(row.id)) })) add({ id: `budget-${row.id}`, projectId, category: "budget", kind: "attention", severity: "warning", title: `${name} needs a Theatre Budget access decision`, detail: `${roleName} · choose department budgets or mark access not required`, href: `/projects/${projectId}/roles#assignment-${row.id}`, dueAt: null });
     if (row.google_automation_skipped) continue;
     const groupSettings = googleSettings.get(`${projectId}:${role?.role_group ?? ""}`);
     if (groupSettings?.google_group_sync_enabled && groupSettings.active_google_group_email && ["not_attempted", "missing", "failed"].includes(String(row.google_group_sync_status))) add({ id: `google-membership-${row.id}`, projectId, category: "google", kind: "attention", severity: row.google_group_sync_status === "failed" ? "urgent" : "warning", title: `${name}: Google Group membership ${String(row.google_group_sync_status).replace(/_/g, " ")}`, detail: String(row.google_group_sync_error || groupSettings.active_google_group_email), href: `/projects/${projectId}/google-groups`, dueAt: null });

@@ -27,6 +27,7 @@ type Person = {
   pronouns: string;
   affiliation: string;
   person_type: string;
+  is_siena_employee: boolean;
   status: string;
   publicity_bio: string;
   publicity_headshot_url: string;
@@ -115,7 +116,7 @@ export default async function PersonPage({
     supabase
       .from("people")
       .select(
-        "id, auth_user_id, first_name, middle_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, status, publicity_bio, publicity_headshot_url, publicity_profile_version"
+        "id, auth_user_id, first_name, middle_name, last_name, preferred_name, full_name, email, vendor_number, phone, pronouns, affiliation, person_type, is_siena_employee, status, publicity_bio, publicity_headshot_url, publicity_profile_version"
       )
       .eq("id", personId)
       .maybeSingle(),
@@ -295,6 +296,10 @@ export default async function PersonPage({
                 </select>
               </label>
             </div>
+            <label className="checkbox-card">
+              <input name="isSienaEmployee" type="checkbox" defaultChecked={typedPerson.is_siena_employee} />
+              <span><strong>Siena Employee</strong><small>Makes this person eligible for Theatre Budget access without marking them as a guest artist.</small></span>
+            </label>
             <label className="field">
               <span>Profile notes</span>
               <textarea name="notes" defaultValue={String(managementDetails?.notes ?? "")} rows={4} />

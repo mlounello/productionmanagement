@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 type PersonRow = {
   id: string; full_name: string; first_name: string; middle_name: string; last_name: string; preferred_name: string;
-  pronouns: string; email: string; vendor_number: string; phone: string; affiliation: string; person_type: string;
+  pronouns: string; email: string; vendor_number: string; phone: string; affiliation: string; person_type: string; is_siena_employee: boolean;
   status: string; publicity_headshot_url: string;
   performance_interests:string[];technical_interests:string[];vocal_range:string;instruments:string;special_skills:string;performance_experience:string;technical_experience:string;certifications_training:string;dance_styles:string[];dance_experience:string;
 };
@@ -31,7 +31,7 @@ export default async function PeoplePage({
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
   const [{ data: people, error }, { data: assignments }, { data: notes }, { data: managementDetails }, { data: currentRole }] = await Promise.all([
-    supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, status, publicity_headshot_url, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience").order("full_name", { ascending: true }),
+    supabase.from("people").select("id, full_name, first_name, middle_name, last_name, preferred_name, pronouns, email, vendor_number, phone, affiliation, person_type, is_siena_employee, status, publicity_headshot_url, performance_interests, technical_interests, vocal_range, instruments, special_skills, performance_experience, technical_experience, certifications_training, dance_styles, dance_experience").order("full_name", { ascending: true }),
     supabase.from("role_assignments").select("id, person_id, project_id, status, is_guest_artist, projects(title), project_roles(name, role_group)"),
     supabase.from("person_notes").select("person_id"),
     supabase.from("person_management_details").select("person_id, notes"),
@@ -58,6 +58,7 @@ export default async function PeoplePage({
       phone: person.phone ?? "",
       affiliation: person.affiliation ?? "",
       personType: person.person_type ?? "person",
+      isSienaEmployee: Boolean(person.is_siena_employee),
       status: person.status ?? "active",
       headshotUrl: person.publicity_headshot_url ?? "",
       managementNotes: managementNotes.get(person.id) ?? "",

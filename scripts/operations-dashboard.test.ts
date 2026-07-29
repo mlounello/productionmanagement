@@ -31,7 +31,7 @@ test("severity and sorting prioritize overdue work", () => {
 });
 
 test("Budget warnings require a department-access decision, independent of payee linking", () => {
-  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: true, hasAccessDecision: true }), false);
-  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: true, hasAccessDecision: false }), true);
-  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: false, hasAccessDecision: false }), false);
+  assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: true, hasAccessDecision: true }), false);
+  assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: true, hasAccessDecision: false }), true);
+  assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: false, hasAccessDecision: false }), false);
 });
