@@ -25,6 +25,7 @@ import {
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
   saveTheatreBudgetDepartmentAccessAction,
+  sendTheatreBudgetDepartmentAccessLinkAction,
   syncAllProjectIntegrationsAction,
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
@@ -45,7 +46,7 @@ import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetContractSummaries, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjectDepartments, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetContractSummaries, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjectDepartments, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 import { displayStatus } from "@/lib/status-display";
@@ -555,15 +556,12 @@ export default async function ProjectWorkspacePage({
   const linkedBudgetProject = budgetProjectLink
     ? theatreBudgetProjects.data.find((project) => project.id === budgetProjectLink.external_id) ?? null
     : null;
-  const theatreBudgetContracts = budgetProjectLink && ["roles", "people"].includes(workspace)
-    ? await fetchTheatreBudgetContractStatuses(String(budgetProjectLink.external_id))
-    : { data: [], error: null };
   const theatreBudgetDepartments = budgetProjectLink && workspace === "roles"
     ? await fetchTheatreBudgetProjectDepartments(String(budgetProjectLink.external_id))
     : { data: [], error: null };
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
-  const theatreBudgetContractSummaries = workspace === "roles" && budgetLinks.length
+  const theatreBudgetContractSummaries = ["roles", "people"].includes(workspace) && budgetLinks.length
     ? await fetchTheatreBudgetContractSummaries([...new Set(budgetLinks.map((link) => link.external_id))])
     : { data: [], error: null };
   const budgetContractsByGuestArtistId = new Map<string, typeof theatreBudgetContractSummaries.data>();
@@ -616,7 +614,9 @@ export default async function ProjectWorkspacePage({
   );
   const budgetGuestArtistsById = new Map(theatreBudgetGuestArtists.data.map((artist) => [artist.id, artist]));
   const budgetContractByGuestArtistId = new Map(
-    theatreBudgetContracts.data.map((contract) => [contract.guest_artist_id, contract])
+    theatreBudgetContractSummaries.data
+      .filter((contract) => contract.production_project_id === String(budgetProjectLink?.external_id ?? ""))
+      .map((contract) => [contract.guest_artist_id, contract])
   );
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
@@ -1455,7 +1455,7 @@ export default async function ProjectWorkspacePage({
                       <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
-                      {assignment.is_guest_artist ? <StatusBadge status={budgetAccessExempt ? "disabled" : selectedDepartmentIds.size ? budgetAccessPending ? "pending" : "linked" : "not_ready"} label={budgetAccessExempt ? "Budget Access Not Required" : selectedDepartmentIds.size ? `Budget Access ${budgetAccessPending ? "Pending" : `${selectedDepartmentIds.size} Department${selectedDepartmentIds.size === 1 ? "" : "s"}`}` : "Budget Access Needed"} /> : null}
+                      {assignment.is_guest_artist ? <StatusBadge status={budgetAccessExempt ? "disabled" : selectedDepartmentIds.size ? budgetAccessPending ? "pending" : "linked" : "not_ready"} label={budgetAccessExempt ? "Budget Access Not Required" : selectedDepartmentIds.size ? `Budget Access ${budgetAccessPending ? "Invite Needed" : `${selectedDepartmentIds.size} Department${selectedDepartmentIds.size === 1 ? "" : "s"}`}` : "Budget Access Needed"} /> : null}
                     </div>
                   </summary>
                   <div className="integration-panel">
@@ -1500,8 +1500,8 @@ export default async function ProjectWorkspacePage({
                       </div>
                       {theatreBudgetGuestArtists.error ? (
                         <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
-                      ) : theatreBudgetContracts.error ? (
-                        <p className="setup-warning">Contract status is unavailable: {theatreBudgetContracts.error}</p>
+                      ) : theatreBudgetContractSummaries.error ? (
+                        <p className="setup-warning">Contract status is unavailable: {theatreBudgetContractSummaries.error}</p>
                       ) : linkedGuestArtist ? (
                         <div className="linked-record">
                           <div>
@@ -1511,14 +1511,15 @@ export default async function ProjectWorkspacePage({
                               {linkedGuestArtist.email ?? "No email"}
                               {linkedGuestArtist.vendor_number ? ` · Vendor ${linkedGuestArtist.vendor_number}` : ""}
                               {!linkedGuestArtist.active ? " · Inactive" : ""}
-                              {budgetContract ? ` · Contract: ${displayStatus(budgetContract.workflow_status)}` : " · No contract for this project"}
+                              {budgetContract ? ` · Contract: ${displayStatus(budgetContract.workflow_status)}` : " · No contract associated with this production"}
                             </span>
                             <span>Matched by the friendly payee profile shown above; internal record codes are hidden.</span>
                             <div className="compact-list">
                               <strong>Budget projects and contracts</strong>
                               {theatreBudgetContractSummaries.error ? <span>Contract history is unavailable: {theatreBudgetContractSummaries.error}</span> : allBudgetContracts.length ? allBudgetContracts.map((contract) => (
                                 <span key={contract.id}>
-                                  {contract.project_name}{contract.project_season ? ` · ${contract.project_season}` : ""}
+                                  {contract.production_project_name}{contract.production_project_season ? ` · ${contract.production_project_season}` : ""}
+                                  {contract.production_project_id !== contract.project_id ? ` · Accounted in ${contract.project_name}${contract.project_season ? ` (${contract.project_season})` : ""}` : ""}
                                   {contract.contract_role ? ` · ${contract.contract_role}` : ""}
                                   {contract.contract_number ? ` · Contract ${contract.contract_number}` : ""}
                                   {` · ${displayStatus(contract.workflow_status)}`}
@@ -1640,10 +1641,11 @@ export default async function ProjectWorkspacePage({
                             <input name="noAccessRequired" type="checkbox" defaultChecked={budgetAccessExempt} />
                             <span><strong>No Theatre Budget access required</strong><small>This keeps the guest-artist and payee links but removes the missing-access warning.</small></span>
                           </label>
-                          {selectedDepartmentIds.size ? <p className={budgetAccessPending ? "setup-warning" : "setup-success"}>{budgetAccessPending ? "Departments are selected; view access is waiting for the matching Theatre Budget account to be connected." : `View-only access is active for ${selectedDepartmentIds.size} department${selectedDepartmentIds.size === 1 ? "" : "s"}.`}</p> : null}
+                          {selectedDepartmentIds.size ? <p className={budgetAccessPending ? "setup-warning" : "setup-success"}>{budgetAccessPending ? "Departments are selected. Send the Theatre Budget access link below to create or connect the matching account." : `View-only access is active for ${selectedDepartmentIds.size} department${selectedDepartmentIds.size === 1 ? "" : "s"}.`}</p> : null}
                           <button type="submit">Save department Budget access</button>
                         </form>
                       )}
+                      {budgetAccessPending ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">Send Theatre Budget access link</button></form> : null}
                     </div>
                   ) : null}
                   <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">

@@ -18,6 +18,7 @@ import {
 } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { sendTheatreBudgetDepartmentAccessLink } from "@/lib/theatre-budget-access-invite";
 import {
   createTheatreBudgetGuestArtist,
   fetchTheatreBudgetGuestArtistById,
@@ -1019,6 +1020,55 @@ export async function saveTheatreBudgetDepartmentAccessAction(formData: FormData
       : status === "pending_account"
         ? `${departments} department${departments === 1 ? "" : "s"} selected. Access will activate when the matching Theatre Budget account is connected.`
         : `View-only Theatre Budget access saved for ${departments} department${departments === 1 ? "" : "s"}.`,
+    `assignment-${input.id}`
+  ));
+}
+
+export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: FormData) {
+  await requireUser();
+  const parsed = projectScopedRowSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    id: requiredString(formData.get("assignmentId"))
+  });
+  if (!parsed.success) redirect(`/projects?error=${encodeURIComponent("Invalid Theatre Budget access invitation.")}`);
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const [{ data: assignment, error: assignmentError }, { data: accessRows, error: accessError }] = await Promise.all([
+    supabase
+      .from("role_assignments")
+      .select("id, is_guest_artist, people(full_name, email)")
+      .eq("project_id", input.projectId)
+      .eq("id", input.id)
+      .maybeSingle(),
+    supabase
+      .from("role_assignment_budget_access")
+      .select("id, status, access_not_required")
+      .eq("role_assignment_id", input.id)
+      .eq("active", true)
+  ]);
+  if (assignmentError || !assignment?.is_guest_artist) {
+    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Guest artist assignment not found.", `assignment-${input.id}`));
+  }
+  if (accessError || !(accessRows ?? []).some((row) => row.status === "pending_account" && !row.access_not_required)) {
+    redirect(projectAssignmentErrorPath(input.projectId, accessError?.message ?? "This assignment does not have pending department access.", `assignment-${input.id}`));
+  }
+  const personRelation = assignment.people as unknown as { full_name?: string; email?: string } | Array<{ full_name?: string; email?: string }> | null;
+  const person = Array.isArray(personRelation) ? personRelation[0] : personRelation;
+  let result: Awaited<ReturnType<typeof sendTheatreBudgetDepartmentAccessLink>>;
+  try {
+    result = await sendTheatreBudgetDepartmentAccessLink({
+      email: String(person?.email ?? ""),
+      fullName: String(person?.full_name ?? "")
+    });
+  } catch (error) {
+    redirect(projectAssignmentErrorPath(input.projectId, error instanceof Error ? error.message : "Theatre Budget access invitation failed.", `assignment-${input.id}`));
+  }
+  revalidatePath(`/projects/${input.projectId}`);
+  redirect(projectAssignmentSuccessPath(
+    input.projectId,
+    result.created
+      ? "Theatre Budget account created, department access activated, and invitation sent."
+      : "Department access activated and a Theatre Budget sign-in link was sent.",
     `assignment-${input.id}`
   ));
 }

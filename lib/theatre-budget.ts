@@ -61,10 +61,13 @@ export type TheatreBudgetContractStatus = {
 };
 
 export type TheatreBudgetContractSummary = TheatreBudgetContractStatus & {
+  production_project_id: string;
   contract_number: string | null;
   contract_role: string | null;
   project_name: string;
   project_season: string | null;
+  production_project_name: string;
+  production_project_season: string | null;
 };
 
 export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string[]): Promise<{
@@ -76,7 +79,7 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("contracts")
-    .select("id, project_id, guest_artist_id, contract_number, contract_role, workflow_status, updated_at, projects(name, season)")
+    .select("id, project_id, production_project_id, guest_artist_id, contract_number, contract_role, workflow_status, updated_at, projects(name, season), production_project:projects!contracts_production_project_id_fkey(name, season)")
     .in("guest_artist_id", guestArtistIds)
     .order("updated_at", { ascending: false });
   if (error) return { data: [], error: error.message };
@@ -84,16 +87,21 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
     data: (data ?? []).map((row) => {
       const projectRelation = row.projects as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
       const project = Array.isArray(projectRelation) ? projectRelation[0] : projectRelation;
+      const productionProjectRelation = row.production_project as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
+      const productionProject = Array.isArray(productionProjectRelation) ? productionProjectRelation[0] : productionProjectRelation;
       return {
         id: String(row.id),
         project_id: String(row.project_id),
+        production_project_id: String(row.production_project_id ?? row.project_id),
         guest_artist_id: String(row.guest_artist_id),
         contract_number: row.contract_number ? String(row.contract_number) : null,
         contract_role: row.contract_role ? String(row.contract_role) : null,
         workflow_status: row.workflow_status as TheatreBudgetContractStatus["workflow_status"],
         updated_at: String(row.updated_at),
         project_name: project?.name ? String(project.name) : "Unnamed Theatre Budget project",
-        project_season: project?.season ? String(project.season) : null
+        project_season: project?.season ? String(project.season) : null,
+        production_project_name: productionProject?.name ? String(productionProject.name) : project?.name ? String(project.name) : "Unnamed production",
+        production_project_season: productionProject?.season ? String(productionProject.season) : project?.season ? String(project.season) : null
       };
     }),
     error: null

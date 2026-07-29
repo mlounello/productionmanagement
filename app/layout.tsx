@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { AppSidebarNav } from "@/components/app-sidebar-nav";
+import { SamePageScrollRestoration } from "@/components/same-page-scroll-restoration";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,6 +25,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body>
+        <Suspense fallback={null}><SamePageScrollRestoration /></Suspense>
         <div className={hasInternalAccess ? "app-shell" : "public-shell"}>
           {hasInternalAccess ? (
             <aside className="app-sidebar">
