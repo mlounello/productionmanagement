@@ -2049,9 +2049,18 @@ legend {
   border-top: 1px solid var(--line);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr) minmax(180px, 0.7fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 12px;
   padding-top: 12px;
+}
+
+.role-edit-form > .checkbox-card,
+.role-edit-form > button {
+  grid-column: 1 / -1;
+}
+
+.role-edit-form > button {
+  justify-self: start;
 }
 
 .assignment-card form + form {
@@ -2414,6 +2423,25 @@ a.readiness-main:hover { color: var(--siena-green); }
   gap: 10px;
   grid-template-columns: minmax(160px, 1.1fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) auto;
   margin-bottom: 16px;
+}
+
+.inline-create input[type="checkbox"] {
+  min-height: 18px;
+  padding: 0;
+  width: 18px;
+}
+
+.inline-create.role-create-form {
+  align-items: stretch;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.role-create-form .role-budget-toggle {
+  grid-column: 1 / span 2;
+}
+
+.role-create-form > button {
+  grid-column: 3;
 }
 
 .inline-create.run-create {
@@ -2947,6 +2975,15 @@ a.readiness-main:hover { color: var(--siena-green); }
   .operations-filter,
   .operations-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inline-create.role-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .role-create-form .role-budget-toggle,
+  .role-create-form > button {
+    grid-column: 1;
   }
 
   .campaign-send-grid { grid-template-columns: 1fr; }

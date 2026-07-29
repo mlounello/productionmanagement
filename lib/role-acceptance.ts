@@ -3,7 +3,7 @@ import { activeEmailTemplate } from "@/lib/email-template-catalog";
 import { syncAssignmentGoogleAutomation } from "@/lib/google-group-automation";
 import { renderTemplate,sendHtmlEmail } from "@/lib/outbound-email";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
+import { syncAssignmentToPlaybillAsSystem } from "@/lib/playbill-sync";
 import { firstAndLastName } from "@/lib/person-display-name";
 
 export async function ensureRoleAcceptanceRequest(projectId:string, assignmentId:string, actorUserId:string|null, send=true, respectAutoSend=false){
@@ -43,7 +43,7 @@ export async function completeAcceptedOnboarding(requestId:string){
   const credited=firstAndLastName(person??{});
   const pub=await admin.from("project_publicity_submissions").upsert({project_id:req.project_id,person_id:req.person_id,credited_name:credited,bio:person?.publicity_bio??"",headshot_url:person?.publicity_headshot_url??"",source_profile_version:Number(person?.publicity_profile_version??1),status:"draft",playbill_sync_status:"not_ready"},{onConflict:"project_id,person_id",ignoreDuplicates:true});
   const warnings:string[]=[]; if(pub.error)warnings.push(pub.error.message);
-  try{await syncAssignmentToPlaybill(String(req.project_id),String(req.role_assignment_id));}catch(e){warnings.push(`Playbill: ${e instanceof Error?e.message:"sync failed"}`);}
+  try{await syncAssignmentToPlaybillAsSystem(String(req.project_id),String(req.role_assignment_id));}catch(e){warnings.push(`Playbill: ${e instanceof Error?e.message:"sync failed"}`);}
   try{const result=await syncAssignmentGoogleAutomation(String(req.project_id),String(req.role_assignment_id),null);warnings.push(...result.warnings);}catch(e){warnings.push(e instanceof Error?e.message:"Google/Propared onboarding failed.");}
   const {data:assignment}=await admin.from("role_assignments").select("google_group_sync_status,welcome_email_status").eq("id",req.role_assignment_id).maybeSingle();
   await admin.from("role_assignments").update({onboarding_status:warnings.length?"attention":"publicity_pending",onboarding_checklist:{agreement_confirmed:true,google_group_checked:["verified","missing"].includes(String(assignment?.google_group_sync_status)),google_group_status:assignment?.google_group_sync_status,welcome_sent:["sent","already_sent"].includes(String(assignment?.welcome_email_status)),publicity_prepared:!pub.error,attention:warnings}}).eq("id",req.role_assignment_id);

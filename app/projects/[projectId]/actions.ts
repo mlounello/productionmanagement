@@ -1065,8 +1065,8 @@ export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: Form
   if (assignmentError || !assignment || !(invitePerson?.is_siena_employee || inviteRole?.budget_access_expected)) {
     redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "This assignment is not eligible for department Budget access.", `assignment-${input.id}`));
   }
-  if (accessError || !(accessRows ?? []).some((row) => row.status === "pending_account" && !row.access_not_required)) {
-    redirect(projectAssignmentErrorPath(input.projectId, accessError?.message ?? "This assignment does not have pending department access.", `assignment-${input.id}`));
+  if (accessError || !(accessRows ?? []).some((row) => !row.access_not_required)) {
+    redirect(projectAssignmentErrorPath(input.projectId, accessError?.message ?? "This assignment does not have department access to invite.", `assignment-${input.id}`));
   }
   const person = invitePerson;
   let result: Awaited<ReturnType<typeof sendTheatreBudgetDepartmentAccessLink>>;

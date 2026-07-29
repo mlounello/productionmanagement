@@ -1153,7 +1153,7 @@ export default async function ProjectWorkspacePage({
               <p className="muted">Define the roles this project needs before assigning people into them.</p>
             </div>
           </div>
-          <form action={createProjectRoleAction} className="inline-create">
+          <form action={createProjectRoleAction} className="inline-create role-create-form">
             <input name="projectId" type="hidden" value={typedProject.id} />
             <input aria-label="Role name" name="name" placeholder="Role name" required />
             <select aria-label="Role group" name="roleGroup" defaultValue="production_team">
@@ -1171,9 +1171,12 @@ export default async function ProjectWorkspacePage({
                 </option>
               ))}
             </select>
-            <label className="check-row">
+            <label className="checkbox-card compact role-budget-toggle">
               <input name="budgetAccessExpected" type="checkbox" />
-              <span>Budget access expected</span>
+              <span>
+                <strong>Budget access expected</strong>
+                <small>Require a department-budget decision when filled.</small>
+              </span>
             </label>
             <button type="submit">Add role</button>
           </form>
@@ -1667,7 +1670,7 @@ export default async function ProjectWorkspacePage({
                           <button type="submit">Save department Budget access</button>
                         </form>
                       )}
-                      {budgetAccessPending ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">Send Theatre Budget access link</button></form> : null}
+                      {selectedDepartmentIds.size && !budgetAccessExempt ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">{budgetAccessPending ? "Send" : "Resend"} Theatre Budget access link</button></form> : null}
                     </div>
                   ) : null}
                   <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">

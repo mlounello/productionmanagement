@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { publicitySyncFailureStatus, syncApprovedPublicityToPlaybill } from "@/lib/publicity-sync";
+import { syncAssignmentToPlaybillAsSystem } from "@/lib/playbill-sync";
 import { sendPublicityReminder } from "@/lib/profile-access-links";
 import { sanitizeRichText, stripRichTextToPlain } from "@/lib/rich-text";
 import { firstAndLastName } from "@/lib/person-display-name";
@@ -47,6 +48,7 @@ const creditedNameForProfile=firstAndLastName;
 export async function prepareProjectPublicityAction(formData: FormData) {
   await requireUser();
   const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
+  await requirePublicityManager(projectId);
   const supabase = await createSupabaseServerClient();
   const { data: assignments, error } = await supabase
     .from("role_assignments")
@@ -74,8 +76,32 @@ export async function prepareProjectPublicityAction(formData: FormData) {
     const { error: upsertError } = await supabase.from("project_publicity_submissions").upsert(rows, { onConflict: "project_id,person_id", ignoreDuplicates: true });
     if (upsertError) redirect(path(projectId, "error", upsertError.message));
   }
+
+  let repairedAssignments = 0;
+  const repairWarnings: string[] = [];
+  for (const assignment of assignments ?? []) {
+    try {
+      const result = await syncAssignmentToPlaybillAsSystem(projectId, String(assignment.id));
+      if (result) repairedAssignments += 1;
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : "Playbill assignment sync failed.";
+      repairWarnings.push(message);
+      await supabase.from("role_assignments").update({
+        playbill_sync_status: "failed",
+        sync_notes: message
+      }).eq("project_id", projectId).eq("id", assignment.id);
+    }
+  }
+
   revalidatePath(`/projects/${projectId}/publicity`);
-  redirect(path(projectId, "success", `Prepared ${rows.length} assignment${rows.length === 1 ? "" : "s"}. Existing production copies were preserved.`));
+  const warning = repairWarnings.length
+    ? ` ${repairWarnings.length} Playbill assignment${repairWarnings.length === 1 ? "" : "s"} still need attention.`
+    : "";
+  redirect(path(
+    projectId,
+    repairWarnings.length ? "error" : "success",
+    `Prepared ${rows.length} production cop${rows.length === 1 ? "y" : "ies"} and repaired ${repairedAssignments} Playbill assignment${repairedAssignments === 1 ? "" : "s"}. Existing edits were preserved.${warning}`
+  ));
 }
 
 export async function saveProjectPublicityCopyAction(formData: FormData) {

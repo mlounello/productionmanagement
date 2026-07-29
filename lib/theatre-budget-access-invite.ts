@@ -2,7 +2,6 @@ import "server-only";
 
 import { THEATRE_BUDGET_SITE_URL } from "@/lib/config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { elevatedSupabaseConfiguration } from "@/lib/supabase-admin-config";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -14,7 +13,7 @@ async function findAuthUser(email: string) {
   const perPage = 1000;
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     const found = data.users.find((user) => normalizeEmail(user.email ?? "") === target);
     if (found) return found;
     if (data.users.length < perPage) return null;
@@ -23,13 +22,14 @@ async function findAuthUser(email: string) {
 }
 
 async function requestTheatreBudgetAccessEmail(email: string) {
-  const { key } = elevatedSupabaseConfiguration(process.env);
+  const integrationSecret = process.env.BUDGET_ACCESS_INTEGRATION_SECRET?.trim();
+  if (!integrationSecret) throw new Error("The Theatre Budget email integration credential is not configured.");
   const response = await fetch(
     `${THEATRE_BUDGET_SITE_URL.replace(/\/+$/, "")}/api/integrations/production-management/budget-access-link`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${integrationSecret}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ email }),
@@ -57,7 +57,7 @@ export async function sendTheatreBudgetDepartmentAccessLink(input: {
       email_confirm: true,
       user_metadata: { full_name: input.fullName || email, name: input.fullName || email }
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     if (!data.user?.id) throw new Error("The Theatre Budget account could not be created.");
     account = data.user;
   }
@@ -66,12 +66,12 @@ export async function sendTheatreBudgetDepartmentAccessLink(input: {
     .schema("app_theatre_budget")
     .from("users")
     .upsert({ id: account.id, full_name: input.fullName || email }, { onConflict: "id" });
-  if (userError) throw userError;
+  if (userError) throw new Error(userError.message);
   const { error: activationError } = await admin.rpc("activate_pending_department_budget_access", {
     target_user_id: account.id,
     target_email: email
   });
-  if (activationError) throw activationError;
+  if (activationError) throw new Error(activationError.message);
   await requestTheatreBudgetAccessEmail(email);
   return { created };
 }
