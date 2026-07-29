@@ -1082,8 +1082,8 @@ export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: Form
   redirect(projectAssignmentSuccessPath(
     input.projectId,
     result.created
-      ? "Theatre Budget account created, department access activated, and invitation sent."
-      : "Department access activated and a Theatre Budget sign-in link was sent.",
+      ? "Theatre Budget account created, department access activated, and the permanent app link was sent."
+      : "Department access activated and the permanent Theatre Budget app link was sent.",
     `assignment-${input.id}`
   ));
 }

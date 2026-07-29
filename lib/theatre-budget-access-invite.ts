@@ -21,7 +21,7 @@ async function findAuthUser(email: string) {
   return null;
 }
 
-async function requestTheatreBudgetAccessEmail(email: string) {
+async function requestTheatreBudgetAccessEmail(email: string, fullName: string) {
   const integrationSecret = process.env.BUDGET_ACCESS_INTEGRATION_SECRET?.trim();
   if (!integrationSecret) throw new Error("The Theatre Budget email integration credential is not configured.");
   const response = await fetch(
@@ -32,7 +32,7 @@ async function requestTheatreBudgetAccessEmail(email: string) {
         Authorization: `Bearer ${integrationSecret}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, fullName }),
       cache: "no-store"
     }
   );
@@ -72,6 +72,6 @@ export async function sendTheatreBudgetDepartmentAccessLink(input: {
     target_email: email
   });
   if (activationError) throw new Error(activationError.message);
-  await requestTheatreBudgetAccessEmail(email);
+  await requestTheatreBudgetAccessEmail(email, input.fullName);
   return { created };
 }

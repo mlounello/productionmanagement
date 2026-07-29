@@ -1615,7 +1615,7 @@ export default async function ProjectWorkspacePage({
                           <button type="submit">Save department Budget access</button>
                         </form>
                       )}
-                      {selectedDepartmentIds.size && !budgetAccessExempt ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">{budgetAccessPending ? "Send" : "Resend"} Theatre Budget access link</button></form> : null}
+                      {selectedDepartmentIds.size && !budgetAccessExempt ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">{budgetAccessPending ? "Send" : "Resend"} Theatre Budget access email</button></form> : null}
                     </div>
                   ) : null}
                   <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">
