@@ -949,6 +949,59 @@ button {
   padding: 0;
 }
 
+.audition-preview-toolbar {
+  margin-bottom: 20px;
+}
+
+.audition-preview-toolbar .setup-warning {
+  margin-bottom: 12px;
+}
+
+.audition-preview-actions,
+.audition-preview-share {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.audition-preview-share code {
+  overflow-wrap: anywhere;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .audition-public-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .audition-preview-toolbar,
+  nav,
+  footer {
+    display: none !important;
+  }
+
+  .audition-public-page .page-header {
+    break-after: avoid;
+    margin-bottom: 16px;
+  }
+
+  .audition-form-section {
+    break-inside: avoid;
+    box-shadow: none;
+    margin-bottom: 14px;
+    padding: 18px 20px;
+  }
+
+  .audition-preview-fields > button {
+    display: none;
+  }
+}
+
 .audition-form-section {
   border-color: #d4e1da;
   border-radius: 14px;

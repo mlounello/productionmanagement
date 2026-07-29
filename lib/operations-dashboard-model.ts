@@ -25,12 +25,11 @@ export type OperationFilters = {
   due: OperationDueWindow;
 };
 
-export function needsTheatreBudgetLink(input: {
+export function needsTheatreBudgetAccessDecision(input: {
   isGuestArtist: boolean;
-  hasSavedLink: boolean;
-  syncStatus: string;
+  hasAccessDecision: boolean;
 }) {
-  return input.isGuestArtist && !input.hasSavedLink && input.syncStatus !== "disabled";
+  return input.isGuestArtist && !input.hasAccessDecision;
 }
 
 export function severityForDate(value: string | null, now = new Date()): OperationSeverity {

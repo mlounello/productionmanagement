@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -199,6 +200,20 @@ export async function updateAuditionFormAction(formData: FormData) {
   }).eq("id", formId).eq("project_id", projectId);
   if (error) redirect(path(projectId, error.message, true));
   redirect(path(projectId, `Form saved as ${status}.`));
+}
+
+export async function regenerateAuditionStaffPreviewLinkAction(formData: FormData) {
+  const projectId = uuid.parse(formData.get("projectId"));
+  const formId = uuid.parse(formData.get("formId"));
+  const { supabase } = await context(projectId);
+  const { error } = await supabase
+    .from("audition_forms")
+    .update({ staff_preview_token: randomUUID() })
+    .eq("id", formId)
+    .eq("project_id", projectId);
+  if (error) redirect(path(projectId, error.message, true));
+  revalidatePath(path(projectId));
+  redirect(path(projectId, "A new staff preview link was created. The previous link no longer works."));
 }
 
 export async function duplicateAuditionFormVersionAction(formData: FormData) {

@@ -22,6 +22,36 @@ export type TheatreBudgetProject = {
   status: string;
 };
 
+export type TheatreBudgetDepartment = {
+  id: string;
+  name: string;
+};
+
+export async function fetchTheatreBudgetProjectDepartments(projectId: string): Promise<{
+  data: TheatreBudgetDepartment[];
+  error: string | null;
+}> {
+  const supabase = createTheatreBudgetIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_theatre_budget")
+    .from("project_budget_lines")
+    .select("production_category_id, production_categories(id, name)")
+    .eq("project_id", projectId)
+    .eq("active", true)
+    .not("production_category_id", "is", null);
+  if (error) return { data: [], error: error.message };
+  const departments = new Map<string, string>();
+  for (const row of data ?? []) {
+    const relation = row.production_categories as unknown as { id?: string; name?: string } | Array<{ id?: string; name?: string }> | null;
+    const department = Array.isArray(relation) ? relation[0] : relation;
+    if (department?.id && department.name) departments.set(String(department.id), String(department.name));
+  }
+  return {
+    data: [...departments].map(([id, name]) => ({ id, name })).sort((left, right) => left.name.localeCompare(right.name)),
+    error: null
+  };
+}
+
 export type TheatreBudgetContractStatus = {
   id: string;
   project_id: string;

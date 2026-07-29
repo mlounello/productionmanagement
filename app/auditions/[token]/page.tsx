@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { hasProjectSchedule, ProjectScheduleDisplay, type ProjectSchedule } from "@/components/project-schedule-display";
 import { AuditionSlotSelector } from "@/components/audition-slot-selector";
 import { AuditionSubmissionForm } from "@/components/audition-submission-form";
+import { PrintButton } from "@/components/print-button";
 import { auditionUploadSizeLabel } from "@/lib/audition-upload";
 
 export const dynamic = "force-dynamic";
@@ -30,12 +31,17 @@ function formatSession(session: Session) {
   return `${start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:"America/New_York"})} · ${start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})}${end?`–${end.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})}`:""}`;
 }
 
-export default async function PublicAuditionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string; success?: string; notice?: string; challenge?: string; profile?: string; preview?:string }> }) {
+export default async function PublicAuditionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: Promise<{ error?: string; success?: string; notice?: string; challenge?: string; profile?: string; preview?:string; staffPreview?:string }> }) {
   const { token } = await params;
   const query = await searchParams;
   const supabase = await createSupabaseServerClient();
-  const preview=query?.preview==="1";
-  const { data, error } = preview?await supabase.rpc("get_audition_form_preview",{form_token:token}):await supabase.rpc("get_public_audition_form", { form_token: token });
+  const sharedStaffPreview=query?.staffPreview==="1";
+  const preview=query?.preview==="1"||sharedStaffPreview;
+  const { data, error } = sharedStaffPreview
+    ? await supabase.rpc("get_shared_audition_form_preview", { preview_token: token })
+    : preview
+      ? await supabase.rpc("get_audition_form_preview",{form_token:token})
+      : await supabase.rpc("get_public_audition_form", { form_token: token });
   if (error || !data) notFound();
   const payload = data as { form: { id: string; title: string; description: string }; project: { title: string }; schedule?: ProjectSchedule; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
   const profile = preview?null:await getVerifiedProfile(query?.profile, "audition", payload.form.id);
@@ -68,7 +74,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
   };
   return <div className="page audition-public-page">
     <header className="page-header"><div><p className="eyebrow">{payload.project.title}</p><h1>{payload.form.title}</h1><p className="muted">{payload.form.description}</p></div></header>
-    {preview?<p className="setup-warning"><strong>Secure staff preview.</strong> This is the current form layout. Profile verification and submission are disabled until the form is published.</p>:null}
+    {preview?<div className="audition-preview-toolbar"><p className="setup-warning"><strong>Staff preview.</strong> This link shows the current form and schedule without applicant responses. Profile verification and submission are disabled.</p><div className="audition-preview-actions"><PrintButton /></div></div>:null}
     {query?.error ? <p className="setup-warning">{query.error}</p> : null}{query?.success ? <p className="setup-success">{query.success}</p> : null}{query?.notice ? <p className="setup-success">{query.notice}</p> : null}
     {!preview?<section className="panel audition-profile-loader"><h2>Load your saved Siena Theatre profile</h2><p className="muted">Optional: enter the email already on your profile and your exact 90# when applicable. We will email a six-digit verification code before filling saved vocal range, interests, experience, and skills.</p>
       <form action={requestIntakeVerificationCodeAction} className="form-row"><input type="hidden" name="contextType" value="audition"/><input type="hidden" name="contextId" value={payload.form.id}/><input type="hidden" name="contextToken" value={token}/><label className="field"><span>Email</span><input type="email" name="email" required/></label><label className="field"><span>90# (if applicable)</span><input name="vendorNumber"/></label><button type="submit">Load my saved profile</button></form>

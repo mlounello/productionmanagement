@@ -24,7 +24,7 @@ import {
   linkTheatreBudgetGuestArtistAction,
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
-  setTheatreBudgetLinkRequirementAction,
+  saveTheatreBudgetDepartmentAccessAction,
   syncAllProjectIntegrationsAction,
   syncProjectRoleToPlaybillAction,
   syncRoleAssignmentToPlaybillAction,
@@ -45,7 +45,7 @@ import { InlineHelp } from "@/components/ui/inline-help";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPlaybillShowRoles, fetchPlaybillShows } from "@/lib/playbill";
 import { fetchActiveDepartments, fetchActiveLocations, fetchActiveReferenceValues } from "@/lib/reference-data";
-import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetContractSummaries, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
+import { fetchTheatreBudgetContractStatuses, fetchTheatreBudgetContractSummaries, fetchTheatreBudgetGuestArtists, fetchTheatreBudgetProjectDepartments, fetchTheatreBudgetProjects, type TheatreBudgetGuestArtist } from "@/lib/theatre-budget";
 import type { ProjectWorkspaceKey } from "@/lib/project-routes";
 import { loadProjectReadiness } from "@/lib/project-readiness";
 import { displayStatus } from "@/lib/status-display";
@@ -164,6 +164,17 @@ type ExternalLink = {
   external_id: string;
   sync_status: string;
   metadata: Record<string, unknown>;
+};
+
+type BudgetAccessRow = {
+  id: string;
+  role_assignment_id: string;
+  budget_project_id: string | null;
+  production_category_id: string | null;
+  access_not_required: boolean;
+  budget_user_id: string | null;
+  derived_access_scope_id: string | null;
+  status: "pending_account" | "granted" | "exempt";
 };
 
 type ProjectLocation = {
@@ -480,6 +491,13 @@ export default async function ProjectWorkspacePage({
           assignmentRows.map((assignment) => assignment.id)
         )
     : { data: [] };
+  const { data: assignmentBudgetAccess } = ["overview", "roles"].includes(workspace) && assignmentRows.length
+    ? await supabase
+        .from("role_assignment_budget_access")
+        .select("id, role_assignment_id, budget_project_id, production_category_id, access_not_required, budget_user_id, derived_access_scope_id, status")
+        .in("role_assignment_id", assignmentRows.map((assignment) => assignment.id))
+        .eq("active", true)
+    : { data: [] };
   const { data: assignmentPlaybillLinks } = ["roles", "integrations"].includes(workspace) && assignmentRows.length
     ? await supabase
         .from("external_links")
@@ -540,6 +558,9 @@ export default async function ProjectWorkspacePage({
   const theatreBudgetContracts = budgetProjectLink && ["roles", "people"].includes(workspace)
     ? await fetchTheatreBudgetContractStatuses(String(budgetProjectLink.external_id))
     : { data: [], error: null };
+  const theatreBudgetDepartments = budgetProjectLink && workspace === "roles"
+    ? await fetchTheatreBudgetProjectDepartments(String(budgetProjectLink.external_id))
+    : { data: [], error: null };
   const linkedPlaybillRoles = needsPlaybillWorkspace && linkedPlaybillShow ? await fetchPlaybillShowRoles(linkedPlaybillShow.id) : [];
   const budgetLinks = (guestArtistLinks ?? []) as ExternalLink[];
   const theatreBudgetContractSummaries = workspace === "roles" && budgetLinks.length
@@ -567,10 +588,15 @@ export default async function ProjectWorkspacePage({
   });
   const assignmentSyncFailures = assignmentRows.filter((assignment) => assignment.playbill_sync_status === "failed");
   const budgetLinksByAssignmentId = new Map(budgetLinks.map((link) => [link.local_entity_id, link]));
+  const budgetAccessByAssignmentId = new Map<string, BudgetAccessRow[]>();
+  for (const access of (assignmentBudgetAccess ?? []) as BudgetAccessRow[]) {
+    const rows = budgetAccessByAssignmentId.get(access.role_assignment_id) ?? [];
+    rows.push(access);
+    budgetAccessByAssignmentId.set(access.role_assignment_id, rows);
+  }
   const unlinkedGuestAssignments = assignmentRows.filter(
     (assignment) => assignment.is_guest_artist
-      && assignment.guest_artist_sync_status !== "disabled"
-      && !budgetLinksByAssignmentId.has(assignment.id)
+      && !(budgetAccessByAssignmentId.get(assignment.id)?.length)
   );
   const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
   const overviewNotifications = workspace === "overview" ? await Promise.all([
@@ -766,7 +792,7 @@ export default async function ProjectWorkspacePage({
               return <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/auditions#calendar-sync`} key={`calendar-${item.id}`}><StatusBadge status="failed" label="Calendar"/><div><strong>{person?.full_name ?? "Applicant"} needs calendar follow-up</strong><span>{item.google_calendar_sync_error || "The audition invitation did not synchronize."}</span></div><span aria-hidden="true">→</span></Link>;
             })}
             {roleSyncFailures.length + assignmentSyncFailures.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/integrations`}><StatusBadge status="failed" label="Playbill"/><div><strong>{roleSyncFailures.length + assignmentSyncFailures.length} integration item{roleSyncFailures.length + assignmentSyncFailures.length === 1 ? "" : "s"} failed</strong><span>Open Integrations to retry or review the provider response.</span></div><span aria-hidden="true">→</span></Link> : null}
-            {unlinkedGuestAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{unlinkedGuestAssignments.length} guest artist link{unlinkedGuestAssignments.length === 1 ? "" : "s"} needed</strong><span>Connect the assignment to its Theatre Budget guest artist.</span></div><span aria-hidden="true">→</span></Link> : null}
+            {unlinkedGuestAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{unlinkedGuestAssignments.length} guest artist Budget access decision{unlinkedGuestAssignments.length === 1 ? "" : "s"} needed</strong><span>Choose one or more view-only department budgets, or mark access as not required.</span></div><span aria-hidden="true">→</span></Link> : null}
             {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !unlinkedGuestAssignments.length ? <p className="setup-success">No unresolved project notifications.</p> : null}
           </div>
           {(overviewNotifications?.[1].data ?? []).length ? <details className="notification-activity"><summary>Recent participant activity</summary><div className="compact-list">{(overviewNotifications?.[1].data ?? []).map((item) => { const person = item.people as unknown as { full_name?: string } | null; return <div className="compact-row" key={item.id}><div><strong>{person?.full_name ?? "Participant"}</strong><span>Role {item.status} · {item.submitted_at ? formatDate(item.submitted_at) : "recently"}</span></div><StatusBadge status={item.status}/></div>; })}</div></details> : null}
@@ -777,7 +803,7 @@ export default async function ProjectWorkspacePage({
             <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>
             <div><span>{runRows.length}</span><p>Run Items</p></div>
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Warnings</p></div>
-            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Links Needed</p></div>
+            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Access Needed</p></div>
           </div>
         </section>
         <section className="panel workspace-section">
@@ -882,7 +908,7 @@ export default async function ProjectWorkspacePage({
             <div><span>{playbillRoleLinksByRoleId.size}</span><p>Linked Roles</p></div>
             <div><span>{roles.filter((role) => !playbillRoleLinksByRoleId.has(role.id)).length}</span><p>Unlinked Roles</p></div>
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Failures</p></div>
-            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Needed</p></div>
+            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Access Needed</p></div>
           </div>
           <form action={syncAllProjectIntegrationsAction}>
             <input name="projectId" type="hidden" value={typedProject.id} />
@@ -1404,6 +1430,10 @@ export default async function ProjectWorkspacePage({
               const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
               const budgetContract = budgetLink ? budgetContractByGuestArtistId.get(budgetLink.external_id) : null;
               const allBudgetContracts = budgetLink ? budgetContractsByGuestArtistId.get(budgetLink.external_id) ?? [] : [];
+              const departmentAccess = budgetAccessByAssignmentId.get(assignment.id) ?? [];
+              const selectedDepartmentIds = new Set(departmentAccess.map((access) => access.production_category_id).filter((id): id is string => Boolean(id)));
+              const budgetAccessExempt = departmentAccess.some((access) => access.access_not_required);
+              const budgetAccessPending = departmentAccess.some((access) => access.status === "pending_account");
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
@@ -1425,7 +1455,7 @@ export default async function ProjectWorkspacePage({
                       <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} />
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
-                      {assignment.is_guest_artist ? <StatusBadge status={budgetLink ? "linked" : assignment.guest_artist_sync_status} label={budgetLink ? "Budget Linked" : assignment.guest_artist_sync_status === "disabled" ? "Budget Not Required" : `Budget ${titleCase(assignment.guest_artist_sync_status)}`} /> : null}
+                      {assignment.is_guest_artist ? <StatusBadge status={budgetAccessExempt ? "disabled" : selectedDepartmentIds.size ? budgetAccessPending ? "pending" : "linked" : "not_ready"} label={budgetAccessExempt ? "Budget Access Not Required" : selectedDepartmentIds.size ? `Budget Access ${budgetAccessPending ? "Pending" : `${selectedDepartmentIds.size} Department${selectedDepartmentIds.size === 1 ? "" : "s"}`}` : "Budget Access Needed"} /> : null}
                     </div>
                   </summary>
                   <div className="integration-panel">
@@ -1463,7 +1493,7 @@ export default async function ProjectWorkspacePage({
                   {assignment.is_guest_artist ? (
                     <div className="integration-panel">
                       <div>
-                        <strong>Theatre Budget Guest Artist</strong>
+                        <strong>Theatre Budget Payee / Contract Record</strong>
                         <p className="muted">
                           One person links to one reusable Theatre Budget guest-artist profile. That profile may have contracts in multiple Budget projects.
                         </p>
@@ -1472,19 +1502,6 @@ export default async function ProjectWorkspacePage({
                         <p className="setup-warning">{theatreBudgetGuestArtists.error}</p>
                       ) : theatreBudgetContracts.error ? (
                         <p className="setup-warning">Contract status is unavailable: {theatreBudgetContracts.error}</p>
-                      ) : assignment.guest_artist_sync_status === "disabled" ? (
-                        <div className="linked-record">
-                          <div>
-                            <strong>Theatre Budget link not required</strong>
-                            <span>This person remains a guest artist and is excluded from missing-link reports.</span>
-                          </div>
-                          <form action={setTheatreBudgetLinkRequirementAction}>
-                            <input name="projectId" type="hidden" value={typedProject.id} />
-                            <input name="assignmentId" type="hidden" value={assignment.id} />
-                            <input name="requirement" type="hidden" value="required" />
-                            <button className="button secondary" type="submit">Require Budget link</button>
-                          </form>
-                        </div>
                       ) : linkedGuestArtist ? (
                         <div className="linked-record">
                           <div>
@@ -1515,12 +1532,6 @@ export default async function ProjectWorkspacePage({
                               <input name="projectId" type="hidden" value={typedProject.id} />
                               <input name="assignmentId" type="hidden" value={assignment.id} />
                               <button className="button secondary" type="submit">Unlink</button>
-                            </form>
-                            <form action={setTheatreBudgetLinkRequirementAction}>
-                              <input name="projectId" type="hidden" value={typedProject.id} />
-                              <input name="assignmentId" type="hidden" value={assignment.id} />
-                              <input name="requirement" type="hidden" value="not_required" />
-                              <button className="button secondary" type="submit">Unlink &amp; mark not required</button>
                             </form>
                           </div>
                           <details style={{ gridColumn: "1 / -1" }}>
@@ -1575,15 +1586,7 @@ export default async function ProjectWorkspacePage({
                           <button type="submit">Link existing artist</button>
                         </form>
                       )}
-                      {!linkedGuestArtist && assignment.guest_artist_sync_status !== "disabled" ? (
-                        <form action={setTheatreBudgetLinkRequirementAction}>
-                          <input name="projectId" type="hidden" value={typedProject.id} />
-                          <input name="assignmentId" type="hidden" value={assignment.id} />
-                          <input name="requirement" type="hidden" value="not_required" />
-                          <button className="button secondary" type="submit">No Theatre Budget link required</button>
-                        </form>
-                      ) : null}
-                      {!linkedGuestArtist && assignment.guest_artist_sync_status !== "disabled" ? (
+                      {!linkedGuestArtist ? (
                         <details>
                           <summary>Create a new Theatre Budget guest artist</summary>
                           <form action={createAndLinkTheatreBudgetGuestArtistAction} className="guest-artist-link-form">
@@ -1600,6 +1603,47 @@ export default async function ProjectWorkspacePage({
                           </form>
                         </details>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {assignment.is_guest_artist ? (
+                    <div className="integration-panel">
+                      <div>
+                        <strong>Department Budget Access</strong>
+                        <p className="muted">Grant view-only access to one or more department budgets. This is separate from the payee/contract record above.</p>
+                      </div>
+                      {!budgetProjectLink ? (
+                        <div className="stacked-form">
+                          <p className="setup-warning">Link this Production Management project to its Theatre Budget project in Integrations before assigning department access.</p>
+                          <form action={saveTheatreBudgetDepartmentAccessAction}>
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <input name="noAccessRequired" type="hidden" value="on" />
+                            <button className="button secondary" type="submit">Mark Budget access not required</button>
+                          </form>
+                        </div>
+                      ) : theatreBudgetDepartments.error ? (
+                        <p className="setup-warning">Department budgets are unavailable: {theatreBudgetDepartments.error}</p>
+                      ) : (
+                        <form action={saveTheatreBudgetDepartmentAccessAction} className="stacked-form">
+                          <input name="projectId" type="hidden" value={typedProject.id} />
+                          <input name="assignmentId" type="hidden" value={assignment.id} />
+                          <div className="checkbox-grid">
+                            {theatreBudgetDepartments.data.map((department) => (
+                              <label className="checkbox-card" key={department.id}>
+                                <input name="departmentId" type="checkbox" value={department.id} defaultChecked={selectedDepartmentIds.has(department.id)} />
+                                <span><strong>{department.name}</strong><small>View-only access to this department’s budget.</small></span>
+                              </label>
+                            ))}
+                          </div>
+                          {!theatreBudgetDepartments.data.length ? <p className="setup-warning">This Theatre Budget project has no active department budget lines yet.</p> : null}
+                          <label className="checkbox-card">
+                            <input name="noAccessRequired" type="checkbox" defaultChecked={budgetAccessExempt} />
+                            <span><strong>No Theatre Budget access required</strong><small>This keeps the guest-artist and payee links but removes the missing-access warning.</small></span>
+                          </label>
+                          {selectedDepartmentIds.size ? <p className={budgetAccessPending ? "setup-warning" : "setup-success"}>{budgetAccessPending ? "Departments are selected; view access is waiting for the matching Theatre Budget account to be connected." : `View-only access is active for ${selectedDepartmentIds.size} department${selectedDepartmentIds.size === 1 ? "" : "s"}.`}</p> : null}
+                          <button type="submit">Save department Budget access</button>
+                        </form>
+                      )}
                     </div>
                   ) : null}
                   <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">

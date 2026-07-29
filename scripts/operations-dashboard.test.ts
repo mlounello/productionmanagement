@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 // @ts-expect-error Node's built-in TypeScript loader requires the extension.
-import { filterOperationItems, needsTheatreBudgetLink, severityForDate, sortOperationItems, type OperationItem } from "../lib/operations-dashboard-model.ts";
+import { filterOperationItems, needsTheatreBudgetAccessDecision, severityForDate, sortOperationItems, type OperationItem } from "../lib/operations-dashboard-model.ts";
 
 const now = new Date("2026-07-13T16:00:00Z");
 const items: OperationItem[] = [
@@ -30,9 +30,8 @@ test("severity and sorting prioritize overdue work", () => {
   assert.equal(sortOperationItems(items)[0]?.id, "overdue");
 });
 
-test("Budget warnings use the saved link and honor an explicit exemption", () => {
-  assert.equal(needsTheatreBudgetLink({ isGuestArtist: true, hasSavedLink: true, syncStatus: "not_ready" }), false);
-  assert.equal(needsTheatreBudgetLink({ isGuestArtist: true, hasSavedLink: false, syncStatus: "disabled" }), false);
-  assert.equal(needsTheatreBudgetLink({ isGuestArtist: true, hasSavedLink: false, syncStatus: "not_ready" }), true);
-  assert.equal(needsTheatreBudgetLink({ isGuestArtist: false, hasSavedLink: false, syncStatus: "not_guest_artist" }), false);
+test("Budget warnings require a department-access decision, independent of payee linking", () => {
+  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: true, hasAccessDecision: true }), false);
+  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: true, hasAccessDecision: false }), true);
+  assert.equal(needsTheatreBudgetAccessDecision({ isGuestArtist: false, hasAccessDecision: false }), false);
 });

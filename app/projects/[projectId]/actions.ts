@@ -17,6 +17,7 @@ import {
   vacateAssignmentInPlaybill
 } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   createTheatreBudgetGuestArtist,
   fetchTheatreBudgetGuestArtistById,
@@ -967,20 +968,25 @@ export async function updateRoleAssignmentAction(formData: FormData) {
   redirect(projectAssignmentSuccessPath(input.projectId, "Assignment saved.", `assignment-${input.id}`));
 }
 
-export async function setTheatreBudgetLinkRequirementAction(formData: FormData) {
+export async function saveTheatreBudgetDepartmentAccessAction(formData: FormData) {
   await requireUser();
   const parsed = projectScopedRowSchema.extend({
-    requirement: z.enum(["required", "not_required"])
+    departmentIds: z.array(z.string().uuid()),
+    noAccessRequired: z.boolean()
   }).safeParse({
     projectId: requiredString(formData.get("projectId")),
     id: requiredString(formData.get("assignmentId")),
-    requirement: requiredString(formData.get("requirement"))
+    departmentIds: formData.getAll("departmentId").map((value) => requiredString(value)),
+    noAccessRequired: formData.get("noAccessRequired") === "on"
   });
   if (!parsed.success) {
-    redirect(`/projects?error=${encodeURIComponent("Invalid Theatre Budget link requirement.")}`);
+    redirect(`/projects?error=${encodeURIComponent("Invalid Theatre Budget department access selection.")}`);
   }
 
   const input = parsed.data;
+  if (!input.noAccessRequired && input.departmentIds.length === 0) {
+    redirect(projectAssignmentErrorPath(input.projectId, "Choose at least one department or mark Theatre Budget access as not required.", `assignment-${input.id}`));
+  }
   const supabase = await createSupabaseServerClient();
   const { data: assignment, error: assignmentError } = await supabase
     .from("role_assignments")
@@ -989,54 +995,30 @@ export async function setTheatreBudgetLinkRequirementAction(formData: FormData) 
     .eq("id", input.id)
     .maybeSingle();
   if (assignmentError || !assignment?.is_guest_artist) {
-    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Only guest artist assignments can change this setting.", `assignment-${input.id}`));
+    redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "Only guest artist assignments can receive department Budget access.", `assignment-${input.id}`));
   }
 
-  const { data: link, error: linkError } = await supabase
-    .from("external_links")
-    .select("id")
-    .eq("local_entity_type", "role_assignment")
-    .eq("local_entity_id", input.id)
-    .eq("external_app", "theatre_budget")
-    .eq("external_schema", "app_theatre_budget")
-    .eq("external_table", "guest_artists")
-    .maybeSingle();
-  if (linkError) {
-    redirect(projectAssignmentErrorPath(input.projectId, linkError.message, `assignment-${input.id}`));
-  }
-
-  const nextStatus = input.requirement === "not_required"
-    ? "disabled"
-    : link
-      ? "synced"
-      : "not_ready";
-  if (input.requirement === "not_required" && link) {
-    const { error: unlinkError } = await supabase
-      .from("external_links")
-      .delete()
-      .eq("id", link.id);
-    if (unlinkError) {
-      redirect(projectAssignmentErrorPath(input.projectId, unlinkError.message, `assignment-${input.id}`));
-    }
-  }
-  const { error } = await supabase
-    .from("role_assignments")
-    .update({ guest_artist_sync_status: nextStatus })
-    .eq("project_id", input.projectId)
-    .eq("id", input.id);
+  const admin = createSupabaseAdminClient();
+  const { data: result, error } = await admin.rpc("set_assignment_department_budget_access", {
+    target_assignment_id: input.id,
+    target_category_ids: input.noAccessRequired ? [] : [...new Set(input.departmentIds)],
+    no_access_required: input.noAccessRequired
+  });
   if (error) {
     redirect(projectAssignmentErrorPath(input.projectId, error.message, `assignment-${input.id}`));
   }
 
+  const status = String((result as { status?: string } | null)?.status ?? "");
+  const departments = Number((result as { departments?: number } | null)?.departments ?? 0);
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${input.projectId}`);
   redirect(projectAssignmentSuccessPath(
     input.projectId,
-    input.requirement === "not_required"
-      ? "The Theatre Budget link was removed and marked not required for this guest artist."
-      : link
-        ? "The existing Theatre Budget link is recognized."
-        : "Theatre Budget linking is required again.",
+    input.noAccessRequired
+      ? "Marked as not requiring Theatre Budget department access."
+      : status === "pending_account"
+        ? `${departments} department${departments === 1 ? "" : "s"} selected. Access will activate when the matching Theatre Budget account is connected.`
+        : `View-only Theatre Budget access saved for ${departments} department${departments === 1 ? "" : "s"}.`,
     `assignment-${input.id}`
   ));
 }
