@@ -8,6 +8,10 @@ const migration = readFileSync(
   new URL("../supabase/migrations/202607290400_assignment_confirmation_exemptions.sql", import.meta.url),
   "utf8"
 );
+const contractStatusMigration = readFileSync(
+  new URL("../supabase/migrations/202607290430_guest_contract_assignment_status.sql", import.meta.url),
+  "utf8"
+);
 
 test("Guest Artists and Siena Employees never require a separate confirmation", () => {
   assert.equal(assignmentConfirmationExempt({ isGuestArtist: true, isSienaEmployee: false }), true);
@@ -38,4 +42,12 @@ test("signed Theatre Budget contracts accept linked Guest Artist assignments", (
   assert.match(migration, /siena_signed/i);
   assert.match(migration, /reconcile_assignments_after_contract_status/i);
   assert.match(migration, /status = 'accepted'/i);
+});
+
+test("Guest Artist assignment status follows the complete Theatre Budget contract mapping", () => {
+  assert.match(contractStatusMigration, /desired_status text := 'offered'/i);
+  assert.match(contractStatusMigration, /contract_signed_returned[\s\S]+siena_signed/i);
+  assert.match(contractStatusMigration, /desired_status := 'accepted'/i);
+  assert.match(contractStatusMigration, /assignment\.status is distinct from desired_status/i);
+  assert.match(contractStatusMigration, /after insert or delete or update of workflow_status/i);
 });
