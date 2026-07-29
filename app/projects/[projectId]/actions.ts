@@ -566,7 +566,7 @@ export async function copyProjectRolesAction(formData: FormData) {
   if (parsed.data.projectId === parsed.data.sourceProjectId) redirect(projectErrorPath(parsed.data.projectId, "Choose a different project."));
   const supabase = await createSupabaseServerClient();
   const [{ data: source, error: sourceError }, { data: existing, error: existingError }] = await Promise.all([
-    supabase.from("project_roles").select("name, role_group, department, description, sort_order").eq("project_id", parsed.data.sourceProjectId),
+    supabase.from("project_roles").select("name, role_group, department, description, sort_order, budget_access_expected").eq("project_id", parsed.data.sourceProjectId),
     supabase.from("project_roles").select("name, role_group").eq("project_id", parsed.data.projectId)
   ]);
   if (sourceError) redirect(projectErrorPath(parsed.data.projectId, sourceError.message));
@@ -1006,7 +1006,7 @@ export async function saveTheatreBudgetDepartmentAccessAction(formData: FormData
     .maybeSingle();
   const accessPerson = Array.isArray(assignment?.people) ? assignment?.people[0] : assignment?.people;
   const accessRole = Array.isArray(assignment?.project_roles) ? assignment?.project_roles[0] : assignment?.project_roles;
-  const accessEligible = Boolean(assignment?.is_guest_artist || accessPerson?.is_siena_employee || accessRole?.budget_access_expected);
+  const accessEligible = Boolean(accessPerson?.is_siena_employee || accessRole?.budget_access_expected);
   if (assignmentError || !assignment || !accessEligible) {
     redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "This assignment is not eligible for department Budget access.", `assignment-${input.id}`));
   }
@@ -1062,7 +1062,7 @@ export async function sendTheatreBudgetDepartmentAccessLinkAction(formData: Form
   const invitePerson = Array.isArray(invitePersonRelation) ? invitePersonRelation[0] : invitePersonRelation;
   const inviteRoleRelation = assignment?.project_roles as unknown as { budget_access_expected?: boolean } | Array<{ budget_access_expected?: boolean }> | null;
   const inviteRole = Array.isArray(inviteRoleRelation) ? inviteRoleRelation[0] : inviteRoleRelation;
-  if (assignmentError || !assignment || !(assignment.is_guest_artist || invitePerson?.is_siena_employee || inviteRole?.budget_access_expected)) {
+  if (assignmentError || !assignment || !(invitePerson?.is_siena_employee || inviteRole?.budget_access_expected)) {
     redirect(projectAssignmentErrorPath(input.projectId, assignmentError?.message ?? "This assignment is not eligible for department Budget access.", `assignment-${input.id}`));
   }
   if (accessError || !(accessRows ?? []).some((row) => row.status === "pending_account" && !row.access_not_required)) {

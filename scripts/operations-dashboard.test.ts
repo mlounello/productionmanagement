@@ -30,7 +30,7 @@ test("severity and sorting prioritize overdue work", () => {
   assert.equal(sortOperationItems(items)[0]?.id, "overdue");
 });
 
-test("Budget warnings require a department-access decision, independent of payee linking", () => {
+test("Budget warnings are created only for roles that require department access", () => {
   assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: true, hasAccessDecision: true }), false);
   assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: true, hasAccessDecision: false }), true);
   assert.equal(needsTheatreBudgetAccessDecision({ requiresBudgetAccess: false, hasAccessDecision: false }), false);

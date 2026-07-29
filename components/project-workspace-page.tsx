@@ -594,8 +594,8 @@ export default async function ProjectWorkspacePage({
     rows.push(access);
     budgetAccessByAssignmentId.set(access.role_assignment_id, rows);
   }
-  const unlinkedGuestAssignments = assignmentRows.filter(
-    (assignment) => (assignment.is_guest_artist || rolesById.get(assignment.role_id)?.budget_access_expected)
+  const missingBudgetAccessAssignments = assignmentRows.filter(
+    (assignment) => rolesById.get(assignment.role_id)?.budget_access_expected
       && !(budgetAccessByAssignmentId.get(assignment.id)?.length)
   );
   const readiness=workspace==="overview"?await loadProjectReadiness(typedProject.id,[...new Set(roles.map((role)=>role.role_group))].sort(),assignmentRows.filter((assignment)=>assignment.is_guest_artist).length):null;
@@ -795,8 +795,8 @@ export default async function ProjectWorkspacePage({
               return <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/auditions#calendar-sync`} key={`calendar-${item.id}`}><StatusBadge status="failed" label="Calendar"/><div><strong>{person?.full_name ?? "Applicant"} needs calendar follow-up</strong><span>{item.google_calendar_sync_error || "The audition invitation did not synchronize."}</span></div><span aria-hidden="true">→</span></Link>;
             })}
             {roleSyncFailures.length + assignmentSyncFailures.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/integrations`}><StatusBadge status="failed" label="Playbill"/><div><strong>{roleSyncFailures.length + assignmentSyncFailures.length} integration item{roleSyncFailures.length + assignmentSyncFailures.length === 1 ? "" : "s"} failed</strong><span>Open Integrations to retry or review the provider response.</span></div><span aria-hidden="true">→</span></Link> : null}
-            {unlinkedGuestAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{unlinkedGuestAssignments.length} Budget access decision{unlinkedGuestAssignments.length === 1 ? "" : "s"} needed</strong><span>Choose one or more view-only department budgets, or mark access as not required.</span></div><span aria-hidden="true">→</span></Link> : null}
-            {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !unlinkedGuestAssignments.length ? <p className="setup-success">No unresolved project notifications.</p> : null}
+            {missingBudgetAccessAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{missingBudgetAccessAssignments.length} Budget access decision{missingBudgetAccessAssignments.length === 1 ? "" : "s"} needed</strong><span>Choose one or more view-only department budgets, or mark access as not required.</span></div><span aria-hidden="true">→</span></Link> : null}
+            {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !missingBudgetAccessAssignments.length ? <p className="setup-success">No unresolved project notifications.</p> : null}
           </div>
           {(overviewNotifications?.[1].data ?? []).length ? <details className="notification-activity"><summary>Recent participant activity</summary><div className="compact-list">{(overviewNotifications?.[1].data ?? []).map((item) => { const person = item.people as unknown as { full_name?: string } | null; return <div className="compact-row" key={item.id}><div><strong>{person?.full_name ?? "Participant"}</strong><span>Role {item.status} · {item.submitted_at ? formatDate(item.submitted_at) : "recently"}</span></div><StatusBadge status={item.status}/></div>; })}</div></details> : null}
         </section>
@@ -806,7 +806,7 @@ export default async function ProjectWorkspacePage({
             <div><span>{availableAssignmentRoles.length}</span><p>Vacant Roles</p></div>
             <div><span>{runRows.length}</span><p>Run Items</p></div>
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Warnings</p></div>
-            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Access Needed</p></div>
+            <div><span>{missingBudgetAccessAssignments.length}</span><p>Budget Access Needed</p></div>
           </div>
         </section>
         <section className="panel workspace-section">
@@ -911,7 +911,7 @@ export default async function ProjectWorkspacePage({
             <div><span>{playbillRoleLinksByRoleId.size}</span><p>Linked Roles</p></div>
             <div><span>{roles.filter((role) => !playbillRoleLinksByRoleId.has(role.id)).length}</span><p>Unlinked Roles</p></div>
             <div><span>{roleSyncFailures.length + assignmentSyncFailures.length}</span><p>Sync Failures</p></div>
-            <div><span>{unlinkedGuestAssignments.length}</span><p>Budget Access Needed</p></div>
+            <div><span>{missingBudgetAccessAssignments.length}</span><p>Budget Access Needed</p></div>
           </div>
           <form action={syncAllProjectIntegrationsAction}>
             <input name="projectId" type="hidden" value={typedProject.id} />
@@ -1450,8 +1450,8 @@ export default async function ProjectWorkspacePage({
               const selectedDepartmentIds = new Set(departmentAccess.map((access) => access.production_category_id).filter((id): id is string => Boolean(id)));
               const budgetAccessExempt = departmentAccess.some((access) => access.access_not_required);
               const budgetAccessPending = departmentAccess.some((access) => access.status === "pending_account");
-              const budgetAccessEligible = Boolean(assignment.is_guest_artist || person?.is_siena_employee || role?.budget_access_expected);
-              const budgetAccessDecisionRequired = Boolean(assignment.is_guest_artist || role?.budget_access_expected);
+              const budgetAccessEligible = Boolean(person?.is_siena_employee || role?.budget_access_expected);
+              const budgetAccessDecisionRequired = Boolean(role?.budget_access_expected);
               const guestArtistSuggestions = suggestedGuestArtistMatches(person, theatreBudgetGuestArtists.data);
               const playbillShowRoleLink = playbillShowRoleLinksByAssignmentId.get(assignment.id);
               const playbillRequestLink = playbillRequestLinksByAssignmentId.get(assignment.id);
