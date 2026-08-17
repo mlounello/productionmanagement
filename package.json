@@ -34,6 +34,7 @@
     "test:theatre-budget-access-email": "node --test scripts/theatre-budget-access-email.test.mjs",
     "test:theatre-budget-contract-query": "node --test scripts/theatre-budget-contract-query.test.mjs",
     "test:phase5a-integrations": "node --test scripts/phase5a-integration-boundaries.test.mjs",
+    "test:playbill-multi-role-bio": "node --test scripts/playbill-multi-role-bio.test.mjs",
     "verify:admin-credential": "node --experimental-strip-types scripts/verify-admin-credential.ts"
   },
   "dependencies": {

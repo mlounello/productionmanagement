@@ -3,14 +3,16 @@ import {
   createPlaybillPerson,
   createPlaybillShowRole,
   deletePlaybillSubmissionRequestsForRole,
-  ensureBioSubmissionRequest,
+  ensurePersonBioSubmissionRequest,
   fetchPlaybillPersonById,
   fetchPlaybillShowById,
   fetchPlaybillShowRoleById,
+  fetchPlaybillShowRoles,
   findPlaybillPerson,
   findPlaybillShowRole,
   findPlaybillShowRoleSlot,
-  markBioSubmissionRequestSource,
+  markBioSubmissionRequestSourceById,
+  movePersonBioRequestToRole,
   updatePlaybillPersonIdentity,
   updatePlaybillShowRole,
   type PlaybillPerson,
@@ -63,6 +65,39 @@ async function replaceExternalLink(
     metadata: link.metadata
   });
   if (error) throw new Error(error.message);
+}
+
+async function linkPersonAssignmentsToBioRequest(
+  supabase: PmClient,
+  input: {
+    projectId: string;
+    personId: string;
+    show: PlaybillShow;
+    request: import("@/lib/playbill").PlaybillSubmissionRequest;
+  }
+) {
+  const { data: assignments, error } = await supabase
+    .from("role_assignments")
+    .select("id, status")
+    .eq("project_id", input.projectId)
+    .eq("person_id", input.personId);
+  if (error) throw new Error(error.message);
+  for (const assignment of assignments ?? []) {
+    if (["declined", "withdrawn"].includes(String(assignment.status ?? ""))) continue;
+    await replaceExternalLink(supabase, {
+      local_entity_type: "role_assignment",
+      local_entity_id: String(assignment.id),
+      external_table: "submission_requests",
+      external_id: input.request.id,
+      metadata: {
+        show_id: input.show.id,
+        program_id: input.show.program_id,
+        show_role_id: input.request.show_role_id,
+        request_type: input.request.request_type,
+        status: input.request.status
+      }
+    });
+  }
 }
 
 async function getLinkedDraftShow(supabase: PmClient, projectId: string): Promise<PlaybillShow | null> {
@@ -319,14 +354,17 @@ async function syncAssignmentToPlaybillWithClient(
     metadata: { show_id: show.id, program_id: show.program_id, person_id: playbillPerson.id, role_name: showRole.role_name, category: showRole.category }
   });
 
-  const request = await ensureBioSubmissionRequest(showRole.id);
-  await markBioSubmissionRequestSource(showRole.id, "production_management");
-  await replaceExternalLink(supabase, {
-    local_entity_type: "role_assignment",
-    local_entity_id: assignmentId,
-    external_table: "submission_requests",
-    external_id: request.id,
-    metadata: { show_id: show.id, program_id: show.program_id, show_role_id: showRole.id, request_type: request.request_type, status: request.status }
+  let request = await ensurePersonBioSubmissionRequest({
+    showId: show.id,
+    personId: playbillPerson.id,
+    preferredShowRoleId: showRole.id
+  });
+  request = await markBioSubmissionRequestSourceById(request.id, "production_management");
+  await linkPersonAssignmentsToBioRequest(supabase, {
+    projectId,
+    personId: String(person.id),
+    show,
+    request
   });
   const { error: updateError } = await supabase
     .from("role_assignments")
@@ -367,7 +405,7 @@ export async function vacateAssignmentInPlaybill(projectId: string, assignmentId
   if (!show) return;
   const { data: assignment, error: assignmentError } = await supabase
     .from("role_assignments")
-    .select("role_id")
+    .select("role_id, person_id")
     .eq("project_id", projectId)
     .eq("id", assignmentId)
     .maybeSingle();
@@ -385,6 +423,22 @@ export async function vacateAssignmentInPlaybill(projectId: string, assignmentId
   if (!link?.external_id) return;
   const showRole = await fetchPlaybillShowRoleById(String(link.external_id));
   if (showRole) {
+    const replacementRole = showRole.person_id
+      ? (await fetchPlaybillShowRoles(show.id)).find((role) =>
+          role.id !== showRole.id && role.person_id === showRole.person_id
+        ) ?? null
+      : null;
+    if (replacementRole) {
+      const movedRequest = await movePersonBioRequestToRole(showRole.id, replacementRole.id);
+      if (movedRequest && assignment?.person_id) {
+        await linkPersonAssignmentsToBioRequest(supabase, {
+          projectId,
+          personId: String(assignment.person_id),
+          show,
+          request: movedRequest
+        });
+      }
+    }
     await deletePlaybillSubmissionRequestsForRole(showRole.id);
     await updatePlaybillShowRole(showRole.id, {
       showId: show.id,

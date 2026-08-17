@@ -461,6 +461,118 @@ export async function ensureBioSubmissionRequest(showRoleId: string) {
   return data as PlaybillSubmissionRequest;
 }
 
+function bioRequestStatusPriority(status: string) {
+  if (status === "locked") return 6;
+  if (status === "approved") return 5;
+  if (status === "submitted") return 4;
+  if (status === "returned") return 3;
+  if (status === "draft") return 2;
+  return 1;
+}
+
+async function mergeBioRequestInto(canonical: PlaybillSubmissionRequest, duplicate: PlaybillSubmissionRequest) {
+  const supabase = createPlaybillIntegrationClient();
+  const db = supabase.schema("app_playbill");
+  const { error: submissionsError } = await db
+    .from("submissions")
+    .update({ request_id: canonical.id })
+    .eq("request_id", duplicate.id);
+  if (submissionsError) throw new Error(submissionsError.message);
+  const { error: deleteError } = await db.from("submission_requests").delete().eq("id", duplicate.id);
+  if (deleteError) throw new Error(deleteError.message);
+}
+
+export async function ensurePersonBioSubmissionRequest(input: {
+  showId: string;
+  personId: string;
+  preferredShowRoleId: string;
+}) {
+  const supabase = createPlaybillIntegrationClient();
+  const db = supabase.schema("app_playbill");
+  const { data: roleRows, error: rolesError } = await db
+    .from("show_roles")
+    .select("id")
+    .eq("show_id", input.showId)
+    .eq("person_id", input.personId);
+  if (rolesError) throw new Error(rolesError.message);
+  const roleIds = (roleRows ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
+  if (!roleIds.includes(input.preferredShowRoleId)) roleIds.push(input.preferredShowRoleId);
+
+  const { data: requestRows, error: requestsError } = await db
+    .from("submission_requests")
+    .select("id, show_role_id, request_type, status")
+    .in("show_role_id", roleIds)
+    .eq("request_type", "bio");
+  if (requestsError) throw new Error(requestsError.message);
+  const requests = (requestRows ?? []) as PlaybillSubmissionRequest[];
+  if (requests.length === 0) return ensureBioSubmissionRequest(input.preferredShowRoleId);
+
+  const canonical = [...requests].sort((left, right) =>
+    bioRequestStatusPriority(right.status) - bioRequestStatusPriority(left.status)
+      || left.id.localeCompare(right.id)
+  )[0];
+  for (const duplicate of requests) {
+    if (duplicate.id !== canonical.id) await mergeBioRequestInto(canonical, duplicate);
+  }
+  return canonical;
+}
+
+export async function movePersonBioRequestToRole(fromShowRoleId: string, toShowRoleId: string) {
+  const supabase = createPlaybillIntegrationClient();
+  const db = supabase.schema("app_playbill");
+  const { data: requestRows, error } = await db
+    .from("submission_requests")
+    .select("id, show_role_id, request_type, status")
+    .in("show_role_id", [fromShowRoleId, toShowRoleId])
+    .eq("request_type", "bio");
+  if (error) throw new Error(error.message);
+  const requests = (requestRows ?? []) as PlaybillSubmissionRequest[];
+  if (requests.length === 0) return null;
+
+  let canonical = [...requests].sort((left, right) =>
+    Number(right.show_role_id === toShowRoleId) - Number(left.show_role_id === toShowRoleId)
+      || bioRequestStatusPriority(right.status) - bioRequestStatusPriority(left.status)
+      || left.id.localeCompare(right.id)
+  )[0];
+  if (canonical.show_role_id !== toShowRoleId) {
+    const { data: moved, error: moveError } = await db
+      .from("submission_requests")
+      .update({ show_role_id: toShowRoleId })
+      .eq("id", canonical.id)
+      .select("id, show_role_id, request_type, status")
+      .single();
+    if (moveError) throw new Error(moveError.message);
+    canonical = moved as PlaybillSubmissionRequest;
+  }
+  for (const duplicate of requests) {
+    if (duplicate.id !== canonical.id) await mergeBioRequestInto(canonical, duplicate);
+  }
+  return canonical;
+}
+
+export async function markBioSubmissionRequestSourceById(requestId: string, source: "playbill" | "production_management") {
+  const supabase = createPlaybillIntegrationClient();
+  const { data, error } = await supabase
+    .schema("app_playbill")
+    .from("submission_requests")
+    .update({ submission_source: source })
+    .eq("id", requestId)
+    .select("id, show_role_id, request_type, status")
+    .single();
+  if (error) {
+    if (!isMissingColumnError(error, ["submission_source"])) throw new Error(error.message);
+    const { data: legacy, error: legacyError } = await supabase
+      .schema("app_playbill")
+      .from("submission_requests")
+      .select("id, show_role_id, request_type, status")
+      .eq("id", requestId)
+      .single();
+    if (legacyError) throw new Error(legacyError.message);
+    return legacy as PlaybillSubmissionRequest;
+  }
+  return data as PlaybillSubmissionRequest;
+}
+
 export async function markBioSubmissionRequestSource(showRoleId: string, source: "playbill" | "production_management") {
   const supabase = createPlaybillIntegrationClient();
   const { data, error } = await supabase
