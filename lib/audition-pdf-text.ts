@@ -11,6 +11,7 @@ const replacements: Record<string, string> = {
   "\u2606": "*",
   "\u266f": "#",
   "\u266d": "b",
+  "\u00b7": "|",
   "\u00a0": " ",
 };
 
