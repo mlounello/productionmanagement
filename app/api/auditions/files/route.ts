@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { normalizeAuditionHeadshot } from "@/lib/audition-headshot";
 import { auditionUploadSizeLabel, auditionUploadTooLarge } from "@/lib/audition-upload";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -27,13 +28,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `${file.name} exceeds the ${auditionUploadSizeLabel()} upload limit.` }, { status: 413 });
     }
 
-    const bytes = Buffer.from(await file.arrayBuffer());
+    const isHeadshot = targetFieldKey.data === "headshot";
+    if (isHeadshot && !file.type.toLowerCase().startsWith("image/")) {
+      return NextResponse.json({ error: "Choose an image file for the headshot." }, { status: 400 });
+    }
+    const sourceBytes = Buffer.from(await file.arrayBuffer());
+    const bytes = isHeadshot ? await normalizeAuditionHeadshot(sourceBytes) : sourceBytes;
+    const uploadName = isHeadshot ? `${file.name.replace(/\.[^.]+$/, "") || "headshot"}.jpg` : file.name;
+    const uploadType = isHeadshot ? "image/jpeg" : file.type || "application/octet-stream";
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.rpc("upload_public_audition_file", {
       access_token: accessToken.data,
       target_field_key: targetFieldKey.data,
-      upload_name: file.name,
-      upload_type: file.type || "application/octet-stream",
+      upload_name: uploadName,
+      upload_type: uploadType,
       upload_data: `\\x${bytes.toString("hex")}`
     });
 
