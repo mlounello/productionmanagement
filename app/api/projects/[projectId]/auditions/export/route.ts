@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     supabase.from("audition_form_fields").select("form_id, field_key, label, sensitivity, export_group, sort_order").order("sort_order"),
     supabase.from("project_roles").select("id, name").eq("project_id", projectId).order("name")
   ]);
-  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), audition_slots(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data)").eq("project_id", projectId).is("cancelled_at", null);
+  let submissionQuery = supabase.from("audition_submissions").select("id, form_id, answers, private_notes, audition_status, callback_status, casting_status, submitted_at, people(full_name, preferred_name, email, pronouns), primary_audition_slot:audition_slots!audition_submissions_slot_id_fkey(starts_at), audition_reviews(notes, recommendation), audition_files(field_key, file_name, content_type, file_data)").eq("project_id", projectId).is("cancelled_at", null);
   if (!allApplicants) submissionQuery = submissionQuery.in("id", selectedIds);
   const { data: submissions, error } = await submissionQuery; if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   const formMap = new Map((forms ?? []).map((form) => [String(form.id), String(form.title)]));
@@ -57,13 +57,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   rows.sort((a,b) => {
     const pa = a.people as Record<string,unknown>|null; const pb = b.people as Record<string,unknown>|null;
     if (url.searchParams.get("sort") === "name") return clean(pa?.preferred_name||pa?.full_name).localeCompare(clean(pb?.preferred_name||pb?.full_name));
-    const sa = a.audition_slots as Record<string,unknown>|null; const sb = b.audition_slots as Record<string,unknown>|null; return clean(sa?.starts_at).localeCompare(clean(sb?.starts_at));
+    const sa = a.primary_audition_slot as Record<string,unknown>|null; const sb = b.primary_audition_slot as Record<string,unknown>|null; return clean(sa?.starts_at).localeCompare(clean(sb?.starts_at));
   });
   const pdf = await PDFDocument.create(); const bodyFont = await pdf.embedFont(StandardFonts.Helvetica); const titleFont = await pdf.embedFont(StandardFonts.HelveticaBold);
   const sensitiveIncluded = (fields ?? []).some((field) => field.sensitivity === "sensitive" && included.includes(String(field.export_group)));
   if (exportType === "roster") {
     let page = pdf.addPage([PAGE.width,PAGE.height]); let y = header(page,titleFont,bodyFont,String(project?.title??"Production"),"Audition Roster",false);
-    rows.forEach((row,index)=>{if(y<55){page=pdf.addPage([PAGE.width,PAGE.height]);y=header(page,titleFont,bodyFont,String(project?.title??"Production"),"Audition Roster (continued)",false);}const person=row.people as Record<string,unknown>|null;const slot=row.audition_slots as Record<string,unknown>|null;page.drawText(`${index+1}. ${clean(person?.preferred_name||person?.full_name)}`,{x:PAGE.margin,y,font:titleFont,size:10});page.drawText(`${slot?.starts_at?new Date(String(slot.starts_at)).toLocaleString():"Unscheduled"}  |  ${clean(row.audition_status)}`,{x:260,y,font:bodyFont,size:9});y-=22;page.drawLine({start:{x:PAGE.margin,y:y+8},end:{x:570,y:y+8},thickness:.5,color:rgb(.85,.88,.86)});});
+    rows.forEach((row,index)=>{if(y<55){page=pdf.addPage([PAGE.width,PAGE.height]);y=header(page,titleFont,bodyFont,String(project?.title??"Production"),"Audition Roster (continued)",false);}const person=row.people as Record<string,unknown>|null;const slot=row.primary_audition_slot as Record<string,unknown>|null;page.drawText(`${index+1}. ${clean(person?.preferred_name||person?.full_name)}`,{x:PAGE.margin,y,font:titleFont,size:10});page.drawText(`${slot?.starts_at?new Date(String(slot.starts_at)).toLocaleString():"Unscheduled"}  |  ${clean(row.audition_status)}`,{x:260,y,font:bodyFont,size:9});y-=22;page.drawLine({start:{x:PAGE.margin,y:y+8},end:{x:570,y:y+8},thickness:.5,color:rgb(.85,.88,.86)});});
   } else {
     for (const [index,row] of rows.entries()) {
       const person = row.people as Record<string,unknown>|null; const name = clean(person?.preferred_name||person?.full_name||"Applicant"); const answers=(row.answers??{}) as Record<string,unknown>;
