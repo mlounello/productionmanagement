@@ -1,6 +1,7 @@
 import { ENABLE_GOOGLE_CALENDAR_SYNC } from "@/lib/config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { deleteGoogleCalendarEvent, upsertGoogleCalendarEvent } from "@/lib/google-calendar-apps-script";
+import { auditionCalendarAggregateStatus } from "@/lib/audition-calendar-status";
+import { deleteGoogleCalendarEvent, getGoogleCalendarBridgeCapabilities, upsertGoogleCalendarEvent } from "@/lib/google-calendar-apps-script";
 
 type SlotRow={id:string;starts_at:string;ends_at:string|null;google_calendar_event_id:string|null;audition_sessions:{title:string;location:string;project_id:string}|null};
 const uniqueEmails=(values:string[])=>Array.from(new Set(values.map((value)=>value.trim().toLowerCase()).filter((value)=>value.includes("@"))));
@@ -13,6 +14,8 @@ export async function syncAuditionCalendarSlots(projectId:string,slotIds:string[
   const {data:settings,error:settingsError}=await admin.from("project_google_calendar_settings").select("enabled,calendar_id,invite_directorial_team,additional_guest_emails").eq("project_id",projectId).maybeSingle();
   if(settingsError)throw settingsError;
   if(!settings?.enabled)return {status:"skipped" as const,warnings:[] as string[]};
+  const capabilities=await getGoogleCalendarBridgeCapabilities();
+  await admin.from("project_google_calendar_settings").update({bridge_version:capabilities.bridgeVersion}).eq("project_id",projectId);
   const [projectResult,slotsResult,directorialResult]=await Promise.all([
     admin.from("projects").select("title").eq("id",projectId).maybeSingle(),
     admin.from("audition_slots").select("id,starts_at,ends_at,google_calendar_event_id,audition_sessions!inner(title,location,project_id)").in("id",uniqueSlotIds).eq("audition_sessions.project_id",projectId),
@@ -25,6 +28,8 @@ export async function syncAuditionCalendarSlots(projectId:string,slotIds:string[
   const staffEmails=(directorial??[]).map((row)=>String((row.people as unknown as {email?:string}|null)?.email??""));
   const warnings:string[]=[];
   const submissionResults=new Map<string,{failed:string[];synced:boolean}>();
+  let successfulSlots=0;
+  let failedSlots=0;
   for(const slot of (slots??[]) as unknown as SlotRow[]){
     let submissionIds:string[]=[];
     try{
@@ -40,18 +45,19 @@ export async function syncAuditionCalendarSlots(projectId:string,slotIds:string[
       }
       const session=slot.audition_sessions;
       const fallbackEnd=new Date(new Date(slot.starts_at).getTime()+5*60_000).toISOString();
-      const result=await upsertGoogleCalendarEvent({calendarId:settings.calendar_id,eventId:slot.google_calendar_event_id,title:`${project?.title??"Production"} – ${session?.title??"Audition"}`,description:"Audition appointment managed by Production Management. Please contact the production team if you need assistance.",location:session?.location??"",startsAt:slot.starts_at,endsAt:slot.ends_at??fallbackEnd,guestEmails});
+      const result=await upsertGoogleCalendarEvent({calendarId:settings.calendar_id,eventId:slot.google_calendar_event_id,externalKey:`audition-slot:${slot.id}`,title:`${project?.title??"Production"} – ${session?.title??"Audition"}`,description:"Audition appointment managed by Production Management. Please contact the production team if you need assistance.",location:session?.location??"",startsAt:slot.starts_at,endsAt:slot.ends_at??fallbackEnd,guestEmails,retrySafe:capabilities.idempotentUpsert});
       await admin.from("audition_slots").update({google_calendar_event_id:String(result.eventId??slot.google_calendar_event_id??""),google_calendar_sync_status:"synced",google_calendar_sync_error:"",google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);
+      successfulSlots+=1;
       submissionIds.forEach((id)=>submissionResults.set(id,{failed:submissionResults.get(id)?.failed??[],synced:true}));
-    }catch(error){const message=error instanceof Error?error.message:"Calendar sync failed.";warnings.push(message);submissionIds.forEach((id)=>{const current=submissionResults.get(id)??{failed:[],synced:false};submissionResults.set(id,{...current,failed:[...current.failed,message]});});await admin.from("audition_slots").update({google_calendar_sync_status:"failed",google_calendar_sync_error:message,google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);}
+    }catch(error){failedSlots+=1;const message=error instanceof Error?error.message:"Calendar sync failed.";warnings.push(message);submissionIds.forEach((id)=>{const current=submissionResults.get(id)??{failed:[],synced:false};submissionResults.set(id,{...current,failed:[...current.failed,message]});});await admin.from("audition_slots").update({google_calendar_sync_status:"failed",google_calendar_sync_error:message,google_calendar_synced_at:new Date().toISOString()}).eq("id",slot.id);}
   }
   const syncedAt=new Date().toISOString();
   for(const [submissionId,result] of submissionResults){
     const errors=Array.from(new Set(result.failed));
-    await admin.from("audition_submissions").update({google_calendar_sync_status:errors.length?"failed":"synced",google_calendar_sync_error:errors.join(" "),google_calendar_synced_at:syncedAt}).eq("id",submissionId);
+    await admin.from("audition_submissions").update({google_calendar_sync_status:errors.length?(result.synced?"partial":"failed"):"synced",google_calendar_sync_error:errors.join(" "),google_calendar_synced_at:syncedAt}).eq("id",submissionId);
   }
   const uniqueWarnings=Array.from(new Set(warnings));
-  return {status:uniqueWarnings.length?"failed" as const:"synced" as const,warnings:uniqueWarnings};
+  return {status:auditionCalendarAggregateStatus(successfulSlots,failedSlots),warnings:uniqueWarnings,bridgeVersion:capabilities.bridgeVersion};
 }
 
 export async function syncAuditionSubmissionCalendar(submissionId:string){

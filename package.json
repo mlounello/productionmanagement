@@ -22,6 +22,7 @@
     "test:ui-status": "node --experimental-strip-types --test scripts/status-display.test.ts",
     "test:communications": "node --experimental-strip-types --test scripts/communications.test.ts",
     "test:callback-booking": "node --test scripts/callback-booking-boundary.test.mjs",
+    "test:audition-calendar": "node --experimental-strip-types --test scripts/audition-calendar-status.test.ts",
     "test:rich-text": "node --experimental-strip-types --test scripts/rich-text.test.ts",
     "test:email-rate-limit": "node --experimental-strip-types --test scripts/resend-rate-limit.test.ts",
     "test:email-branding": "node --experimental-strip-types --test scripts/email-branding.test.ts",

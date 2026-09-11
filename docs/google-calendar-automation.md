@@ -74,6 +74,8 @@ Only the script owner completes this authorization. Applicants never see this st
 
 Updating the existing deployment normally keeps the same URL, so the app's environment settings should not need to change.
 
+The current bridge reports itself as **version 2**. Version 2 places a hidden Production Management key in every event so a retry finds and updates the same event instead of creating a duplicate. After publishing the new version, return to Production Management and click **Test calendar connection**. The success message must say that safe retries and individual resync are enabled before using either resync action.
+
 ## Step 4: Confirm the app environment settings
 
 If Calendar and Google Groups use the same Apps Script deployment, Production Management automatically reuses:
@@ -105,7 +107,7 @@ After changing a Vercel environment variable, redeploy Production Management so 
 7. Add any extra staff email addresses, one per line.
 8. Click **Save calendar settings**.
 9. Click **Test calendar connection**.
-10. Confirm the page reports a successful connection.
+10. Confirm the page reports a successful connection and says safe retries and individual resync are enabled.
 11. Turn on **Create and maintain Google Calendar invitations for audition bookings** and save again if it is not already on.
 
 Use **Sync all current bookings** once if applicants booked before the Calendar integration was enabled.
@@ -120,6 +122,8 @@ Use **Sync all current bookings** once if applicants booked before the Calendar 
 6. The applicant may accept the invitation using whatever calendar/email service they use. A Gmail address is not required.
 
 If Google Calendar has a temporary problem, the application is still saved. The applicant sees a warning, and staff see **Calendar failed** beside that applicant in the Auditions workspace. After correcting the connection, use **Sync all current bookings** to retry.
+
+If one booking succeeds and another fails, the applicant is marked **Calendar partially synced**. Open the applicant to see the separate status for each acting appointment, dance call, or other required booking. Once bridge version 2 is confirmed, use **Resync this applicant** to retry only that person's calendar invitations.
 
 ## Rescheduling and cancellation
 

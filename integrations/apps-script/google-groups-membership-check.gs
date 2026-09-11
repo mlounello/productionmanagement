@@ -15,27 +15,50 @@ function doPost(event) {
 
     if (payload.action === 'test_calendar') {
       const calendar = calendarForId_(payload.calendarId);
-      return json_({ ok: true, calendarId: calendar.getId(), calendarName: calendar.getName() });
+      return json_({ ok: true, calendarId: calendar.getId(), calendarName: calendar.getName(), bridgeVersion: 2, idempotentUpsert: true });
+    }
+
+    if (payload.action === 'calendar_capabilities') {
+      return json_({ ok: true, bridgeVersion: 2, idempotentUpsert: true });
     }
 
     if (payload.action === 'upsert_calendar_event') {
       const calendar = calendarForId_(payload.calendarId);
       const guests = normalizeEmails_(payload.guestEmails);
+      const startsAt = new Date(payload.startsAt);
+      const endsAt = new Date(payload.endsAt);
+      const externalKey = String(payload.externalKey || '').trim();
+      const marker = externalKey ? '[PM_CALENDAR_KEY:' + externalKey + ']' : '';
+      const description = String(payload.description || '') + (marker ? '\n\n' + marker : '');
       let calendarEvent = payload.eventId ? calendar.getEventById(String(payload.eventId)) : null;
       if (!calendarEvent) {
-        calendarEvent = calendar.createEvent(String(payload.title || 'Audition'), new Date(payload.startsAt), new Date(payload.endsAt), {
-          description: String(payload.description || ''), location: String(payload.location || '')
+        const searchStart = new Date(startsAt.getTime() - 24 * 60 * 60 * 1000);
+        const searchEnd = new Date(endsAt.getTime() + 24 * 60 * 60 * 1000);
+        const candidates = calendar.getEvents(searchStart, searchEnd);
+        const markerMatches = marker ? candidates.filter(function(candidate) {
+          return String(candidate.getDescription() || '').indexOf(marker) >= 0;
+        }) : [];
+        const legacyMatches = candidates.filter(function(candidate) {
+          return candidate.getTitle() === String(payload.title || 'Audition') &&
+            candidate.getStartTime().getTime() === startsAt.getTime() &&
+            candidate.getEndTime().getTime() === endsAt.getTime();
+        });
+        calendarEvent = markerMatches[0] || legacyMatches[0] || null;
+      }
+      if (!calendarEvent) {
+        calendarEvent = calendar.createEvent(String(payload.title || 'Audition'), startsAt, endsAt, {
+          description: description, location: String(payload.location || '')
         });
         calendarEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
         guests.forEach(function(email) { calendarEvent.addGuest(email); });
       } else {
-        calendarEvent.setTitle(String(payload.title || 'Audition')).setDescription(String(payload.description || '')).setLocation(String(payload.location || '')).setTime(new Date(payload.startsAt), new Date(payload.endsAt));
+        calendarEvent.setTitle(String(payload.title || 'Audition')).setDescription(description).setLocation(String(payload.location || '')).setTime(startsAt, endsAt);
         calendarEvent.setGuestsCanInviteOthers(false).setGuestsCanModify(false).setGuestsCanSeeGuests(false);
         const current = calendarEvent.getGuestList().map(function(guest) { return normalizeEmail_(guest.getEmail()); });
         current.filter(function(email) { return guests.indexOf(email) < 0; }).forEach(function(email) { calendarEvent.removeGuest(email); });
         guests.filter(function(email) { return current.indexOf(email) < 0; }).forEach(function(email) { calendarEvent.addGuest(email); });
       }
-      return json_({ ok: true, eventId: calendarEvent.getId() });
+      return json_({ ok: true, eventId: calendarEvent.getId(), bridgeVersion: 2 });
     }
 
     if (payload.action === 'delete_calendar_event') {

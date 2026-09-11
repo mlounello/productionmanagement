@@ -11,7 +11,7 @@ import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { sendAuditionAccessInvite } from "@/lib/audition-access-invites";
 import { testGoogleCalendarAccess } from "@/lib/google-calendar-apps-script";
-import { syncAuditionCalendarSlots } from "@/lib/audition-calendar-sync";
+import { syncAuditionCalendarSlots, syncAuditionSubmissionCalendar } from "@/lib/audition-calendar-sync";
 
 const uuid = z.string().uuid();
 const fieldSchema = z.object({
@@ -108,16 +108,31 @@ export async function saveAuditionCalendarSettingsAction(formData:FormData){
 export async function testAuditionCalendarAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:settings}=await supabase.from("project_google_calendar_settings").select("calendar_id").eq("project_id",projectId).maybeSingle();if(!settings)redirect(calendarPath(projectId,"Save the calendar settings before testing the connection.",true));
   let calendarName=settings.calendar_id;
-  try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:""}).eq("project_id",projectId);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
-  redirect(calendarPath(projectId,`Connected to ${calendarName}.`));
+  let bridgeVersion=1;
+  try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);bridgeVersion=Number(result.bridgeVersion??1);const bridgeWarning=bridgeVersion<2?"The calendar is connected, but the Apps Script bridge must be republished with the current repository code before safe retries and individual resync are enabled.":"";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:bridgeWarning,bridge_version:bridgeVersion}).eq("project_id",projectId);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message,bridge_version:1}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+  redirect(calendarPath(projectId,bridgeVersion>=2?`Connected to ${calendarName}. Safe calendar retries and individual resync are enabled.`:`Connected to ${calendarName}, but the Apps Script bridge needs to be republished.`));
 }
 
 export async function syncExistingAuditionCalendarAction(formData:FormData){
-  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:slots}=await supabase.from("audition_slots").select("id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId);
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const [{data:slots},{data:settings}]=await Promise.all([supabase.from("audition_slots").select("id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId),supabase.from("project_google_calendar_settings").select("bridge_version").eq("project_id",projectId).maybeSingle()]);
+  if(Number(settings?.bridge_version??1)<2)redirect(calendarPath(projectId,"Republish and test the current Apps Script bridge before resynchronizing. This prevents duplicate Google events when Google returns an incomplete response.",true));
   let result:Awaited<ReturnType<typeof syncAuditionCalendarSlots>>;
   try{result=await syncAuditionCalendarSlots(projectId,(slots??[]).map((slot)=>String(slot.id)));}catch(error){redirect(calendarPath(projectId,error instanceof Error?error.message:"Calendar sync failed.",true));}
   if(result.status==="skipped")redirect(calendarPath(projectId,"Turn on calendar invitations and save the project settings before synchronizing.",true));
   redirect(calendarPath(projectId,result.warnings.length?`Calendar sync finished with warnings: ${result.warnings.join(" ")}`:"All current audition bookings were synchronized."));
+}
+
+export async function syncAuditionApplicantCalendarAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const submissionId=uuid.parse(formData.get("submissionId"));const {supabase}=await context(projectId);
+  const [{data:submission},{data:settings}]=await Promise.all([supabase.from("audition_submissions").select("id").eq("id",submissionId).eq("project_id",projectId).is("cancelled_at",null).maybeSingle(),supabase.from("project_google_calendar_settings").select("enabled,bridge_version").eq("project_id",projectId).maybeSingle()]);
+  if(!submission)redirect(`${path(projectId,"The active audition submission was not found.",true)}#review`);
+  if(!settings?.enabled)redirect(`${path(projectId,"Turn on calendar invitations before resynchronizing this applicant.",true)}#review`);
+  if(Number(settings.bridge_version??1)<2)redirect(`${path(projectId,"Republish and test the current Apps Script bridge before resynchronizing. This prevents duplicate Google events.",true)}#review`);
+  let result:Awaited<ReturnType<typeof syncAuditionSubmissionCalendar>>;
+  try{result=await syncAuditionSubmissionCalendar(submissionId);}catch(error){redirect(`${path(projectId,error instanceof Error?error.message:"Calendar sync failed.",true)}#review`);}
+  if(result.status==="skipped")redirect(`${path(projectId,"Calendar synchronization is not enabled for this project.",true)}#review`);
+  const message=result.status==="synced"?"This applicant's calendar invitations are fully synchronized.":result.status==="partial"?`Some invitations synchronized, but another still needs attention: ${result.warnings.join(" ")}`:`Calendar synchronization failed: ${result.warnings.join(" ")}`;
+  redirect(`${path(projectId,message,result.status!=="synced")}#review`);
 }
 
 export async function createAuditionFormAction(formData: FormData) {
