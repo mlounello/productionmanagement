@@ -46,7 +46,12 @@ export async function submitAuditionAction(formData: FormData): Promise<Audition
   const verified = await getVerifiedProfile(String(formData.get("profileSession") ?? ""), "audition", String(form.id));
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("submit_public_audition_v2", { form_token: token, answer_payload: answers, booking_payload:bookings });
-  if (error || !data) return {ok:false,error:error?.message ?? "Could not submit audition form."};
+  if (error || !data) {
+    if (error?.code === "23505" && error.message.includes("active audition submission already exists")) {
+      return { ok: false, error: "An audition form has already been submitted with this email address. Contact production staff if you need to correct or replace it." };
+    }
+    return {ok:false,error:error?.message ?? "Could not submit audition form."};
+  }
   const result = data as { submission_id: string; access_token: string };
   const { data: submission } = await admin.from("audition_submissions").select("person_id").eq("id", result.submission_id).maybeSingle();
   let personId = String(submission?.person_id ?? "");

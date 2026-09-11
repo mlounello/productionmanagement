@@ -28,7 +28,7 @@
     "test:publicity-reminders": "node --experimental-strip-types --test scripts/publicity-reminder-policy.test.ts scripts/publicity-reminder-email.test.ts",
     "test:person-deletion": "node --test scripts/person-deletion-boundary.test.mjs",
     "test:auth-routing": "node --experimental-strip-types --test scripts/auth-callback-routing.test.ts",
-    "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts",
+    "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts scripts/audition-duplicate-submission.test.mjs",
     "test:audition-upload": "node --experimental-strip-types --test scripts/audition-upload.test.ts",
     "test:audition-export": "node --experimental-strip-types --test scripts/audition-export-boundary.test.mjs scripts/audition-headshot.test.ts scripts/audition-pdf-text.test.ts",
     "test:credential-config": "node --experimental-strip-types --test scripts/credential-config.test.ts",
