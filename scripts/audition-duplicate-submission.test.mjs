@@ -7,6 +7,7 @@ const migration = fs.readFileSync(
   "utf8",
 );
 const action = fs.readFileSync(new URL("../app/auditions/[token]/actions.ts", import.meta.url), "utf8");
+const adminPage = fs.readFileSync(new URL("../app/projects/[projectId]/auditions/page.tsx", import.meta.url), "utf8");
 
 test("serializes duplicate checks and rejects the same active form/email pair", () => {
   assert.match(migration, /pg_advisory_xact_lock/);
@@ -19,4 +20,12 @@ test("serializes duplicate checks and rejects the same active form/email pair", 
 test("returns a clear public message instead of exposing a database error", () => {
   assert.match(action, /error\?\.code === "23505"/);
   assert.match(action, /An audition form has already been submitted with this email address/);
+});
+
+test("keeps cancelled attempts out of active applicant counts and packet choices", () => {
+  assert.match(adminPage, /const activeSubmissionRows = submissionRows\.filter/);
+  assert.match(adminPage, /const cancelledSubmissionRows = submissionRows\.filter/);
+  assert.match(adminPage, /activeSubmissionRows\.length/);
+  assert.match(adminPage, /activeSubmissionRows\.map\(\(submission\).*key={`export-/s);
+  assert.match(adminPage, /Cancelled submission history/);
 });
