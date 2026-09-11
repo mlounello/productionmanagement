@@ -30,7 +30,7 @@
     "test:auth-routing": "node --experimental-strip-types --test scripts/auth-callback-routing.test.ts",
     "test:audition-dependencies": "node --experimental-strip-types --test scripts/audition-slot-dependencies.test.ts",
     "test:audition-upload": "node --experimental-strip-types --test scripts/audition-upload.test.ts",
-    "test:audition-export": "node --test scripts/audition-export-boundary.test.mjs",
+    "test:audition-export": "node --experimental-strip-types --test scripts/audition-export-boundary.test.mjs scripts/audition-pdf-text.test.ts",
     "test:credential-config": "node --experimental-strip-types --test scripts/credential-config.test.ts",
     "test:theatre-budget-access-email": "node --test scripts/theatre-budget-access-email.test.mjs",
     "test:theatre-budget-contract-query": "node --test scripts/theatre-budget-contract-query.test.mjs",

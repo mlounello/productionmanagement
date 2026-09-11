@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { auditionPdfText } from "@/lib/audition-pdf-text";
 import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
 export const dynamic = "force-dynamic";
 
 const PAGE = { width: 612, height: 792, margin: 42 };
-function clean(value: unknown) { return Array.isArray(value) ? value.join(", ") : String(value ?? "").trim(); }
+function clean(value: unknown) { return auditionPdfText(Array.isArray(value) ? value.join(", ") : value).trim(); }
 function wrap(text: string, font: PDFFont, size: number, width: number) {
   const lines: string[] = [];
-  for (const paragraph of text.replace(/\r/g, "").split("\n")) {
+  for (const paragraph of auditionPdfText(text).replace(/\r/g, "").split("\n")) {
     const words = paragraph.split(/\s+/).filter(Boolean); let line = "";
     for (const word of words) { const candidate = line ? `${line} ${word}` : word; if (font.widthOfTextAtSize(candidate, size) <= width) line = candidate; else { if (line) lines.push(line); line = word; } }
     lines.push(line || " ");
@@ -18,8 +19,8 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
 
 function header(page: PDFPage, titleFont: PDFFont, bodyFont: PDFFont, project: string, title: string, confidential: boolean) {
   page.drawText("SIENA THEATRE", { x: PAGE.margin, y: 755, font: titleFont, size: 10, color: rgb(0, .4, .28) });
-  page.drawText(project, { x: PAGE.margin, y: 735, font: titleFont, size: 17 });
-  page.drawText(title, { x: PAGE.margin, y: 714, font: bodyFont, size: 11, color: rgb(.32, .38, .35) });
+  page.drawText(auditionPdfText(project), { x: PAGE.margin, y: 735, font: titleFont, size: 17 });
+  page.drawText(auditionPdfText(title), { x: PAGE.margin, y: 714, font: bodyFont, size: 11, color: rgb(.32, .38, .35) });
   page.drawLine({ start: { x: PAGE.margin, y: 701 }, end: { x: 570, y: 701 }, thickness: 1, color: rgb(.82, .87, .84) });
   if (confidential) page.drawText("CONFIDENTIAL - AUTHORIZED AUDITION STAFF ONLY", { x: PAGE.margin, y: 22, font: titleFont, size: 8, color: rgb(.65, .12, .1) });
   return 682;
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const formFields=(fields??[]).filter((field)=>String(field.form_id)===String(row.form_id)&&included.includes(String(field.export_group)));
       for(const field of formFields){const raw=answers[String(field.field_key)];const value=String(field.field_key)==="role_interests"?(Array.isArray(raw)?raw:[raw]).filter(Boolean).map((id)=>roleNameById.get(String(id))??String(id)).join(", "):clean(raw);if(hideBlank&&!value)continue;let result=drawAnswer(page,titleFont,bodyFont,y,String(field.label),value);if(result.overflow){page=pdf.addPage([PAGE.width,PAGE.height]);y=header(page,titleFont,bodyFont,String(project?.title??"Production"),`${name} · continued`,sensitiveIncluded);result=drawAnswer(page,titleFont,bodyFont,y,String(field.label),value);}y=result.y;if(compact)y+=5;}
       if(included.includes("reviewer_notes")){const independent=(row.audition_reviews as Array<Record<string,unknown>>|null)??[];const reviewText=[clean(row.private_notes),...independent.map((review)=>`${clean(review.recommendation)}${review.notes?`\n${clean(review.notes)}`:""}`)].filter(Boolean).join("\n\n");const result=drawAnswer(page,titleFont,bodyFont,y,"Reviewer Notes",reviewText);y=result.y;}
-      if(notesPage){const notes=pdf.addPage([PAGE.width,PAGE.height]);let ny=header(notes,titleFont,bodyFont,String(project?.title??"Production"),`Director Notes · ${name}`,false);notes.drawText("ROLE CONSIDERATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=18;(roles??[]).slice(0,24).forEach((role,roleIndex)=>{const col=roleIndex%2;const rowIndex=Math.floor(roleIndex/2);const x=PAGE.margin+col*260;const yy=ny-rowIndex*18;notes.drawRectangle({x,y:yy-2,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(String(role.name),{x:x+15,y:yy-1,font:bodyFont,size:9});});ny-=Math.ceil(Math.min((roles??[]).length,24)/2)*18+12;notes.drawText("RECOMMENDATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=20;["Callback","Considering","Cast","Not cast","Needs discussion"].forEach((label,i)=>{notes.drawRectangle({x:PAGE.margin+i*100,y:ny,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(label,{x:PAGE.margin+i*100+14,y:ny+1,font:bodyFont,size:8});});ny-=30;notes.drawText("NOTES",{x:PAGE.margin,y:ny,font:titleFont,size:10});for(let line=0;line<22;line++){ny-=24;notes.drawLine({start:{x:PAGE.margin,y:ny},end:{x:570,y:ny},thickness:.5,color:rgb(.72,.76,.73)});}}
+      if(notesPage){const notes=pdf.addPage([PAGE.width,PAGE.height]);let ny=header(notes,titleFont,bodyFont,String(project?.title??"Production"),`Director Notes · ${name}`,false);notes.drawText("ROLE CONSIDERATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=18;(roles??[]).slice(0,24).forEach((role,roleIndex)=>{const col=roleIndex%2;const rowIndex=Math.floor(roleIndex/2);const x=PAGE.margin+col*260;const yy=ny-rowIndex*18;notes.drawRectangle({x,y:yy-2,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(auditionPdfText(role.name),{x:x+15,y:yy-1,font:bodyFont,size:9});});ny-=Math.ceil(Math.min((roles??[]).length,24)/2)*18+12;notes.drawText("RECOMMENDATION",{x:PAGE.margin,y:ny,font:titleFont,size:10});ny-=20;["Callback","Considering","Cast","Not cast","Needs discussion"].forEach((label,i)=>{notes.drawRectangle({x:PAGE.margin+i*100,y:ny,width:9,height:9,borderWidth:1,borderColor:rgb(.3,.35,.32)});notes.drawText(label,{x:PAGE.margin+i*100+14,y:ny+1,font:bodyFont,size:8});});ny-=30;notes.drawText("NOTES",{x:PAGE.margin,y:ny,font:titleFont,size:10});for(let line=0;line<22;line++){ny-=24;notes.drawLine({start:{x:PAGE.margin,y:ny},end:{x:570,y:ny},thickness:.5,color:rgb(.72,.76,.73)});}}
     }
   }
   await supabase.from("audition_export_audit").insert({ project_id: projectId, generated_by: user.id, export_type: exportType, submission_ids: rows.map((row)=>String(row.id)), included_fields: included, settings: { notes_page: notesPage, hide_blank: hideBlank, compact, sensitive_included: sensitiveIncluded } });
