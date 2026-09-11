@@ -6,6 +6,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SOURCE = 15 * 1024 * 1024;
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
+  return "Poster upload failed.";
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const { applyCookies, supabase } = createSupabaseRouteClient(request);
@@ -26,11 +32,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const admin = createSupabaseAdminClient();
     const objectPath = `${projectId}/poster.jpg`;
     const upload = await admin.storage.from("show-posters").upload(objectPath, output, { contentType: "image/jpeg", cacheControl: "3600", upsert: true });
-    if (upload.error) throw upload.error;
+    if (upload.error) throw new Error(upload.error.message);
     const publicUrl = admin.storage.from("show-posters").getPublicUrl(objectPath).data.publicUrl;
     const versionedUrl = `${publicUrl}?v=${Date.now()}`;
     const projectUpdate = await admin.from("projects").update({ poster_image_url: versionedUrl }).eq("id", projectId);
-    if (projectUpdate.error) throw projectUpdate.error;
+    if (projectUpdate.error) throw new Error(projectUpdate.error.message);
 
     let warning = "";
     const { data: link } = await admin.from("external_links").select("external_id").eq("local_entity_type", "project").eq("local_entity_id", projectId).eq("external_app", "playbill").eq("external_table", "shows").maybeSingle();
@@ -46,6 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return applyCookies(NextResponse.json({ url: versionedUrl, warning }));
   } catch (error) {
-    return applyCookies(NextResponse.json({ error: error instanceof Error ? error.message : "Poster upload failed." }, { status: 500 }));
+    console.error("Project poster upload failed", { projectId, error });
+    return applyCookies(NextResponse.json({ error: errorMessage(error) }, { status: 500 }));
   }
 }
