@@ -9,6 +9,7 @@ import { optionalMusicFields, standardAuditionFields, standardAuditionSections }
 import { beginAssignmentOnboarding } from "@/lib/role-acceptance";
 import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { sendAuditionAccessInvite } from "@/lib/audition-access-invites";
 import { testGoogleCalendarAccess } from "@/lib/google-calendar-apps-script";
 import { syncAuditionCalendarSlots, syncAuditionSubmissionCalendar } from "@/lib/audition-calendar-sync";
@@ -107,10 +108,11 @@ export async function saveAuditionCalendarSettingsAction(formData:FormData){
 
 export async function testAuditionCalendarAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const {data:settings}=await supabase.from("project_google_calendar_settings").select("calendar_id").eq("project_id",projectId).maybeSingle();if(!settings)redirect(calendarPath(projectId,"Save the calendar settings before testing the connection.",true));
+  const admin=createSupabaseAdminClient();
   let calendarName=settings.calendar_id;
   let bridgeVersion=1;
-  try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);bridgeVersion=Number(result.bridgeVersion??1);const bridgeWarning=bridgeVersion<2?"The calendar is connected, but the Apps Script bridge must be republished with the current repository code before safe retries and individual resync are enabled.":"";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:bridgeWarning,bridge_version:bridgeVersion}).eq("project_id",projectId);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await supabase.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message,bridge_version:1}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
-  redirect(calendarPath(projectId,bridgeVersion>=2?`Connected to ${calendarName}. Safe calendar retries and individual resync are enabled.`:`Connected to ${calendarName}, but the Apps Script bridge needs to be republished.`));
+  try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);bridgeVersion=Number(result.bridgeVersion??1);const bridgeWarning=bridgeVersion<2?"The calendar is connected, but the Apps Script bridge must be republished with the current repository code before safe retries and individual resync are enabled.":"";const {error:updateError}=await admin.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:bridgeWarning,bridge_version:bridgeVersion}).eq("project_id",projectId);if(updateError)throw new Error(`The calendar connected, but Production Management could not save the bridge version: ${updateError.message}`);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await admin.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message,bridge_version:1}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+  redirect(calendarPath(projectId,bridgeVersion>=2?`Connected to ${calendarName} using bridge version ${bridgeVersion}. Safe calendar retries and individual resync are enabled.`:`Connected to ${calendarName} using bridge version ${bridgeVersion}, but the Apps Script bridge needs to be republished.`));
 }
 
 export async function syncExistingAuditionCalendarAction(formData:FormData){

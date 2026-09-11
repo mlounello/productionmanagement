@@ -30,4 +30,7 @@ test("audition workspace exposes per-booking status and individual resync", () =
   assert.match(page, /google_calendar_sync_status/);
   assert.match(actions, /syncAuditionApplicantCalendarAction/);
   assert.match(actions, /bridge_version/);
+  assert.match(actions, /createSupabaseAdminClient/);
+  assert.match(actions, /could not save the bridge version/);
+  assert.match(page, /Bridge v/);
 });
