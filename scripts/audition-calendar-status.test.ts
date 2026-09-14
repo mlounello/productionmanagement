@@ -31,6 +31,9 @@ test("calendar edits are staged for explicit approval or denial", () => {
   assert.match(actions, /reviewAuditionCalendarChangeAction/);
   assert.match(page, /Calendar Change Review/);
   assert.match(page, /Deny &amp; revert/);
+  assert.match(page, /destinationSession\.title/);
+  assert.match(page, /This historic event contains multiple applicants in a capacity-one slot/);
+  assert.match(page, /disabled=\{ambiguous\}/);
   assert.match(migration, /status text not null default 'pending'/);
   assert.match(migration, /destination time is already full/i);
 });
