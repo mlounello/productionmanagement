@@ -142,18 +142,27 @@ export async function checkAuditionCalendarChangesAction(formData:FormData){
   const {data:settings}=await supabase.from("project_google_calendar_settings").select("enabled,calendar_id,bridge_version").eq("project_id",projectId).maybeSingle();
   if(!settings?.enabled)redirect(calendarPath(projectId,"Turn on and save Google Calendar invitations before checking for changes.",true));
   if(Number(settings.bridge_version??1)<3)redirect(calendarPath(projectId,"Republish and test Calendar Bridge v3 before checking for Calendar changes.",true));
-  let detected=0;
+  let detected=0;let repaired=0;
   try{
     const {data:slots,error:slotError}=await admin.from("audition_slots").select("id,starts_at,ends_at,google_calendar_event_id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId).not("google_calendar_event_id","is",null);
     if(slotError)throw new Error(slotError.message);
     const requested=(slots??[]).filter((slot)=>slot.google_calendar_event_id).map((slot)=>({slotId:String(slot.id),eventId:String(slot.google_calendar_event_id)}));
     const calendarEvents=[] as Awaited<ReturnType<typeof readGoogleCalendarEvents>>;
     for(let index=0;index<requested.length;index+=200)calendarEvents.push(...await readGoogleCalendarEvents(settings.calendar_id,requested.slice(index,index+200)));
+    const calendarEventBySlot=new Map(calendarEvents.map((event)=>[event.slotId,event]));
+    const missingSlotIds=requested.filter((item)=>calendarEventBySlot.get(item.slotId)?.found!==true).map((item)=>item.slotId);
+    if(missingSlotIds.length){
+      const repair=await syncAuditionCalendarSlots(projectId,missingSlotIds);
+      if(repair.status==="failed"||repair.status==="partial")throw new Error(`Missing Calendar events were detected, but could not all be restored. ${repair.warnings.join(" ")}`.trim());
+      if(repair.status==="skipped")throw new Error("Missing Calendar events were detected, but calendar synchronization is disabled.");
+      repaired=missingSlotIds.length;
+    }
     await admin.from("audition_calendar_change_reviews").update({status:"stale",reviewed_at:new Date().toISOString(),error_message:"A newer Calendar check replaced this pending difference."}).eq("project_id",projectId).eq("status","pending");
     for(const event of calendarEvents){if(!event.found||!event.startsAt||!event.endsAt)continue;const slot=(slots??[]).find((candidate)=>String(candidate.id)===event.slotId);if(!slot)continue;const currentEnd=slot.ends_at??slot.starts_at;if(Math.abs(new Date(slot.starts_at).getTime()-new Date(event.startsAt).getTime())<1000&&Math.abs(new Date(currentEnd).getTime()-new Date(event.endsAt).getTime())<1000)continue;const {error}=await admin.from("audition_calendar_change_reviews").upsert({project_id:projectId,slot_id:slot.id,google_calendar_event_id:event.eventId,current_starts_at:slot.starts_at,current_ends_at:currentEnd,proposed_starts_at:event.startsAt,proposed_ends_at:event.endsAt,google_updated_at:event.updatedAt??null,status:"pending",detected_at:new Date().toISOString(),reviewed_at:null,reviewed_by:null,error_message:""},{onConflict:"slot_id,proposed_starts_at,proposed_ends_at"});if(error)throw new Error(error.message);detected+=1;}
     await admin.from("project_google_calendar_settings").update({last_change_check_at:new Date().toISOString(),last_change_check_error:"",bridge_version:3}).eq("project_id",projectId);
   }catch(error){const message=error instanceof Error?error.message:"Calendar changes could not be checked.";await admin.from("project_google_calendar_settings").update({last_change_check_at:new Date().toISOString(),last_change_check_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
-  redirect(calendarPath(projectId,detected?`${detected} Calendar change${detected===1?"":"s"} found. Review each one below.`:"No unreviewed Calendar time changes were found."));
+  const messages=[];if(repaired)messages.push(`${repaired} missing Calendar event${repaired===1?" was":"s were"} restored from Production Management.`);messages.push(detected?`${detected} Calendar change${detected===1?"":"s"} found. Review each one below.`:"No unreviewed Calendar time changes were found.");
+  redirect(calendarPath(projectId,messages.join(" ")));
 }
 
 export async function reviewAuditionCalendarChangeAction(formData:FormData){

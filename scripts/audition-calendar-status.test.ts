@@ -30,6 +30,8 @@ test("calendar edits are staged for explicit approval or denial", () => {
   assert.match(bridge, /read_calendar_events/);
   assert.match(actions, /checkAuditionCalendarChangesAction/);
   assert.match(actions, /reviewAuditionCalendarChangeAction/);
+  assert.match(actions, /missingSlotIds/);
+  assert.match(actions, /missing Calendar event.*restored from Production Management/);
   assert.match(page, /Calendar Change Review/);
   assert.match(reviewActions, /Deny & revert/);
   assert.match(reviewActions, /Approving…/);
