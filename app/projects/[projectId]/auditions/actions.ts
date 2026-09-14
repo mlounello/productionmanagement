@@ -11,7 +11,7 @@ import { syncAssignmentToPlaybill } from "@/lib/playbill-sync";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { sendAuditionAccessInvite } from "@/lib/audition-access-invites";
-import { testGoogleCalendarAccess } from "@/lib/google-calendar-apps-script";
+import { readGoogleCalendarEvents, testGoogleCalendarAccess } from "@/lib/google-calendar-apps-script";
 import { syncAuditionCalendarSlots, syncAuditionSubmissionCalendar } from "@/lib/audition-calendar-sync";
 
 const uuid = z.string().uuid();
@@ -112,7 +112,7 @@ export async function testAuditionCalendarAction(formData:FormData){
   let calendarName=settings.calendar_id;
   let bridgeVersion=1;
   try{const result=await testGoogleCalendarAccess(settings.calendar_id);calendarName=String(result.calendarName??settings.calendar_id);bridgeVersion=Number(result.bridgeVersion??1);const bridgeWarning=bridgeVersion<2?"The calendar is connected, but the Apps Script bridge must be republished with the current repository code before safe retries and individual resync are enabled.":"";const {error:updateError}=await admin.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:bridgeWarning,bridge_version:bridgeVersion}).eq("project_id",projectId);if(updateError)throw new Error(`The calendar connected, but Production Management could not save the bridge version: ${updateError.message}`);}catch(error){const message=error instanceof Error?error.message:"Calendar connection failed.";await admin.from("project_google_calendar_settings").update({last_tested_at:new Date().toISOString(),last_error:message,bridge_version:1}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
-  redirect(calendarPath(projectId,bridgeVersion>=2?`Connected to ${calendarName} using bridge version ${bridgeVersion}. Safe calendar retries and individual resync are enabled.`:`Connected to ${calendarName} using bridge version ${bridgeVersion}, but the Apps Script bridge needs to be republished.`));
+  redirect(calendarPath(projectId,bridgeVersion>=3?`Connected to ${calendarName} using bridge version ${bridgeVersion}. Safe resync and Calendar change review are enabled.`:bridgeVersion>=2?`Connected to ${calendarName} using bridge version ${bridgeVersion}. Safe calendar retries and individual resync are enabled; republish the current script to add change review.`:`Connected to ${calendarName} using bridge version ${bridgeVersion}, but the Apps Script bridge needs to be republished.`));
 }
 
 export async function syncExistingAuditionCalendarAction(formData:FormData){
@@ -135,6 +135,42 @@ export async function syncAuditionApplicantCalendarAction(formData:FormData){
   if(result.status==="skipped")redirect(`${path(projectId,"Calendar synchronization is not enabled for this project.",true)}#review`);
   const message=result.status==="synced"?"This applicant's calendar invitations are fully synchronized.":result.status==="partial"?`Some invitations synchronized, but another still needs attention: ${result.warnings.join(" ")}`:`Calendar synchronization failed: ${result.warnings.join(" ")}`;
   redirect(`${path(projectId,message,result.status!=="synced")}#review`);
+}
+
+export async function checkAuditionCalendarChangesAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const {supabase}=await context(projectId);const admin=createSupabaseAdminClient();
+  const {data:settings}=await supabase.from("project_google_calendar_settings").select("enabled,calendar_id,bridge_version").eq("project_id",projectId).maybeSingle();
+  if(!settings?.enabled)redirect(calendarPath(projectId,"Turn on and save Google Calendar invitations before checking for changes.",true));
+  if(Number(settings.bridge_version??1)<3)redirect(calendarPath(projectId,"Republish and test Calendar Bridge v3 before checking for Calendar changes.",true));
+  let detected=0;
+  try{
+    const {data:slots,error:slotError}=await admin.from("audition_slots").select("id,starts_at,ends_at,google_calendar_event_id,audition_sessions!inner(project_id)").eq("audition_sessions.project_id",projectId).not("google_calendar_event_id","is",null);
+    if(slotError)throw new Error(slotError.message);
+    const requested=(slots??[]).filter((slot)=>slot.google_calendar_event_id).map((slot)=>({slotId:String(slot.id),eventId:String(slot.google_calendar_event_id)}));
+    const calendarEvents=[] as Awaited<ReturnType<typeof readGoogleCalendarEvents>>;
+    for(let index=0;index<requested.length;index+=200)calendarEvents.push(...await readGoogleCalendarEvents(settings.calendar_id,requested.slice(index,index+200)));
+    await admin.from("audition_calendar_change_reviews").update({status:"stale",reviewed_at:new Date().toISOString(),error_message:"A newer Calendar check replaced this pending difference."}).eq("project_id",projectId).eq("status","pending");
+    for(const event of calendarEvents){if(!event.found||!event.startsAt||!event.endsAt)continue;const slot=(slots??[]).find((candidate)=>String(candidate.id)===event.slotId);if(!slot)continue;const currentEnd=slot.ends_at??slot.starts_at;if(Math.abs(new Date(slot.starts_at).getTime()-new Date(event.startsAt).getTime())<1000&&Math.abs(new Date(currentEnd).getTime()-new Date(event.endsAt).getTime())<1000)continue;const {error}=await admin.from("audition_calendar_change_reviews").upsert({project_id:projectId,slot_id:slot.id,google_calendar_event_id:event.eventId,current_starts_at:slot.starts_at,current_ends_at:currentEnd,proposed_starts_at:event.startsAt,proposed_ends_at:event.endsAt,google_updated_at:event.updatedAt??null,status:"pending",detected_at:new Date().toISOString(),reviewed_at:null,reviewed_by:null,error_message:""},{onConflict:"slot_id,proposed_starts_at,proposed_ends_at"});if(error)throw new Error(error.message);detected+=1;}
+    await admin.from("project_google_calendar_settings").update({last_change_check_at:new Date().toISOString(),last_change_check_error:"",bridge_version:3}).eq("project_id",projectId);
+  }catch(error){const message=error instanceof Error?error.message:"Calendar changes could not be checked.";await admin.from("project_google_calendar_settings").update({last_change_check_at:new Date().toISOString(),last_change_check_error:message}).eq("project_id",projectId);redirect(calendarPath(projectId,message,true));}
+  redirect(calendarPath(projectId,detected?`${detected} Calendar change${detected===1?"":"s"} found. Review each one below.`:"No unreviewed Calendar time changes were found."));
+}
+
+export async function reviewAuditionCalendarChangeAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const changeId=uuid.parse(formData.get("changeId"));const decision=z.enum(["approve","deny"]).parse(formData.get("decision"));const {supabase,user}=await context(projectId);const admin=createSupabaseAdminClient();
+  const {data:change}=await supabase.from("audition_calendar_change_reviews").select("id,slot_id,status").eq("id",changeId).eq("project_id",projectId).eq("status","pending").maybeSingle();
+  if(!change)redirect(calendarPath(projectId,"That pending Calendar change is no longer available.",true));
+  let slotIds=[String(change.slot_id)];
+  if(decision==="approve"){
+    const {data,error}=await supabase.rpc("approve_audition_calendar_change",{target_project_id:projectId,target_change_id:changeId});
+    if(error)redirect(calendarPath(projectId,error.message,true));
+    const result=data as {source_slot_id?:string;destination_slot_id?:string;submission_ids?:string[]};slotIds=[String(result.source_slot_id??change.slot_id),...(result.destination_slot_id?[String(result.destination_slot_id)]:[])];
+    if(result.submission_ids?.length){const {data:bookings}=await admin.from("audition_submission_slots").select("slot_id").in("submission_id",result.submission_ids);slotIds.push(...(bookings??[]).map((booking)=>String(booking.slot_id)));}
+  }else{
+    const {error}=await supabase.from("audition_calendar_change_reviews").update({status:"denied",reviewed_at:new Date().toISOString(),reviewed_by:user.id,error_message:""}).eq("id",changeId).eq("status","pending");if(error)redirect(calendarPath(projectId,error.message,true));
+  }
+  let warning="";try{const sync=await syncAuditionCalendarSlots(projectId,slotIds);warning=sync.warnings.join(" ");}catch(error){warning=error instanceof Error?error.message:"Calendar could not be synchronized.";}
+  redirect(calendarPath(projectId,warning?`The change was ${decision==="approve"?"approved":"denied"}, but Calendar synchronization needs attention: ${warning}`:decision==="approve"?"Calendar change approved. Applicant bookings and availability are updated.":"Calendar change denied. The Production Management time was restored in Calendar.",Boolean(warning)));
 }
 
 export async function createAuditionFormAction(formData: FormData) {

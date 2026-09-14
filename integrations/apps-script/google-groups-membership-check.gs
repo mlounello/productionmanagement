@@ -15,11 +15,31 @@ function doPost(event) {
 
     if (payload.action === 'test_calendar') {
       const calendar = calendarForId_(payload.calendarId);
-      return json_({ ok: true, calendarId: calendar.getId(), calendarName: calendar.getName(), bridgeVersion: 2, idempotentUpsert: true });
+      return json_({ ok: true, calendarId: calendar.getId(), calendarName: calendar.getName(), bridgeVersion: 3, idempotentUpsert: true, calendarChangeReview: true });
     }
 
     if (payload.action === 'calendar_capabilities') {
-      return json_({ ok: true, bridgeVersion: 2, idempotentUpsert: true });
+      return json_({ ok: true, bridgeVersion: 3, idempotentUpsert: true, calendarChangeReview: true });
+    }
+
+    if (payload.action === 'read_calendar_events') {
+      const calendar = calendarForId_(payload.calendarId);
+      const requested = Array.isArray(payload.events) ? payload.events : [];
+      if (requested.length > 200) return json_({ ok: false, error: 'Too many calendar events requested.' });
+      const events = requested.map(function(item) {
+        const eventId = String(item.eventId || '');
+        const calendarEvent = eventId ? calendar.getEventById(eventId) : null;
+        if (!calendarEvent) return { slotId: String(item.slotId || ''), eventId: eventId, found: false };
+        return {
+          slotId: String(item.slotId || ''),
+          eventId: eventId,
+          found: true,
+          startsAt: calendarEvent.getStartTime().toISOString(),
+          endsAt: calendarEvent.getEndTime().toISOString(),
+          updatedAt: calendarEvent.getLastUpdated().toISOString()
+        };
+      });
+      return json_({ ok: true, events: events, bridgeVersion: 3 });
     }
 
     if (payload.action === 'upsert_calendar_event') {
@@ -58,7 +78,7 @@ function doPost(event) {
         current.filter(function(email) { return guests.indexOf(email) < 0; }).forEach(function(email) { calendarEvent.removeGuest(email); });
         guests.filter(function(email) { return current.indexOf(email) < 0; }).forEach(function(email) { calendarEvent.addGuest(email); });
       }
-      return json_({ ok: true, eventId: calendarEvent.getId(), bridgeVersion: 2 });
+      return json_({ ok: true, eventId: calendarEvent.getId(), bridgeVersion: 3 });
     }
 
     if (payload.action === 'delete_calendar_event') {

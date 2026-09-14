@@ -18,7 +18,21 @@ test("calendar bridge uses deterministic slot keys before enabling retries", () 
   assert.match(sync, /retrySafe:capabilities\.idempotentUpsert/);
   assert.match(bridge, /calendar_capabilities/);
   assert.match(bridge, /PM_CALENDAR_KEY/);
-  assert.match(bridge, /bridgeVersion: 2/);
+  assert.match(bridge, /bridgeVersion: 3/);
+});
+
+test("calendar edits are staged for explicit approval or denial", () => {
+  const bridge = fs.readFileSync(new URL("../integrations/apps-script/google-groups-membership-check.gs", import.meta.url), "utf8");
+  const actions = fs.readFileSync(new URL("../app/projects/[projectId]/auditions/actions.ts", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/projects/[projectId]/auditions/page.tsx", import.meta.url), "utf8");
+  const migration = fs.readFileSync(new URL("../supabase/migrations/202609140200_audition_calendar_change_review.sql", import.meta.url), "utf8");
+  assert.match(bridge, /read_calendar_events/);
+  assert.match(actions, /checkAuditionCalendarChangesAction/);
+  assert.match(actions, /reviewAuditionCalendarChangeAction/);
+  assert.match(page, /Calendar Change Review/);
+  assert.match(page, /Deny &amp; revert/);
+  assert.match(migration, /status text not null default 'pending'/);
+  assert.match(migration, /destination time is already full/i);
 });
 
 test("audition workspace exposes per-booking status and individual resync", () => {

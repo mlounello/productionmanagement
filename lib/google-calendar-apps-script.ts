@@ -34,9 +34,9 @@ export async function getGoogleCalendarBridgeCapabilities() {
   try {
     const result = await request({ action: "calendar_capabilities" });
     const bridgeVersion = Number(result.bridgeVersion ?? 1);
-    return { bridgeVersion, idempotentUpsert: bridgeVersion >= 2 && result.idempotentUpsert === true };
+    return { bridgeVersion, idempotentUpsert: bridgeVersion >= 2 && result.idempotentUpsert === true, calendarChangeReview:bridgeVersion>=3&&result.calendarChangeReview===true };
   } catch {
-    return { bridgeVersion: 1, idempotentUpsert: false };
+    return { bridgeVersion: 1, idempotentUpsert: false, calendarChangeReview:false };
   }
 }
 
@@ -51,4 +51,9 @@ export async function upsertGoogleCalendarEvent(input:{calendarId:string;eventId
 
 export async function deleteGoogleCalendarEvent(calendarId:string,eventId:string) {
   return request({action:"delete_calendar_event",calendarId,eventId});
+}
+
+export async function readGoogleCalendarEvents(calendarId:string,events:Array<{slotId:string;eventId:string}>) {
+  const result=await request({action:"read_calendar_events",calendarId,events});
+  return (Array.isArray(result.events)?result.events:[]) as Array<{slotId:string;eventId:string;found:boolean;startsAt?:string;endsAt?:string;updatedAt?:string}>;
 }
