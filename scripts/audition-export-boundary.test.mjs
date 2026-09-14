@@ -7,15 +7,18 @@ const source = readFileSync(
   "utf8"
 );
 
-test("packet export disambiguates the primary audition-slot relationship", () => {
+test("packet export reads the current multi-booking relationship", () => {
   assert.match(
     source,
-    /primary_audition_slot:audition_slots!audition_submissions_slot_id_fkey\(starts_at\)/
+    /audition_submission_slots\(field_key, audition_slots\(starts_at, ends_at, audition_sessions\(title, booking_category\)\)\)/
   );
-  assert.doesNotMatch(source, /[, ]audition_slots\(starts_at\)/);
+  assert.doesNotMatch(source, /primary_audition_slot/);
 });
 
-test("packet sorting and roster rendering use the explicit primary slot alias", () => {
-  assert.match(source, /a\.primary_audition_slot/);
-  assert.match(source, /row\.primary_audition_slot/);
+test("roster uses actual bookings, Eastern time, and the acting slot for audition-order sorting", () => {
+  assert.match(source, /function rosterBookings/);
+  assert.match(source, /function rosterSortTime/);
+  assert.match(source, /category\.includes\("acting"\)/);
+  assert.match(source, /timeZone: EASTERN_TIME_ZONE/);
+  assert.match(source, /bookings\.map\(rosterBookingLabel\)/);
 });
