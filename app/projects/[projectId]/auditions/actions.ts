@@ -260,6 +260,7 @@ export async function createAuditionSessionAction(formData: FormData) {
   const interval = z.coerce.number().int().min(1).max(240).parse(formData.get("intervalMinutes"));
   const capacity = z.coerce.number().int().min(1).max(500).parse(formData.get("capacity"));
   const sessionType = z.enum(["appointments", "group_call", "workshop", "walk_in", "callback"]).parse(formData.get("sessionType"));
+  if(sessionType==="appointments"&&capacity>1&&formData.get("allowMultipleAppointmentBookings")!=="on")redirect(schedulePath(projectId,"Generated appointments allow one applicant per time by default. Confirm that this block intentionally allows multiple people at the same appointment before saving a higher capacity.",true));
   const requestedBookingMode = z.enum(["self_book", "staff_assigned", "walk_in"]).parse(formData.get("bookingMode"));
   const bookingMode=requestedBookingMode;
   const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
@@ -292,7 +293,7 @@ export async function createAuditionSessionAction(formData: FormData) {
 export async function updateAuditionSessionAction(formData:FormData){
   const projectId=uuid.parse(formData.get("projectId"));const sessionId=uuid.parse(formData.get("sessionId"));const {supabase}=await context(projectId);
   const title=z.string().trim().min(1).max(200).parse(formData.get("title"));const location=z.string().trim().max(200).parse(formData.get("location"));const startsAt=easternDate(z.string().min(1).parse(formData.get("startsAt")));const endsAt=easternDate(z.string().min(1).parse(formData.get("endsAt")));if(!(endsAt>startsAt))redirect(schedulePath(projectId,"Session end must be after its start.",true));
-  const interval=z.coerce.number().int().min(1).max(240).parse(formData.get("intervalMinutes"));const capacity=z.coerce.number().int().min(1).max(500).parse(formData.get("capacity"));const sessionType=z.enum(["appointments","group_call","workshop","walk_in","callback"]).parse(formData.get("sessionType"));const bookingMode=z.enum(["self_book","staff_assigned","walk_in"]).parse(formData.get("bookingMode"));const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
+  const interval=z.coerce.number().int().min(1).max(240).parse(formData.get("intervalMinutes"));const capacity=z.coerce.number().int().min(1).max(500).parse(formData.get("capacity"));const sessionType=z.enum(["appointments","group_call","workshop","walk_in","callback"]).parse(formData.get("sessionType"));if(sessionType==="appointments"&&capacity>1&&formData.get("allowMultipleAppointmentBookings")!=="on")redirect(schedulePath(projectId,"Generated appointments allow one applicant per time by default. Confirm that this block intentionally allows multiple people at the same appointment before saving a higher capacity.",true));const bookingMode=z.enum(["self_book","staff_assigned","walk_in"]).parse(formData.get("bookingMode"));const bookingCategory=z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/).parse(String(formData.get("bookingCategory")??"general").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""));
   const autoAssignSessionId=await linkedSessionId(supabase,projectId,formData.get("autoAssignSessionId"),sessionId);
   const {data:current,error:currentError}=await supabase.from("audition_sessions").select("id,starts_at,ends_at,interval_minutes,capacity,session_type,booking_mode,booking_category").eq("id",sessionId).eq("project_id",projectId).maybeSingle();if(currentError||!current)redirect(schedulePath(projectId,currentError?.message??"Audition block not found.",true));
   const structuralChange=new Date(current.starts_at).getTime()!==startsAt.getTime()||new Date(current.ends_at).getTime()!==endsAt.getTime()||Number(current.interval_minutes)!==interval||Number(current.capacity)!==capacity||current.session_type!==sessionType||current.booking_mode!==bookingMode||current.booking_category!==bookingCategory;
@@ -319,6 +320,19 @@ export async function updateAuditionSubmissionAction(formData: FormData) {
   }).eq("id", submissionId).eq("project_id", projectId);
   if (error) redirect(path(projectId, error.message, true));
   redirect(path(projectId, "Applicant review updated."));
+}
+
+export async function staffMoveAuditionBookingAction(formData:FormData){
+  const projectId=uuid.parse(formData.get("projectId"));const submissionId=uuid.parse(formData.get("submissionId"));const fieldKey=z.string().trim().min(1).max(100).parse(formData.get("fieldKey"));const slotId=uuid.parse(formData.get("slotId"));const {supabase}=await context(projectId);
+  const {data:before}=await supabase.from("audition_submissions").select("audition_submission_slots(slot_id)").eq("id",submissionId).eq("project_id",projectId).is("cancelled_at",null).maybeSingle();
+  if(!before)redirect(`${path(projectId,"The active audition submission was not found.",true)}#review`);
+  const oldSlotIds=((before.audition_submission_slots??[]) as Array<{slot_id:string}>).map((row)=>row.slot_id);
+  const {error}=await supabase.rpc("staff_move_audition_booking",{target_project_id:projectId,target_submission_id:submissionId,target_field_key:fieldKey,target_slot_id:slotId});
+  if(error)redirect(`${path(projectId,error.message,true)}#review`);
+  const {data:after}=await supabase.from("audition_submissions").select("audition_submission_slots(slot_id)").eq("id",submissionId).maybeSingle();
+  const newSlotIds=((after?.audition_submission_slots??[]) as Array<{slot_id:string}>).map((row)=>row.slot_id);
+  let warning="";try{const result=await syncAuditionCalendarSlots(projectId,[...oldSlotIds,...newSlotIds]);warning=result.warnings.join(" ");}catch(syncError){warning=syncError instanceof Error?syncError.message:"Calendar invitations could not be updated.";}
+  redirect(`${path(projectId,warning?`The Production Management booking was moved, but Calendar needs attention: ${warning}`:"The booking was moved and Google Calendar was updated.",Boolean(warning))}#review`);
 }
 
 export async function saveAuditionReviewAction(formData: FormData) {
