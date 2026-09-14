@@ -49,9 +49,11 @@ test("audition workspace exposes per-booking status and individual resync", () =
   const actions = fs.readFileSync(new URL("../app/projects/[projectId]/auditions/actions.ts", import.meta.url), "utf8");
   assert.match(page, /Calendar partially synced/);
   assert.match(page, /bookingCalendarStatuses\.includes\("synced"\)[\s\S]*bookingCalendarStatuses\.includes\("failed"\)\?"partial"/);
-  assert.match(page, /Resync this applicant/);
+  assert.match(page, /Repair \/ resync this applicant/);
+  assert.match(page, /Repairing invitations…/);
   assert.match(page, /google_calendar_sync_status/);
   assert.match(actions, /syncAuditionApplicantCalendarAction/);
+  assert.match(actions, /rediscoverVisibleEvents:true/);
   assert.match(actions, /bridge_version/);
   assert.match(actions, /createSupabaseAdminClient/);
   assert.match(actions, /could not save the bridge version/);

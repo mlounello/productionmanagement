@@ -131,9 +131,9 @@ export async function syncAuditionApplicantCalendarAction(formData:FormData){
   if(!settings?.enabled)redirect(`${path(projectId,"Turn on calendar invitations before resynchronizing this applicant.",true)}#review`);
   if(Number(settings.bridge_version??1)<2)redirect(`${path(projectId,"Republish and test the current Apps Script bridge before resynchronizing. This prevents duplicate Google events.",true)}#review`);
   let result:Awaited<ReturnType<typeof syncAuditionSubmissionCalendar>>;
-  try{result=await syncAuditionSubmissionCalendar(submissionId);}catch(error){redirect(`${path(projectId,error instanceof Error?error.message:"Calendar sync failed.",true)}#review`);}
+  try{result=await syncAuditionSubmissionCalendar(submissionId,{rediscoverVisibleEvents:true});}catch(error){redirect(`${path(projectId,error instanceof Error?error.message:"Calendar sync failed.",true)}#review`);}
   if(result.status==="skipped")redirect(`${path(projectId,"Calendar synchronization is not enabled for this project.",true)}#review`);
-  const message=result.status==="synced"?"This applicant's calendar invitations are fully synchronized.":result.status==="partial"?`Some invitations synchronized, but another still needs attention: ${result.warnings.join(" ")}`:`Calendar synchronization failed: ${result.warnings.join(" ")}`;
+  const message=result.status==="synced"?"This applicant's visible calendar invitations were repaired and fully synchronized.":result.status==="partial"?`Some invitations synchronized, but another still needs attention: ${result.warnings.join(" ")}`:`Calendar synchronization failed: ${result.warnings.join(" ")}`;
   redirect(`${path(projectId,message,result.status!=="synced")}#review`);
 }
 
