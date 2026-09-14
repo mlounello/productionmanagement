@@ -512,6 +512,30 @@ button {
   color: var(--danger);
 }
 
+.button:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: .62;
+}
+
+[aria-busy="true"] button:disabled {
+  cursor: wait;
+}
+
+.button-spinner {
+  animation: button-spinner-rotate .7s linear infinite;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  display: inline-block;
+  height: 14px;
+  width: 14px;
+}
+
+@keyframes button-spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
 .setup-warning {
   border-color: #f5c2c0;
   color: var(--danger);
