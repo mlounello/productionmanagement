@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:casting": "node --experimental-strip-types --test scripts/casting-drafts.test.ts scripts/casting-offers.test.ts",
+    "test:gmail-security": "node --experimental-strip-types --test scripts/gmail-security.test.ts",
     "test:google-groups": "node --test scripts/google-group-naming.test.mjs",
     "test:google-welcome-policy": "node --experimental-strip-types --test scripts/google-group-welcome-policy.test.ts",
     "test:welcome-email-layout": "node --experimental-strip-types --test scripts/role-group-welcome-email.test.ts",

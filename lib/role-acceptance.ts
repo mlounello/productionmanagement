@@ -47,8 +47,10 @@ export async function beginAssignmentOnboarding(projectId:string, assignmentId:s
 }
 
 export async function completeAcceptedOnboarding(requestId:string){
-  const admin=createSupabaseAdminClient(); const {data:req}=await admin.from("role_acceptance_requests").select("project_id,role_assignment_id,person_id").eq("id",requestId).maybeSingle(); if(!req)throw new Error("Acceptance request not found.");
-  await admin.from("role_assignments").update({status:"accepted",confirmation_status:"accepted",onboarding_status:"onboarding",onboarding_checklist:{agreement_confirmed:true,google_group_checked:false,welcome_sent:false,publicity_prepared:false}}).eq("id",req.role_assignment_id);
+  const admin=createSupabaseAdminClient(); const {data:req,error:requestError}=await admin.from("role_acceptance_requests").select("project_id,role_assignment_id,person_id,status").eq("id",requestId).maybeSingle(); if(requestError||!req)throw new Error(requestError?.message??"Acceptance request not found.");
+  if(req.status!=="accepted")throw new Error("Only an accepted agreement can start onboarding.");
+  const activation=await admin.from("role_assignments").update({status:"accepted",confirmation_status:"accepted",onboarding_status:"onboarding",onboarding_checklist:{agreement_confirmed:true,google_group_checked:false,welcome_sent:false,publicity_prepared:false}}).eq("id",req.role_assignment_id);
+  if(activation.error)throw new Error(activation.error.message);
   const {data:person}=await admin.from("people").select("full_name,first_name,last_name,publicity_bio,publicity_headshot_url,publicity_profile_version").eq("id",req.person_id).maybeSingle();
   const credited=firstAndLastName(person??{});
   const pub=await admin.from("project_publicity_submissions").upsert({project_id:req.project_id,person_id:req.person_id,credited_name:credited,bio:person?.publicity_bio??"",headshot_url:person?.publicity_headshot_url??"",source_profile_version:Number(person?.publicity_profile_version??1),status:"draft",playbill_sync_status:"not_ready"},{onConflict:"project_id,person_id",ignoreDuplicates:true});
@@ -56,6 +58,7 @@ export async function completeAcceptedOnboarding(requestId:string){
   try{await syncAssignmentToPlaybillAsSystem(String(req.project_id),String(req.role_assignment_id));}catch(e){warnings.push(`Playbill: ${e instanceof Error?e.message:"sync failed"}`);}
   try{const result=await syncAssignmentGoogleAutomation(String(req.project_id),String(req.role_assignment_id),null);warnings.push(...result.warnings);}catch(e){warnings.push(e instanceof Error?e.message:"Google/Propared onboarding failed.");}
   const {data:assignment}=await admin.from("role_assignments").select("google_group_sync_status,welcome_email_status").eq("id",req.role_assignment_id).maybeSingle();
-  await admin.from("role_assignments").update({onboarding_status:warnings.length?"attention":"publicity_pending",onboarding_checklist:{agreement_confirmed:true,google_group_checked:["verified","missing"].includes(String(assignment?.google_group_sync_status)),google_group_status:assignment?.google_group_sync_status,welcome_sent:["sent","already_sent"].includes(String(assignment?.welcome_email_status)),publicity_prepared:!pub.error,attention:warnings}}).eq("id",req.role_assignment_id);
+  const completion=await admin.from("role_assignments").update({onboarding_status:warnings.length?"attention":"publicity_pending",onboarding_checklist:{agreement_confirmed:true,google_group_checked:["verified","missing"].includes(String(assignment?.google_group_sync_status)),google_group_status:assignment?.google_group_sync_status,welcome_sent:["sent","already_sent"].includes(String(assignment?.welcome_email_status)),publicity_prepared:!pub.error,attention:warnings}}).eq("id",req.role_assignment_id);
+  if(completion.error)warnings.push(completion.error.message);
   return {warnings};
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CastingOverviewNotice } from "@/components/casting-overview-notice";
 import nextDynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -795,6 +796,7 @@ export default async function ProjectWorkspacePage({
         <section className="panel workspace-section">
           <div className="section-heading"><div><p className="eyebrow">Needs your attention</p><h2>Project Notifications</h2><p className="muted">Items created by participant activity or an integration failure. Open a row to resolve it in the correct workspace.</p></div></div>
           <div className="notification-hub">
+            <CastingOverviewNotice projectId={typedProject.id}/>
             {(overviewNotifications?.[0].data ?? []).map((item) => {
               const person = item.people as unknown as { full_name?: string } | null;
               return <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/publicity`} key={`bio-${item.id}`}><StatusBadge status="needs_review" label="Editorial review"/><div><strong>{person?.full_name ?? "Participant"} approved their bio</strong><span>Review and lock the final copy in Publicity.</span></div><span aria-hidden="true">→</span></Link>;
@@ -805,7 +807,7 @@ export default async function ProjectWorkspacePage({
             })}
             {roleSyncFailures.length + assignmentSyncFailures.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/integrations`}><StatusBadge status="failed" label="Playbill"/><div><strong>{roleSyncFailures.length + assignmentSyncFailures.length} integration item{roleSyncFailures.length + assignmentSyncFailures.length === 1 ? "" : "s"} failed</strong><span>Open Integrations to retry or review the provider response.</span></div><span aria-hidden="true">→</span></Link> : null}
             {missingBudgetAccessAssignments.length ? <Link className="notification-row notification-action" href={`/projects/${typedProject.id}/roles`}><StatusBadge status="needs_review" label="Budget"/><div><strong>{missingBudgetAccessAssignments.length} Budget access decision{missingBudgetAccessAssignments.length === 1 ? "" : "s"} needed</strong><span>Choose one or more view-only department budgets, or mark access as not required.</span></div><span aria-hidden="true">→</span></Link> : null}
-            {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !missingBudgetAccessAssignments.length ? <p className="setup-success">No unresolved project notifications.</p> : null}
+            {!(overviewNotifications?.[0].data ?? []).length && !(overviewNotifications?.[2].data ?? []).length && !roleSyncFailures.length && !assignmentSyncFailures.length && !missingBudgetAccessAssignments.length ? <p className="setup-success">Publicity, calendar, integration, and budget checks are clear.</p> : null}
           </div>
           {(overviewNotifications?.[1].data ?? []).length ? <details className="notification-activity"><summary>Recent participant activity</summary><div className="compact-list">{(overviewNotifications?.[1].data ?? []).map((item) => { const person = item.people as unknown as { full_name?: string } | null; return <div className="compact-row" key={item.id}><div><strong>{person?.full_name ?? "Participant"}</strong><span>Role {item.status} · {item.submitted_at ? formatDate(item.submitted_at) : "recently"}</span></div><StatusBadge status={item.status}/></div>; })}</div></details> : null}
         </section>

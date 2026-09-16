@@ -24,6 +24,7 @@ export function ProjectWorkspaceNav({ projectId, active }: { projectId: string; 
       <Link aria-current={active === "setup" ? "page" : undefined} className={active === "setup" ? "active" : ""} href={`/projects/${projectId}/setup`}>Setup</Link>
       <Link aria-current={active === "publicity" ? "page" : undefined} className={active === "publicity" ? "active" : ""} href={`/projects/${projectId}/publicity`}>Publicity</Link>
       <Link aria-current={active === "onboarding" ? "page" : undefined} className={active === "onboarding" ? "active" : ""} href={`/projects/${projectId}/onboarding`}>Onboarding</Link>
+      <Link aria-current={active === "casting" ? "page" : undefined} className={active === "casting" ? "active" : ""} href={`/projects/${projectId}/casting`}>Casting & Offers</Link>
       <Link aria-current={active === "auditions" ? "page" : undefined} className={active === "auditions" ? "active" : ""} href={`/projects/${projectId}/auditions`}>Auditions</Link>
       <Link aria-current={active === "google-groups" ? "page" : undefined} className={active === "google-groups" ? "active" : ""} href={`/projects/${projectId}/google-groups`}>Google Groups</Link>
       <Link aria-current={active === "communications" ? "page" : undefined} className={active === "communications" ? "active" : ""} href={`/projects/${projectId}/communications`}>Communications</Link>
