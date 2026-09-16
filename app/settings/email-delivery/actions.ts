@@ -9,6 +9,7 @@ import { buildGmailTestMessage, GMAIL_SEND_SCOPE, sealGmailSecret, SIENA_GMAIL_A
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { brandProductionManagementEmail } from "@/lib/email-branding";
 import { DISABLE_OUTBOUND_EMAIL } from "@/lib/config";
+import { deliverQueuedEmails } from "@/lib/outbound-email-queue";
 
 function back(kind: string, message: string): never {
   revalidatePath("/settings/email-delivery");
@@ -71,4 +72,12 @@ export async function sendGmailTestAction(form: FormData) {
     if (receiptError) back("error", "Test sent; the test log has its receipt, but connection status could not be updated.");
   }
   back(status === "sent" ? "success" : "error", message || `One test email sent to ${SIENA_GMAIL_ADDRESS}. Check its appearance in your inbox.`);
+}
+
+export async function processEmailQueueAction() {
+  await requireGmailOwner();
+  try {
+    const results = await deliverQueuedEmails({ limit: 20 });
+    back("success", results.length ? `Processed ${results.length} ready message${results.length === 1 ? "" : "s"}. Review their final statuses below.` : "No messages are ready to process. Scheduled retry times and uncertain holds were respected.");
+  } catch (error) { back("error", error instanceof Error ? error.message : "The delivery queue could not be processed."); }
 }

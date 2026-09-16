@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAutomaticPublicityReminders } from "@/lib/publicity-reminder-automation";
 import { runPublicitySyncReconciliation } from "@/lib/publicity-sync-reconciliation";
+import { deliverQueuedEmails } from "@/lib/outbound-email-queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
   try {
     const publicitySync = await runPublicitySyncReconciliation();
     const reminders = await runAutomaticPublicityReminders();
-    return NextResponse.json({ ok: true, publicitySync, reminders });
+    const emailQueue = await deliverQueuedEmails({ limit: 20 }).catch((error) => ({ error: error instanceof Error ? error.message : "Email queue unavailable." }));
+    return NextResponse.json({ ok: true, publicitySync, reminders, emailQueue });
   } catch (error) {
     return NextResponse.json({
       ok: false,

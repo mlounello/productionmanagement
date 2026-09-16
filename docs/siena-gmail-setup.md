@@ -1,8 +1,8 @@
-# Siena Gmail: connect first, switch delivery later
+# Siena Gmail delivery and safe rollout
 
-This increment adds an **owner-only Email Delivery page** at `/settings/email-delivery`. It can connect Siena Gmail, check authorization without sending, and explicitly send one test to `mlounello@siena.edu`. It does **not** switch application mail away from Resend yet. Actor records, assignments, existing templates, and existing emails are unchanged.
+The owner-only **Email Delivery page** at `/settings/email-delivery` connects Siena Gmail, checks authorization, sends a controlled test, displays the durable delivery queue, and can process messages that are ready to retry. Actor records, assignments, existing templates, and existing emails are unchanged.
 
-The eventual sender is **Siena Theatre Production Management <mlounello@siena.edu>**. Do not disable existing Resend credentials yet. Durable delivery jobs, quota-aware retries, administrator notifications, and the production-wide switch remain a separate implementation step. Do not send real casting offers before that step and lifecycle verification.
+The Gmail sender is **Siena Theatre Production Management <mlounello@siena.edu>**. Casting offers and their administrator notifications use the Gmail queue after the rollout migration is applied. Keep Resend configured while the remaining application email types are tested; `OUTBOUND_EMAIL_PROVIDER=resend` leaves those existing messages on Resend until the deliberate production-wide cutover.
 
 ## 1. Google Cloud setup
 
@@ -26,11 +26,19 @@ In the Production Management Vercel project's environment settings, add:
 - `PM_GMAIL_CLIENT_ID`: the new Google Client ID.
 - `PM_GMAIL_CLIENT_SECRET`: the Google Client secret.
 - `PM_GMAIL_ENCRYPTION_KEY`: a newly generated random secret at least 32 characters long, stored in your password manager. This protects the saved refresh token. Do not reuse or copy the Events token. Changing this key requires reconnecting Google.
+- `PM_GMAIL_MAX_MESSAGES_PER_24_HOURS`: the application safety cap; `500` is the recommended starting value.
+- `PM_ADMIN_NOTIFICATION_EMAIL`: the initial administrator notification recipient; use `mlounello@siena.edu` until configurable recipients are enabled for a project.
+- `OUTBOUND_EMAIL_PROVIDER`: keep this as `resend` during casting rollout. Change it to `gmail` only after the complete lifecycle test approves moving every existing application email onto Gmail.
 - Verify `NEXT_PUBLIC_SITE_URL` is exactly `https://productionmanagement.mlounello.com`.
 
 These three `PM_GMAIL_*` secrets must **not** use a `NEXT_PUBLIC_` prefix. Only configure Production initially; avoid giving untrusted preview deployments production mail credentials. Redeploy after changing environment variables.
 
-Have the additive migration `202609160300_gmail_connection.sql` reviewed and applied to the correct Production Management database before connecting. It creates two new server-only tables. It does not update or delete existing actor data. Ordinary authenticated and anonymous clients receive no access to the credentials or test log.
+Apply both additive migrations to the correct Production Management database in this order:
+
+1. `202609160300_gmail_connection.sql` stores the encrypted Gmail connection and controlled-test log.
+2. `202609160400_gmail_delivery_and_notifications.sql` adds the durable outbound queue, casting delivery status, capacity reservation, and project notifications.
+
+Neither migration updates or deletes actor records. Ordinary authenticated and anonymous clients receive no access to Gmail credentials or queued message bodies.
 
 ## 3. Connect your account
 
@@ -48,6 +56,16 @@ Have the additive migration `202609160300_gmail_connection.sql` reviewed and app
 3. Check your Siena inbox and Sent folder. Confirm the sender display name, Siena formatting, and readable body.
 4. Check the **Recent connection tests** log for a sent receipt. Gmail accepting a request is not a guarantee that it reached the inbox.
 5. If the result is **uncertain** or remains **pending**, inspect Sent before starting another test. Network interruptions can happen after Google sends the message. The application deliberately does not retry ambiguous tests automatically. Repeated submission of the same test request cannot send again.
+
+## 5. Casting rollout
+
+1. Leave `ENABLE_CASTING_RELEASE=false` while offers and public responses are tested. Sending an offer does not occupy the role or start onboarding.
+2. Prepare offers on the project's Casting page. Review the exact email preview, select the intended people, acknowledge the confirmation, and send.
+3. The application reserves available role capacity before queuing each offer, preventing more active offers than a single-occupancy role can hold.
+4. Every offer is stored before Gmail is called. Sent, failed, and uncertain results remain visible on the casting tracker and Email Delivery page.
+5. Accepted, declined, and discussion-requested responses create a persistent project notification and send an administrator email.
+6. Rate-limited work remains queued. Use **Process ready queue now** on Email Delivery after its retry time. The existing daily maintenance job also performs a safety retry. Ambiguous deliveries are marked **uncertain** and are never blindly resent.
+7. Only after a complete test should `ENABLE_CASTING_RELEASE` be enabled and the reviewed accepted cohort be released into assignments/onboarding.
 
 ## Troubleshooting
 
