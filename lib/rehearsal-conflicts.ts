@@ -138,7 +138,7 @@ export function parseConflictResponses(raw: string, windows: ConflictWindowSnaps
       if (!overlaps(minutes(interval.starts_at), minutes(interval.ends_at), start, end)) throw new Error(`${window.label} conflict times must overlap the rehearsal window of ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}.`);
     }
     if (answer.preference_enabled) {
-      if (!window.collect_preferences || !clock.safeParse(answer.preference_start).success || !clock.safeParse(answer.preference_end).success || minutes(answer.preference_start) < start || minutes(answer.preference_end) > end || minutes(answer.preference_end) <= minutes(answer.preference_start)) throw new Error(`Review the preferred time for ${window.label}.`);
+      if (!window.collect_preferences || !clock.safeParse(answer.preference_start).success || !clock.safeParse(answer.preference_end).success || minutes(answer.preference_start) < start || minutes(answer.preference_end) > end || minutes(answer.preference_end) <= minutes(answer.preference_start)) throw new Error(`${window.label} preferred time must stay between ${shortTime(window.starts_at)} and ${shortTime(window.ends_at)}.`);
     }
   }
   if (requireAll) for (const window of windows) if (window.required && !seen.has(window.id)) throw new Error(`Choose your availability for ${window.label}.`);
