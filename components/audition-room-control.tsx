@@ -65,17 +65,21 @@ export function AuditionRoomControl({ projectId, applicants: initial, roles }: {
 
   async function setRecommendation(submissionId: string, recommendation: string) {
     const before = applicants;
+    const applicant=applicants.find(row=>row.id===submissionId);const roleIds=applicant?.readRoleIds??[];
+    if(recommendation==="cast"&&!roleIds.length){setErrors(current=>({...current,[submissionId]:"Select at least one role before marking this applicant Cast."}));return;}
     setApplicants((rows) => rows.map((row) => row.id === submissionId ? { ...row, recommendation } : row));
-    try { await patch(submissionId, { recommendation }); }
+    try { await patch(submissionId, { recommendation,roleIds }); }
     catch { setApplicants(before); }
   }
 
   async function setRead(submissionId: string, roleId: string, checked: boolean) {
     const before = applicants;
+    const applicant=applicants.find(row=>row.id===submissionId);const roleIds=checked?[...new Set([...(applicant?.readRoleIds??[]),roleId])]:(applicant?.readRoleIds??[]).filter(id=>id!==roleId);
+    if(applicant?.recommendation==="cast"&&!roleIds.length){setErrors(current=>({...current,[submissionId]:"A Cast decision must keep at least one selected role. Choose another role before removing this one."}));return;}
     setApplicants((rows) => rows.map((row) => row.id === submissionId
-      ? { ...row, readRoleIds: checked ? [...new Set([...row.readRoleIds, roleId])] : row.readRoleIds.filter((id) => id !== roleId) }
+      ? { ...row, readRoleIds: roleIds }
       : row));
-    try { await patch(submissionId, { roleId, read: checked }); }
+    try { await patch(submissionId, applicant?.recommendation==="cast"?{recommendation:"cast",roleIds}:{ roleId, read: checked }); }
     catch { setApplicants(before); }
   }
 
@@ -86,7 +90,7 @@ export function AuditionRoomControl({ projectId, applicants: initial, roles }: {
         <option value="all">Everyone</option><option value="waiting">Not checked in</option><option value="arrived">Checked in / auditioned</option>
         {recommendations.slice(1).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
       </select></label>
-      <p className="muted audition-room-save-note">Changes save automatically. Applicant emails are always sent separately.</p>
+      <p className="muted audition-room-save-note">Role checkboxes identify callback or casting roles. Marking Cast creates one draft per checked role in Casting &amp; Offers; it never sends an email.</p>
     </div>
     <div className="audition-room-table-wrap">
       <table className="audition-room-table">

@@ -20,6 +20,7 @@ export type CastingDraft = {
   coverage_type: "none" | "understudy" | "swing"; covered_role_ids: string[];
   additional_duties: string; actor_notes: string; status: "draft" | "withdrawn";
   revision: number;
+  source_audition_submission_id?: string | null;
 };
 export type CastingPerson = { id: string; full_name: string; email: string; person_type: string };
 export type CastingRole = { id: string; name: string; role_group: string; allows_multiple_assignments: boolean; assignment_capacity: number | null };

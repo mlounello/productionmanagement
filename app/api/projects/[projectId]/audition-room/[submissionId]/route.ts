@@ -4,7 +4,7 @@ import { createSupabaseRouteClient } from "@/lib/supabase-route";
 
 const bodySchema = z.union([
   z.object({ auditionStatus: z.enum(["registered", "checked_in", "auditioned", "no_show"]) }),
-  z.object({ recommendation: z.enum(["", "callback", "consider", "cast", "not_cast", "discuss"]) }),
+  z.object({ recommendation: z.enum(["", "callback", "consider", "cast", "not_cast", "discuss"]), roleIds: z.array(z.string().uuid()).max(100) }),
   z.object({ roleId: z.string().uuid(), read: z.boolean() })
 ]);
 
@@ -28,13 +28,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }).eq("id", submissionId).eq("project_id", projectId);
     if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
   } else if ("recommendation" in parsed.data) {
-    const { error } = await supabase.from("audition_reviews").upsert({
-      submission_id: submissionId,
-      reviewer_user_id: user.id,
-      recommendation: parsed.data.recommendation,
-      rubric: {}
-    }, { onConflict: "submission_id,reviewer_user_id" });
-    if (error) return applyCookies(NextResponse.json({ error: error.message }, { status: 500 }));
+    const {data,error}=await supabase.rpc("sync_audition_room_casting",{target_project_id:projectId,target_submission_id:submissionId,target_recommendation:parsed.data.recommendation,target_role_ids:parsed.data.roleIds});
+    if(error)return applyCookies(NextResponse.json({error:error.message},{status:409}));
+    return applyCookies(NextResponse.json({ok:true,...data}));
   } else {
     const { data: role } = await supabase.from("project_roles").select("id").eq("id", parsed.data.roleId).eq("project_id", projectId).eq("role_group", "cast").maybeSingle();
     if (!role) return applyCookies(NextResponse.json({ error: "That character is not a cast role in this project." }, { status: 400 }));
