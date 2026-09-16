@@ -29,6 +29,12 @@ const maxRetries = Number.isFinite(configuredRetries) ? Math.min(8, Math.max(0, 
 let providerRequestChain: Promise<unknown> = Promise.resolve();
 let nextProviderRequestAt = 0;
 
+function outboundProvider() {
+  const provider = (process.env.OUTBOUND_EMAIL_PROVIDER ?? "resend").trim().toLowerCase();
+  if (provider !== "resend" && provider !== "gmail") throw new Error("OUTBOUND_EMAIL_PROVIDER must be either resend or gmail. No fallback was attempted.");
+  return provider;
+}
+
 function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -72,6 +78,11 @@ async function requestResend(path: string, body: unknown, idempotencyKey: string
 }
 
 export async function sendHtmlEmail(input: HtmlEmailInput, options: { idempotencyKey?: string } = {}) {
+  if (outboundProvider() === "gmail") {
+    if (DISABLE_OUTBOUND_EMAIL) throw new Error("Outbound email is disabled.");
+    const { queueAndDeliverHtmlEmail } = await import("./outbound-email-queue");
+    return queueAndDeliverHtmlEmail(input, { idempotencyKey: options.idempotencyKey ?? `pm-email-${crypto.randomUUID()}` });
+  }
   providerCredentials();
   const payload = await requestResend("/emails", {
     from: PRODUCTION_MANAGEMENT_FROM,
@@ -84,7 +95,25 @@ export async function sendHtmlEmail(input: HtmlEmailInput, options: { idempotenc
 
 export async function sendHtmlEmailBatch(inputs: HtmlEmailInput[], options: { idempotencyKey?: string } = {}) {
   if (!inputs.length) return [];
-  if (inputs.length > 100) throw new Error("Resend batches cannot contain more than 100 emails.");
+  if (inputs.length > 100) throw new Error("Email batches cannot contain more than 100 recipients.");
+  if (outboundProvider() === "gmail") {
+    if (DISABLE_OUTBOUND_EMAIL) throw new Error("Outbound email is disabled.");
+    const { deliverQueuedEmails, queueHtmlEmail } = await import("./outbound-email-queue");
+    const root = options.idempotencyKey ?? `pm-batch-${crypto.randomUUID()}`;
+    // Persist every recipient before attempting any provider request. A problem
+    // with recipient one must not silently discard recipients two through N.
+    const jobs = [];
+    for (let index = 0; index < inputs.length; index += 1) jobs.push(await queueHtmlEmail(inputs[index], { idempotencyKey: `${root}:${index}` }));
+    const results: Array<{ id: string; jobId: string; status: string }> = [];
+    const problems: string[] = [];
+    for (const job of jobs) {
+      const result = job.status === "sent" ? job : ["failed","uncertain","cancelled"].includes(job.status) ? job : (await deliverQueuedEmails({ jobId: job.id, limit: 1 }))[0] ?? job;
+      if (result.status === "sent") results.push({ id: result.provider_message_id ?? result.id, jobId: result.id, status: "sent" });
+      else problems.push(`${result.status}: ${result.last_error || "delivery requires review"}`);
+    }
+    if (problems.length) throw new OutboundEmailError(`${problems.length} Gmail message${problems.length === 1 ? "" : "s"} require delivery review. Every recipient remains recorded in the queue. ${problems[0]}`, 503, jobs.some((job) => job.status === "queued"));
+    return results;
+  }
   providerCredentials();
   const body = inputs.map((input) => ({
     from: PRODUCTION_MANAGEMENT_FROM,

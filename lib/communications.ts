@@ -1,4 +1,4 @@
-import { renderTemplate } from "./outbound-email";
+import { renderTemplate } from "./email-template-rendering";
 import { sanitizeRichText } from "./rich-text";
 export { communicationTypeLabel, selectCommunicationCandidates } from "./communications-model";
 export type { AudienceSelection, CommunicationCandidate } from "./communications-model";

@@ -10,6 +10,7 @@ export type CastingOffer = {
   status: "prepared" | "accepted" | "declined" | "discussion" | "superseded";
   snapshot: OfferSnapshot; expires_at: string; responded_at: string | null; released_at: string | null;
   onboarding_status: string; onboarding_error: string;
+  email_job_id?: string | null; delivery_status?: "not_sent" | "queued" | "processing" | "sent" | "failed" | "uncertain" | "cancelled"; delivery_error?: string; sent_at?: string | null; provider_message_id?: string | null;
   answers?: { typed_name?: string; credit_choice?: string; conflicts?: string; comments?: string };
 };
 export function offerProgress(offers: CastingOffer[]) {

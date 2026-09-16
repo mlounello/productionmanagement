@@ -7,6 +7,7 @@ import { CastingWorkspace } from "@/components/casting-workspace";
 import type { CastingDraft } from "@/lib/casting-drafts";
 import type { CastingOffer } from "@/lib/casting-offers";
 import { CastingOfferTracker } from "@/components/casting-offer-tracker";
+import { SITE_URL } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -38,13 +39,13 @@ export default async function CastingPage({ params }: { params: Promise<{ projec
     allRows((from, to) => supabase.from("project_roles").select("id,name,role_group,allows_multiple_assignments,assignment_capacity").eq("project_id", projectId).order("name").order("id").range(from, to)),
     allRows((from, to) => supabase.from("role_assignments").select("person_id,role_id,status").eq("project_id", projectId).order("id").range(from, to)),
     allRows((from, to) => supabase.from("audition_submissions").select("person_id").eq("project_id", projectId).is("cancelled_at", null).order("id").range(from, to)),
-    allRows((from, to) => supabase.from("casting_offers").select("id,draft_id,project_id,draft_revision,public_token,status,snapshot,answers,expires_at,responded_at,released_at,onboarding_status,onboarding_error").eq("project_id", projectId).order("created_at").order("id").range(from, to)),
+    allRows((from, to) => supabase.from("casting_offers").select("id,draft_id,project_id,draft_revision,public_token,status,snapshot,answers,expires_at,responded_at,released_at,onboarding_status,onboarding_error,email_job_id,delivery_status,delivery_error,sent_at,provider_message_id").eq("project_id", projectId).order("created_at").order("id").range(from, to)),
   ]);
   const error = [drafts, people, roles, assignments, applicants].find((result) => result.error)?.error;
   return <div className="page">
     <header className="page-header"><div><p className="eyebrow">{project.title}</p><h1>Casting & Offers</h1><p className="muted">Prepare the company and review each actor’s proposed role.</p></div><Link className="button secondary" href={`/projects/${projectId}/onboarding`}>Project agreements & schedules</Link></header>
     <ProjectWorkspaceNav projectId={projectId} active="casting" />
-    {offers.error ? <p className="setup-warning">Agreement tracking needs the casting-offer database update. Draft preparation is still available.</p> : <CastingOfferTracker projectId={projectId} offers={(offers.data ?? []) as CastingOffer[]} releaseEnabled={process.env.ENABLE_CASTING_RELEASE === "true"}/>}
+    {offers.error ? <p className="setup-warning">Agreement tracking needs the casting-offer database update. Draft preparation is still available.</p> : <CastingOfferTracker projectId={projectId} offers={(offers.data ?? []) as CastingOffer[]} releaseEnabled={process.env.ENABLE_CASTING_RELEASE === "true"} siteUrl={SITE_URL}/>}
     {error ? <section className="panel"><h2>Casting is not available yet</h2><p role="alert">{drafts.error?.code === "PGRST205" || drafts.error?.code === "42P01" ? "The casting database update needs to be installed. Existing actor records and workflows remain available." : error.message}</p></section> : <CastingWorkspace projectId={projectId} projectTitle={project.title} drafts={(drafts.data ?? []) as CastingDraft[]} people={people.data ?? []} roles={roles.data ?? []} assignments={assignments.data ?? []} applicantIds={(applicants.data ?? []).map((row) => String(row.person_id))} />}
   </div>;
 }

@@ -18,6 +18,8 @@ The second migration passed isolated PostgreSQL assertions for no assignment on 
 
 The third local increment adds owner-only Siena Gmail connection and fixed-recipient testing at `/settings/email-delivery`, encrypted refresh-token storage, owner/session-bound expiring OAuth state with PKCE, strict Siena account verification, and a durable test-receipt log. Connecting does not switch live mail or send actor messages. Setup instructions are in `docs/siena-gmail-setup.md`. The delivery queue, full provider cutover, and administrator emails are still outstanding; this is a connection prerequisite, not completion of phase 5.
 
+The fourth local increment adds a durable Gmail queue, conservative pacing and daily application cap, explicit rate-limit backoff, ambiguous-outcome holds, provider receipts, and a protected retry worker. It adds reviewed individual/bulk casting-offer sending, role-capacity reservation at send time, exact email previews, per-offer delivery state, persistent project notifications, and configurable notification-recipient storage with Mike as the initial fallback. Casting responses, releases, onboarding attention, and offer delivery failures create durable Overview items and administrator email attempts. Company release remains independently disabled.
+
 Enable reviewed cast offers by the end of September 16, with tested public responses, production-manager release control, Siena Gmail sending, and administrator notifications. Extend existing role acceptance, role assignments, publicity, and onboarding rather than introducing a competing lifecycle. Preserve current production agreement text and existing live applicant links.
 
 ## Confirmed product decisions
