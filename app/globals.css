@@ -3164,6 +3164,15 @@ a.readiness-main:hover { color: var(--siena-green); }
 .casting-preview { margin-top: 24px; }
 @media (max-width: 640px) { .casting-row { grid-template-columns: 1fr; gap: 8px; } .casting-row > span:last-child { display: none; } }
 .conflict-response-section { display: grid; gap: 16px; }
+.commitment-response-block { background: #f8fbf9; border: 1px solid #cbdcd3; border-radius: 14px; display: grid; gap: 18px; padding: 20px; }
+.commitment-response-block > h3, .commitment-response-block > h2 { margin: 0; }
+.commitment-agreement { border-top: 1px solid #d8e5de; display: grid; gap: 10px; padding-top: 18px; }
+.commitment-agreement h3, .commitment-agreement h4 { margin: 0; }
+.agreement-check { background: #fff; border: 1px solid #b9d1c4; border-radius: 10px; padding: 14px; }
+.agreement-receipt { align-items: flex-start; background: #eaf6ef; border-radius: 10px; display: flex; gap: 6px; padding: 12px; }
+.mandatory-call-card { background: #fff; }
+.mandatory-call-card select { font-size: 15px; }
+.receipt-block { margin-top: 18px; }
 .conflict-window-stack, .conflict-review-stack { display: grid; gap: 14px; }
 .conflict-window-card { border: 1px solid #cbdcd3; border-radius: 12px; display: grid; gap: 14px; margin: 0; padding: 18px; }
 .conflict-window-card legend { color: #173d2e; font-size: 18px; font-weight: 750; padding: 0 7px; }

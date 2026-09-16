@@ -20,7 +20,9 @@ export async function respondToCastingOfferAction(formData: FormData): Promise<{
   catch (conflictError) { return { error: conflictError instanceof Error ? conflictError.message : "Review rehearsal availability." }; }
   let oneOffConflicts;try{oneOffConflicts=parseOneOffConflicts(String(formData.get("oneOffConflicts")??"[]"),snapshot.conflict_windows??[],snapshot.conflict_calendar??null);}catch(conflictError){return{error:conflictError instanceof Error?conflictError.message:"Review one-off conflicts."};}
   const response = { decision: input.decision, typed_name: input.typedName, comments: input.comments, conflicts: input.conflicts, credit_choice: input.creditChoice,
-    performance_available: formData.get("performanceAvailable") === "on", electronic_signature: formData.get("electronicSignature") === "on",
+    // Granular mandatory-call answers are now the authoritative record. Keep
+    // this compatibility flag true for existing signed-response validation.
+    performance_available: input.decision === "accepted", electronic_signature: formData.get("electronicSignature") === "on",
     conflict_windows: conflictWindows, one_off_conflicts: oneOffConflicts,
     acknowledgements: Object.fromEntries(snapshot.sections.filter((section) => section.requires_response).map((section) => [section.key, formData.get(`ack_${section.key}`) === "on"])) };
   const result = await admin.rpc("respond_to_casting_offer", { offer_token: input.token, response });

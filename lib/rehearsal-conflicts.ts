@@ -39,6 +39,33 @@ export type ConflictWindowAnswer = {
   preference_notes: string;
 };
 
+export type CommitmentGroup = "rehearsal" | "tech" | "performance" | "other";
+
+export function commitmentGroupForWindow(window: ConflictWindowSnapshot): CommitmentGroup {
+  const category = window.schedule_category;
+  if (window.recurrence_type === "weekly" || category === "rehearsal") return "rehearsal";
+  if (category && ["designer_run", "tech", "dress", "photo_call"].includes(category)) return "tech";
+  if (category && ["performance", "strike"].includes(category)) return "performance";
+  if (!category) {
+    const label = window.label.toLowerCase();
+    if (/designer|tech|dress|preview|photo/.test(label)) return "tech";
+    if (/performance|opening|closing|strike/.test(label)) return "performance";
+  }
+  return "other";
+}
+
+export function isMandatoryProductionCall(window: ConflictWindowSnapshot) {
+  return window.recurrence_type === "date" && commitmentGroupForWindow(window) !== "rehearsal";
+}
+
+export function commitmentGroupForSection(section: { key: string; title: string }): CommitmentGroup {
+  const value = `${section.key} ${section.title}`.toLowerCase();
+  if (value.includes("tech") || value.includes("dress")) return "tech";
+  if (value.includes("performance") || value.includes("strike")) return "performance";
+  if (value.includes("rehearsal")) return "rehearsal";
+  return "other";
+}
+
 export type ConflictCalendarSnapshot = { starts_on: string; ends_on: string; excluded_dates: string[] } | null;
 export type OneOffConflict = {
   window_id: string; occurrence_date: string; availability: "partially_available" | "unavailable";
