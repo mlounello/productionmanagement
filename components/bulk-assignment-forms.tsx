@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; allowsMultiple?: boolean; remainingCapacity?: number | null };
 type AssignmentKind = "primary" | "shared" | "understudy" | "alternate";
 type RegularRow = { key: number; roleId: string; personId: string; assignmentKind: AssignmentKind; isGuestArtist: boolean };
 type BudgetRow = { key: number; roleId: string; guestArtistId: string; assignmentKind: AssignmentKind };
@@ -13,6 +13,15 @@ const kinds: Array<{ value: AssignmentKind; label: string }> = [
   { value: "understudy", label: "Understudy" },
   { value: "alternate", label: "Alternate" }
 ];
+
+function availableRoleOptions<T extends { key: number; roleId: string }>(options: Option[], rows: T[], currentKey: number) {
+  return options.filter((option) => {
+    const selectedElsewhere = rows.filter((row) => row.key !== currentKey && row.roleId === option.id).length;
+    if (selectedElsewhere === 0) return true;
+    if (!option.allowsMultiple) return false;
+    return option.remainingCapacity === null || option.remainingCapacity === undefined || selectedElsewhere < option.remainingCapacity;
+  });
+}
 
 function SearchablePicker({
   label,
@@ -127,7 +136,7 @@ export function BulkAssignmentForms({
           <input name="rowsJson" type="hidden" value={JSON.stringify(regularRows)} />
           {regularRows.map((row) => (
             <div className="assignment-create-form" key={`regular-${row.key}`}>
-              <SearchablePicker label="Role" placeholder="Search roles…" value={row.roleId} options={roles.filter((option) => !regularRows.some((item) => item.key !== row.key && item.roleId === option.id))} onChange={(roleId) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId } : item))} />
+              <SearchablePicker label="Role" placeholder="Search roles…" value={row.roleId} options={availableRoleOptions(roles, regularRows, row.key)} onChange={(roleId) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId } : item))} />
               <SearchablePicker label="Person" placeholder="Search people…" value={row.personId} options={people} onChange={(personId) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, personId } : item))} />
               <select aria-label="Assignment type" value={row.assignmentKind} onChange={(event) => setRegularRows((rows) => rows.map((item) => item.key === row.key ? { ...item, assignmentKind: event.target.value as AssignmentKind } : item))}>
                 {kinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
@@ -148,7 +157,7 @@ export function BulkAssignmentForms({
           {budgetRows.map((row) => (
             <div className="assignment-create-form" key={`budget-${row.key}`}>
               <SearchablePicker label="Theatre Budget guest artist" placeholder="Search guest artists…" value={row.guestArtistId} options={guestArtists} onChange={(guestArtistId) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, guestArtistId } : item))} />
-              <SearchablePicker label="Project role" placeholder="Search roles…" value={row.roleId} options={roles.filter((option) => !budgetRows.some((item) => item.key !== row.key && item.roleId === option.id))} onChange={(roleId) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId } : item))} />
+              <SearchablePicker label="Project role" placeholder="Search roles…" value={row.roleId} options={availableRoleOptions(roles, budgetRows, row.key)} onChange={(roleId) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, roleId } : item))} />
               <select aria-label="Assignment type" value={row.assignmentKind} onChange={(event) => setBudgetRows((rows) => rows.map((item) => item.key === row.key ? { ...item, assignmentKind: event.target.value as AssignmentKind } : item))}>
                 {kinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
               </select>

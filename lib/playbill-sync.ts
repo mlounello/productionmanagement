@@ -123,7 +123,7 @@ async function getLinkedDraftShow(supabase: PmClient, projectId: string): Promis
 async function getProjectRole(supabase: PmClient, projectId: string, roleId: string) {
   const { data, error } = await supabase
     .from("project_roles")
-    .select("id, name, role_group")
+    .select("id, name, role_group, allows_multiple_assignments, assignment_capacity")
     .eq("project_id", projectId)
     .eq("id", roleId)
     .maybeSingle();
@@ -210,6 +210,18 @@ export async function syncProjectRoleToPlaybill(projectId: string, roleId: strin
     .eq("project_id", projectId)
     .eq("id", roleId);
   if (roleStatusError) throw new Error(roleStatusError.message);
+  if (role.allows_multiple_assignments) {
+    const { data: assignments, error: assignmentsError } = await supabase
+      .from("role_assignments")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("role_id", roleId)
+      .not("status", "in", "(declined,withdrawn)");
+    if (assignmentsError) throw new Error(assignmentsError.message);
+    for (const assignment of assignments ?? []) {
+      await syncAssignmentToPlaybillWithClient(supabase, projectId, String(assignment.id));
+    }
+  }
   return { show, role, showRole };
 }
 

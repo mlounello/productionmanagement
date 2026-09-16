@@ -11,7 +11,7 @@ import { createDashboardViewAction, deleteDashboardViewAction, saveDashboardLayo
 export const dynamic = "force-dynamic";
 
 type DashboardView = { id: string; owner_user_id: string; name: string; is_default: boolean; visibility: string; layout: unknown; updated_at: string };
-type RoleRow = { id: string; name: string; playbill_sync_status: string };
+type RoleRow = { id: string; name: string; playbill_sync_status: string; allows_multiple_assignments: boolean; assignment_capacity: number | null };
 type AssignmentRow = { id: string; role_id: string; person_id: string; status: string; playbill_sync_status: string; guest_artist_sync_status: string };
 type PublicityRow = { status: string; playbill_sync_status: string };
 
@@ -32,7 +32,7 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   const [{ data: project }, viewsResult, { data: roles }, { data: assignments }, { data: publicity }, { data: notes }] = await Promise.all([
     supabase.from("projects").select("id, title, status, starts_on, ends_on").eq("id", projectId).maybeSingle(),
     supabase.from("project_dashboard_views").select("id, owner_user_id, name, is_default, visibility, layout, updated_at").eq("project_id", projectId).order("is_default", { ascending: false }).order("updated_at", { ascending: false }),
-    supabase.from("project_roles").select("id, name, playbill_sync_status").eq("project_id", projectId),
+    supabase.from("project_roles").select("id, name, playbill_sync_status, allows_multiple_assignments, assignment_capacity").eq("project_id", projectId),
     supabase.from("role_assignments").select("id, role_id, person_id, status, playbill_sync_status, guest_artist_sync_status").eq("project_id", projectId),
     supabase.from("project_publicity_submissions").select("status, playbill_sync_status").eq("project_id", projectId),
     supabase.from("person_notes").select("id, created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(10)
@@ -52,6 +52,13 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   const publicityRows = (publicity ?? []) as PublicityRow[];
   const activeAssignments = assignmentRows.filter((item) => !["declined", "withdrawn"].includes(item.status));
   const filledRoleIds = new Set(activeAssignments.map((item) => item.role_id));
+  const assignmentCounts = new Map<string, number>();
+  for (const assignment of activeAssignments) assignmentCounts.set(assignment.role_id, (assignmentCounts.get(assignment.role_id) ?? 0) + 1);
+  const availableRoleCount = roleRows.filter((role) => {
+    const count = assignmentCounts.get(role.id) ?? 0;
+    if (!role.allows_multiple_assignments) return count === 0;
+    return role.assignment_capacity === null || count < role.assignment_capacity;
+  }).length;
   const integrationWarnings = roleRows.filter((item) => item.playbill_sync_status === "failed").length
     + assignmentRows.filter((item) => item.playbill_sync_status === "failed" || item.guest_artist_sync_status === "failed").length
     + publicityRows.filter((item) => item.playbill_sync_status === "failed").length;
@@ -59,7 +66,7 @@ export default async function ProjectDashboardsPage({ params, searchParams }: { 
   function renderModule(item: DashboardLayoutItem) {
     let content: React.ReactNode;
     if (item.key === "project_summary") content = <div className="dashboard-kpis"><div><strong>{projectRow.status}</strong><span>Status</span></div><div><strong>{formatDate(projectRow.starts_on)}</strong><span>Starts</span></div><div><strong>{formatDate(projectRow.ends_on)}</strong><span>Ends</span></div><div><strong>{new Set(activeAssignments.map((row) => row.person_id)).size}</strong><span>People</span></div></div>;
-    else if (item.key === "role_status") content = <div className="dashboard-kpis"><div><strong>{roleRows.length}</strong><span>Total roles</span></div><div><strong>{filledRoleIds.size}</strong><span>Filled</span></div><div><strong>{Math.max(0, roleRows.length - filledRoleIds.size)}</strong><span>Vacant</span></div></div>;
+    else if (item.key === "role_status") content = <div className="dashboard-kpis"><div><strong>{roleRows.length}</strong><span>Role labels</span></div><div><strong>{filledRoleIds.size}</strong><span>With people</span></div><div><strong>{availableRoleCount}</strong><span>Still available</span></div></div>;
     else if (item.key === "assignment_status") content = <div className="dashboard-kpis"><div><strong>{assignmentRows.length}</strong><span>Total</span></div><div><strong>{assignmentRows.filter((row) => row.status === "accepted").length}</strong><span>Accepted</span></div><div><strong>{assignmentRows.filter((row) => row.status === "offered").length}</strong><span>Offered</span></div></div>;
     else if (item.key === "publicity_status") content = <div className="dashboard-kpis"><div><strong>{publicityRows.length}</strong><span>Prepared</span></div><div><strong>{publicityRows.filter((row) => row.status === "awaiting_person_approval").length}</strong><span>Awaiting person</span></div><div><strong>{publicityRows.filter((row) => row.status === "approved").length}</strong><span>Approved</span></div></div>;
     else if (item.key === "integration_health") content = <div className="dashboard-kpis"><div><strong>{integrationWarnings}</strong><span>Warnings</span></div><div><strong>{publicityRows.filter((row) => row.playbill_sync_status === "synced").length}</strong><span>Publicity synced</span></div></div>;

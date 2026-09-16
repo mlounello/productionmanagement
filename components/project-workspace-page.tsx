@@ -118,6 +118,8 @@ type ProjectRole = {
   playbill_sync_status: string;
   sync_notes: string;
   budget_access_expected: boolean;
+  allows_multiple_assignments: boolean;
+  assignment_capacity: number | null;
 };
 
 type Person = {
@@ -426,7 +428,7 @@ export default async function ProjectWorkspacePage({
       .order("starts_at", { ascending: true }) : Promise.resolve({ data: [] }),
     needsRoles ? supabase
       .from("project_roles")
-      .select("id, name, role_group, department, playbill_sync_status, sync_notes, budget_access_expected")
+      .select("id, name, role_group, department, playbill_sync_status, sync_notes, budget_access_expected, allows_multiple_assignments, assignment_capacity")
       .eq("project_id", typedProject.id)
       .order("role_group", { ascending: true })
       .order("name", { ascending: true }) : Promise.resolve({ data: [] }),
@@ -626,15 +628,18 @@ export default async function ProjectWorkspacePage({
   );
   const rolesById = new Map(roles.map((role) => [role.id, role]));
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]));
-  const filledRoleIds = new Set(
-    assignmentRows
-      .filter((assignment) => !["declined", "withdrawn"].includes(assignment.status))
-      .map((assignment) => assignment.role_id)
-  );
+  const activeAssignmentCountByRoleId = new Map<string, number>();
+  for (const assignment of assignmentRows.filter((item) => !["declined", "withdrawn"].includes(item.status))) {
+    activeAssignmentCountByRoleId.set(assignment.role_id, (activeAssignmentCountByRoleId.get(assignment.role_id) ?? 0) + 1);
+  }
   const assignedPersonIds = new Set(assignmentRows.map((assignment) => assignment.person_id));
   const assignedBudgetArtistIds = new Set(budgetLinks.map((link) => link.external_id));
   const availableAssignmentRoles = roles
-    .filter((role) => !filledRoleIds.has(role.id))
+    .filter((role) => {
+      const assigned = activeAssignmentCountByRoleId.get(role.id) ?? 0;
+      if (!role.allows_multiple_assignments) return assigned === 0;
+      return role.assignment_capacity === null || assigned < role.assignment_capacity;
+    })
     .sort((left, right) => left.name.localeCompare(right.name));
   const sortedPeople = [...peopleRows].sort((left, right) => left.full_name.localeCompare(right.full_name));
   const sortedProjectPersonIds = [...projectPersonIds].sort((left, right) =>
@@ -1179,6 +1184,14 @@ export default async function ProjectWorkspacePage({
                 <small>Require a department-budget decision when filled.</small>
               </span>
             </label>
+            <label className="checkbox-card compact">
+              <input name="allowsMultipleAssignments" type="checkbox" />
+              <span><strong>Multiple people</strong><small>Keep this role available after the first assignment.</small></span>
+            </label>
+            <label className="field">
+              <span>Capacity</span>
+              <input name="assignmentCapacity" type="number" min="2" max="500" placeholder="Unlimited" />
+            </label>
             <button type="submit">Add role</button>
           </form>
           <BulkRoleImport
@@ -1214,6 +1227,7 @@ export default async function ProjectWorkspacePage({
                           {titleCase(role.role_group)}
                           {role.department ? ` · ${role.department}` : ""}
                           {role.budget_access_expected ? " · Budget access expected" : ""}
+                          {role.allows_multiple_assignments ? ` · Multiple people${role.assignment_capacity ? ` (max ${role.assignment_capacity})` : " (unlimited)"}` : " · One person"}
                           {playbillRoleLink ? ` · Playbill ${playbillRoleLink.metadata.vacant ? "vacant" : "filled"}` : ""}
                         </span>
                       </div>
@@ -1253,6 +1267,15 @@ export default async function ProjectWorkspacePage({
                       <label className="checkbox-card">
                         <input name="budgetAccessExpected" type="checkbox" defaultChecked={role.budget_access_expected} />
                         <span><strong>Budget access expected</strong><small>When this role is filled, the assignment must receive department budgets or be marked not required.</small></span>
+                      </label>
+                      <label className="checkbox-card">
+                        <input name="allowsMultipleAssignments" type="checkbox" defaultChecked={role.allows_multiple_assignments} />
+                        <span><strong>Allow multiple people</strong><small>Useful for Ensemble, Stage Crew, Ushers, Band, and other shared role labels.</small></span>
+                      </label>
+                      <label className="field">
+                        <span>Maximum people</span>
+                        <input name="assignmentCapacity" type="number" min="2" max="500" defaultValue={role.assignment_capacity ?? ""} placeholder="Unlimited" />
+                        <small>Leave blank for unlimited. Existing assignments are protected if you later lower this number.</small>
                       </label>
                       <button type="submit">Save role</button>
                     </form>
@@ -1359,7 +1382,11 @@ export default async function ProjectWorkspacePage({
         </div>
         <BulkAssignmentForms
           projectId={typedProject.id}
-          roles={availableAssignmentRoles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
+          roles={availableAssignmentRoles.map((role) => {
+            const assigned = activeAssignmentCountByRoleId.get(role.id) ?? 0;
+            const remainingCapacity = role.allows_multiple_assignments && role.assignment_capacity !== null ? role.assignment_capacity - assigned : null;
+            return { id: role.id, label: `${role.name} (${titleCase(role.role_group)})${role.allows_multiple_assignments ? ` · ${role.assignment_capacity === null ? "multiple" : `${remainingCapacity} opening${remainingCapacity === 1 ? "" : "s"}`}` : ""}`, allowsMultiple: role.allows_multiple_assignments, remainingCapacity };
+          })}
           people={sortedPeople.map((person) => ({ id: person.id, label: `${person.full_name}${assignedPersonIds.has(person.id) ? " *" : ""}${person.email ? ` · ${person.email}` : ""}` }))}
           guestArtists={sortedBudgetGuestArtists.map((artist) => ({
             id: artist.id,
@@ -1368,9 +1395,9 @@ export default async function ProjectWorkspacePage({
           regularAction={bulkCreateRoleAssignmentsAction}
           budgetAction={bulkAssignTheatreBudgetGuestArtistsAction}
         />
-        <InlineHelp title="Guest artists, repeat assignments, and filled roles"><p>Choose Theatre Budget guest artists from the guest-artist search when they already exist there. Use the regular person search for everyone else. Filled roles disappear from the new-assignment list; people remain available for multiple roles, and an asterisk means they already hold at least one role in this project.</p></InlineHelp>
+        <InlineHelp title="Guest artists, repeat assignments, and role capacity"><p>Choose Theatre Budget guest artists from the guest-artist search when they already exist there. Use the regular person search for everyone else. Single-person roles disappear when filled. Multi-person roles remain available until their capacity is reached; an asterisk means a person already holds at least one role in this project.</p></InlineHelp>
         <p className="muted">
-          Filled roles are hidden from new-assignment dropdowns. An asterisk (*) marks people and Theatre Budget guest artists who already hold a role in this project; they remain selectable for additional roles.
+          Filled single-person roles and full multi-person roles are hidden from new-assignment searches. An asterisk (*) marks people and Theatre Budget guest artists who already hold a role in this project; they remain selectable for additional roles.
         </p>
         {theatreBudgetGuestArtists.error ? <p className="setup-warning">{theatreBudgetGuestArtists.error}</p> : null}
         <details className="integration-panel">
@@ -1378,7 +1405,7 @@ export default async function ProjectWorkspacePage({
         <AssignmentCreateForm
           action={createRoleAssignmentAction}
           projectId={typedProject.id}
-          roles={availableAssignmentRoles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})` }))}
+          roles={availableAssignmentRoles.map((role) => ({ id: role.id, label: `${role.name} (${titleCase(role.role_group)})${role.allows_multiple_assignments ? " · multiple people" : ""}` }))}
           people={sortedPeople.map((person) => ({
             id: person.id,
             label: `${person.full_name}${assignedPersonIds.has(person.id) ? " *" : ""}${person.email ? ` · ${person.email}` : ""}`,

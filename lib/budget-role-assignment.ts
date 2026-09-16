@@ -43,15 +43,15 @@ async function replaceBudgetLink(
 
 export async function assignExistingBudgetGuestArtistToRole(input: BudgetRoleAssignmentInput) {
   const supabase = await createSupabaseServerClient();
-  const { data: existingRoleAssignments, error: roleAvailabilityError } = await supabase
-    .from("role_assignments")
-    .select("id, status")
-    .eq("project_id", input.projectId)
-    .eq("role_id", input.roleId);
-  if (roleAvailabilityError) throw new Error(roleAvailabilityError.message);
-  if ((existingRoleAssignments ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
-    throw new Error("That role is already filled. Choose another role.");
-  }
+  const [{ data: role, error: roleError }, { data: existingRoleAssignments, error: roleAvailabilityError }] = await Promise.all([
+    supabase.from("project_roles").select("allows_multiple_assignments, assignment_capacity").eq("project_id", input.projectId).eq("id", input.roleId).maybeSingle(),
+    supabase.from("role_assignments").select("id, person_id, status").eq("project_id", input.projectId).eq("role_id", input.roleId)
+  ]);
+  if (roleError || roleAvailabilityError) throw new Error(roleError?.message ?? roleAvailabilityError?.message ?? "Could not check role capacity.");
+  if (!role) throw new Error("That role was not found.");
+  const activeAssignments = (existingRoleAssignments ?? []).filter((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)));
+  const capacity = role.allows_multiple_assignments ? role.assignment_capacity : 1;
+  if (capacity !== null && activeAssignments.length >= Number(capacity)) throw new Error("That role has reached its assignment capacity.");
   const guestArtist = await fetchTheatreBudgetGuestArtistById(input.guestArtistId);
   if (!guestArtist) throw new Error("The Theatre Budget guest artist was not found.");
 

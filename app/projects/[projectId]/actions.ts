@@ -76,7 +76,9 @@ const projectRoleSchema = z.object({
     "music_band"
   ]),
   departmentId: z.string().uuid().optional(),
-  budgetAccessExpected: z.boolean()
+  budgetAccessExpected: z.boolean(),
+  allowsMultipleAssignments: z.boolean(),
+  assignmentCapacity: z.coerce.number().int().min(2).max(500).optional()
 });
 
 const projectRoleUpdateSchema = z.object({
@@ -100,7 +102,9 @@ const projectRoleUpdateSchema = z.object({
   ]),
   departmentId: z.string().uuid().optional(),
   existingDepartment: z.string().trim().max(120).optional(),
-  budgetAccessExpected: z.boolean()
+  budgetAccessExpected: z.boolean(),
+  allowsMultipleAssignments: z.boolean(),
+  assignmentCapacity: z.coerce.number().int().min(2).max(500).optional()
 });
 
 const personSchema = z.object({
@@ -470,7 +474,9 @@ export async function createProjectRoleAction(formData: FormData) {
     name: requiredString(formData.get("name")),
     roleGroup: requiredString(formData.get("roleGroup")),
     departmentId: optionalString(formData.get("departmentId")),
-    budgetAccessExpected: formData.get("budgetAccessExpected") === "on"
+    budgetAccessExpected: formData.get("budgetAccessExpected") === "on",
+    allowsMultipleAssignments: formData.get("allowsMultipleAssignments") === "on",
+    assignmentCapacity: optionalString(formData.get("assignmentCapacity"))
   });
 
   if (!parsed.success) {
@@ -493,7 +499,9 @@ export async function createProjectRoleAction(formData: FormData) {
     name: input.name,
     role_group: input.roleGroup,
     department: departmentName,
-    budget_access_expected: input.budgetAccessExpected
+    budget_access_expected: input.budgetAccessExpected,
+    allows_multiple_assignments: input.allowsMultipleAssignments,
+    assignment_capacity: input.allowsMultipleAssignments ? input.assignmentCapacity ?? null : null
   }).select("id").single();
 
   if (error) {
@@ -566,7 +574,7 @@ export async function copyProjectRolesAction(formData: FormData) {
   if (parsed.data.projectId === parsed.data.sourceProjectId) redirect(projectErrorPath(parsed.data.projectId, "Choose a different project."));
   const supabase = await createSupabaseServerClient();
   const [{ data: source, error: sourceError }, { data: existing, error: existingError }] = await Promise.all([
-    supabase.from("project_roles").select("name, role_group, department, description, sort_order, budget_access_expected").eq("project_id", parsed.data.sourceProjectId),
+    supabase.from("project_roles").select("name, role_group, department, description, sort_order, budget_access_expected, allows_multiple_assignments, assignment_capacity").eq("project_id", parsed.data.sourceProjectId),
     supabase.from("project_roles").select("name, role_group").eq("project_id", parsed.data.projectId)
   ]);
   if (sourceError) redirect(projectErrorPath(parsed.data.projectId, sourceError.message));
@@ -598,7 +606,9 @@ export async function updateProjectRoleAction(formData: FormData) {
     roleGroup: requiredString(formData.get("roleGroup")),
     departmentId: optionalString(formData.get("departmentId")),
     existingDepartment: optionalString(formData.get("existingDepartment")),
-    budgetAccessExpected: formData.get("budgetAccessExpected") === "on"
+    budgetAccessExpected: formData.get("budgetAccessExpected") === "on",
+    allowsMultipleAssignments: formData.get("allowsMultipleAssignments") === "on",
+    assignmentCapacity: optionalString(formData.get("assignmentCapacity"))
   });
 
   if (!parsed.success) {
@@ -622,7 +632,9 @@ export async function updateProjectRoleAction(formData: FormData) {
       name: input.name,
       role_group: input.roleGroup,
       department: departmentName,
-      budget_access_expected: input.budgetAccessExpected
+      budget_access_expected: input.budgetAccessExpected,
+      allows_multiple_assignments: input.allowsMultipleAssignments,
+      assignment_capacity: input.allowsMultipleAssignments ? input.assignmentCapacity ?? null : null
     })
     .eq("project_id", input.projectId)
     .eq("id", input.id);
@@ -705,14 +717,17 @@ export async function createRoleAssignmentAction(formData: FormData) {
 
   const input = parsed.data;
   const supabase = await createSupabaseServerClient();
-  const { data: existingRoleAssignments, error: roleAvailabilityError } = await supabase
-    .from("role_assignments")
-    .select("id, status")
-    .eq("project_id", input.projectId)
-    .eq("role_id", input.roleId);
-  if (roleAvailabilityError) redirect(projectAssignmentErrorPath(input.projectId, roleAvailabilityError.message));
-  if ((existingRoleAssignments ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
-    redirect(projectAssignmentErrorPath(input.projectId, "That role is already filled. Choose another role."));
+  const [{ data: role, error: roleError }, { data: existingRoleAssignments, error: roleAvailabilityError }] = await Promise.all([
+    supabase.from("project_roles").select("allows_multiple_assignments, assignment_capacity").eq("project_id", input.projectId).eq("id", input.roleId).maybeSingle(),
+    supabase.from("role_assignments").select("id, person_id, status").eq("project_id", input.projectId).eq("role_id", input.roleId)
+  ]);
+  if (roleError || roleAvailabilityError) redirect(projectAssignmentErrorPath(input.projectId, roleError?.message ?? roleAvailabilityError?.message ?? "Could not check role capacity."));
+  if (!role) redirect(projectAssignmentErrorPath(input.projectId, "That role was not found."));
+  const activeAssignments = (existingRoleAssignments ?? []).filter((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)));
+  if (activeAssignments.some((assignment) => String(assignment.person_id) === input.personId)) redirect(projectAssignmentErrorPath(input.projectId, "That person is already assigned to this role."));
+  const capacity = role.allows_multiple_assignments ? role.assignment_capacity : 1;
+  if (capacity !== null && activeAssignments.length >= Number(capacity)) {
+    redirect(projectAssignmentErrorPath(input.projectId, "That role has reached its assignment capacity."));
   }
   const { data: createdAssignment, error } = await supabase.from("role_assignments").insert({
     project_id: input.projectId,
@@ -844,7 +859,10 @@ export async function bulkCreateRoleAssignmentsAction(formData: FormData) {
       failed += 1;
       continue;
     }
-    if ((existing ?? []).some((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)))) {
+    const { data: role } = await supabase.from("project_roles").select("allows_multiple_assignments, assignment_capacity").eq("project_id", projectId.data).eq("id", row.roleId).maybeSingle();
+    const activeAssignments = (existing ?? []).filter((assignment) => !["declined", "withdrawn"].includes(String(assignment.status)));
+    const capacity = role?.allows_multiple_assignments ? role.assignment_capacity : 1;
+    if (!role || activeAssignments.some((assignment) => String(assignment.person_id) === row.personId) || (capacity !== null && activeAssignments.length >= Number(capacity))) {
       skipped += 1;
       continue;
     }
