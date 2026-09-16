@@ -14,7 +14,7 @@ function complete(value:unknown){return Boolean(String(value??"").trim());}
 
 export async function loadProjectReadiness(projectId:string,roleGroups:string[],guestArtistCount:number):Promise<ProjectReadiness>{
   const supabase=await createSupabaseServerClient();
-  const [{data:groupSettings},{data:acceptance},{data:publicity},{data:templates},{data:playbillLink},{data:setupRow},{data:waivers},{data:calendarSettings}]=await Promise.all([
+  const [{data:groupSettings},{data:acceptance},{data:publicity},{data:templates},{data:playbillLink},{data:setupRow},{data:waivers},{data:calendarSettings},{data:conflictWindows}]=await Promise.all([
     supabase.from("project_role_group_google_settings").select("role_group,active_google_group_email,google_group_sync_enabled,welcome_email_enabled,welcome_email_template_id,role_acceptance_email_template_id,propared_role_group_link").eq("project_id",projectId),
     supabase.from("project_role_acceptance_settings").select("auto_send,rehearsal_schedule,tech_schedule,performance_schedule,cast_credit_options,crew_credit_options").eq("project_id",projectId).maybeSingle(),
     supabase.from("project_publicity_settings").select("bio_due_on,headshot_due_on,reminders_enabled,reminder_automation_enabled,reminder_cadence_days,reminder_send_last_day,bio_character_limit").eq("project_id",projectId).maybeSingle(),
@@ -22,7 +22,8 @@ export async function loadProjectReadiness(projectId:string,roleGroups:string[],
     supabase.from("external_links").select("id").eq("local_entity_type","project").eq("local_entity_id",projectId).eq("external_app","playbill").eq("external_schema","app_playbill").eq("external_table","shows").maybeSingle(),
     supabase.from("project_setup_preferences").select("setup_status,uses_role_acceptance,uses_google_groups,uses_propared,uses_playbill,uses_publicity,uses_auditions,uses_budget,selected_role_groups").eq("project_id",projectId).maybeSingle(),
     supabase.from("project_readiness_waivers").select("item_id,reason").eq("project_id",projectId),
-    supabase.from("project_google_calendar_settings").select("enabled,calendar_id,invite_directorial_team,additional_guest_emails,last_tested_at,last_error").eq("project_id",projectId).maybeSingle()
+    supabase.from("project_google_calendar_settings").select("enabled,calendar_id,invite_directorial_team,additional_guest_emails,last_tested_at,last_error").eq("project_id",projectId).maybeSingle(),
+    supabase.from("project_conflict_windows").select("id").eq("project_id",projectId).eq("active",true)
   ]);
   const setup=setupRow as SetupPreferences|null;
   const choice=(key:keyof Omit<SetupPreferences,"setup_status"|"selected_role_groups">)=>setup?Boolean(setup[key]):true;
@@ -39,6 +40,7 @@ export async function loadProjectReadiness(projectId:string,roleGroups:string[],
   const acceptanceItems:ReadinessItem[]=usesRoleAcceptance?[
     {id:"acceptance-settings",title:"Student role-acceptance automation",state:acceptance?.auto_send?"ready":acceptance?"off":"attention",detail:acceptance?acceptance.auto_send?"Automatic sending is enabled when a student is offered a role.":"Configured, but automatic sending is turned off.":"Project acceptance settings have not been saved.",href:`/projects/${projectId}/onboarding`},
     {id:"acceptance-schedule",title:"Agreement schedule",state:acceptance&&(!castAcceptanceNeeded||complete(acceptance.rehearsal_schedule))&&complete(acceptance.tech_schedule)&&complete(acceptance.performance_schedule)?"ready":"attention",detail:acceptance&&(!castAcceptanceNeeded||complete(acceptance.rehearsal_schedule))&&complete(acceptance.tech_schedule)&&complete(acceptance.performance_schedule)?`${castAcceptanceNeeded?"Cast rehearsal, ":""}tech/dress, and performance/strike schedules are set.`:"One or more required schedule sections are empty.",href:`/projects/${projectId}/onboarding`},
+    {id:"rehearsal-conflicts",title:"Rehearsal conflict collection",state:!castAcceptanceNeeded?"optional":(conflictWindows?.length??0)>0?"ready":"attention",detail:!castAcceptanceNeeded?"Cast rehearsal conflicts are not required for the selected role groups.":(conflictWindows?.length??0)>0?`${conflictWindows?.length} active availability window${conflictWindows?.length===1?"":"s"} will be frozen into new Cast offers.`:"Add the recurring or date-specific availability windows actors must complete.",href:`/projects/${projectId}/conflicts`},
     {id:"acceptance-credits",title:"Registration credit choices",state:acceptance&&(!castAcceptanceNeeded||(acceptance.cast_credit_options?.length??0)>0)&&(!crewAcceptanceNeeded||(acceptance.crew_credit_options?.length??0)>0)?"ready":"attention",detail:acceptance&&(!castAcceptanceNeeded||(acceptance.cast_credit_options?.length??0)>0)&&(!crewAcceptanceNeeded||(acceptance.crew_credit_options?.length??0)>0)?"Required Cast and Crew credit choices are configured for this project.":"Add the required project-specific registration credit choices.",href:`/projects/${projectId}/onboarding`}
   ]:[{id:"acceptance-unused",title:"Student role acceptance",state:"optional",detail:"This workflow is not used for this project.",href:`/projects/${projectId}/setup?step=workflow`}];
   const settingsByGroup=new Map((groupSettings??[]).map((row)=>[String(row.role_group),row]));const fallbackAcceptance=activeFor("role_acceptance");

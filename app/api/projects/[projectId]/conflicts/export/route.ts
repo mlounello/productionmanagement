@@ -1,0 +1,17 @@
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth";
+import { conflictWindowDay, shortTime, type ConflictWindowAnswer, type ConflictWindowSnapshot } from "@/lib/rehearsal-conflicts";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+function csv(value:unknown){const text=String(value??"");return/[",\n]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;}
+export async function GET(_:Request,{params}:{params:Promise<{projectId:string}>}){
+  try{await requireUser();const{projectId}=await params;const supabase=await createSupabaseServerClient();const[{data:allowed},{data:admin},{data:project},responses,offers]=await Promise.all([
+    supabase.rpc("has_project_role",{target_project_id:projectId,allowed_roles:["project_manager","producer","department_head","staff"]}),supabase.rpc("has_app_role",{allowed_roles:["admin","producer"]}),supabase.from("projects").select("title").eq("id",projectId).maybeSingle(),
+    supabase.from("rehearsal_conflict_responses").select("id,person_id,source_type,source_id,windows_snapshot,responses,general_notes,submitted_at,people(full_name,email)").eq("project_id",projectId).order("submitted_at",{ascending:false}),supabase.from("casting_offers").select("id,snapshot").eq("project_id",projectId)
+  ]);if(!allowed&&!admin)return NextResponse.json({error:"Project staff access required."},{status:403});if(responses.error)return NextResponse.json({error:responses.error.message},{status:500});
+    const roleByOffer=new Map((offers.data??[]).map((offer)=>[offer.id,String((offer.snapshot as {role_name?:string})?.role_name??"")]));const latest=new Map<string,(typeof responses.data)[number]>();for(const row of responses.data??[])if(!latest.has(row.person_id))latest.set(row.person_id,row);
+    const lines=[["Person","Email","Role","Window","Day or date","Window time","Call type","Maximum call minutes","Availability","Unavailable times","Preferred time","Preference note","Additional notes","Submitted"]];
+    for(const row of latest.values()){const person=row.people as unknown as{full_name?:string;email?:string}|null;const windows=(row.windows_snapshot??[]) as unknown as ConflictWindowSnapshot[];const answers=(row.responses??[]) as unknown as ConflictWindowAnswer[];for(const window of windows){const answer=answers.find((item)=>item.window_id===window.id);if(!answer)continue;lines.push([person?.full_name??"",person?.email??"",row.source_type==="casting_offer"?roleByOffer.get(row.source_id)??"":"",window.label,conflictWindowDay(window),`${shortTime(window.starts_at)}–${shortTime(window.ends_at)}`,window.call_type,String(window.max_call_minutes??""),answer.availability,answer.unavailable.map((range)=>`${shortTime(range.starts_at)}–${shortTime(range.ends_at)}${range.reason?` (${range.reason})`:""}`).join("; "),answer.preference_enabled?`${shortTime(answer.preference_start)}–${shortTime(answer.preference_end)}`:"",answer.preference_notes,row.general_notes,row.submitted_at]);}}
+    const body=lines.map((line)=>line.map(csv).join(",")).join("\r\n");const filename=`${String(project?.title??"production").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}-rehearsal-conflicts.csv`;return new NextResponse(body,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":`attachment; filename="${filename}"`}});
+  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Export failed."},{status:500});}
+}

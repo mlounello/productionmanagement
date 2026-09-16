@@ -3163,3 +3163,17 @@ a.readiness-main:hover { color: var(--siena-green); }
 .casting-covered-roles { max-height: 220px; overflow: auto; display: grid; gap: 8px; }
 .casting-preview { margin-top: 24px; }
 @media (max-width: 640px) { .casting-row { grid-template-columns: 1fr; gap: 8px; } .casting-row > span:last-child { display: none; } }
+.conflict-response-section { display: grid; gap: 16px; }
+.conflict-window-stack, .conflict-review-stack { display: grid; gap: 14px; }
+.conflict-window-card { border: 1px solid #cbdcd3; border-radius: 12px; display: grid; gap: 14px; margin: 0; padding: 18px; }
+.conflict-window-card legend { color: #173d2e; font-size: 18px; font-weight: 750; padding: 0 7px; }
+.conflict-window-card p { margin: 0; }
+.conflict-ranges, .conflict-preference { border-top: 1px solid #e0e9e4; display: grid; gap: 12px; padding-top: 14px; }
+.conflict-ranges h4 { margin: 0; }
+.conflict-range-row { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(120px,.55fr) minmax(120px,.55fr) minmax(220px,1.6fr) auto; }
+.conflict-reason { min-width: 0; }
+.compact-button { min-height: 44px; padding: 10px 14px; }
+.conflict-window-editor { background: #f6faf7; border: 1px solid #cbdcd3; border-radius: 12px; margin-top: 20px; padding: 20px; }
+.conflict-review-row { grid-template-columns: minmax(220px,1fr) auto minmax(320px,1.4fr); }
+.conflict-review-row p { margin: 3px 0; }
+@media (max-width: 800px) { .conflict-range-row, .conflict-review-row { grid-template-columns: 1fr; } }

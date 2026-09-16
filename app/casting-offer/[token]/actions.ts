@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import type { OfferSnapshot } from "@/lib/casting-offers";
 import { notifyProjectManagers } from "@/lib/project-admin-notifications";
+import { parseConflictResponses } from "@/lib/rehearsal-conflicts";
 
 export async function respondToCastingOfferAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   const parsed = z.object({ token: z.string().uuid(), decision: z.enum(["accepted", "declined", "discussion"]), typedName: z.string().trim().min(2).max(180), comments: z.string().max(6000), conflicts: z.string().max(6000), creditChoice: z.string().max(120) }).safeParse({ token: formData.get("token"), decision: formData.get("decision"), typedName: formData.get("typedName"), comments: formData.get("comments") ?? "", conflicts: formData.get("conflicts") ?? "", creditChoice: formData.get("creditChoice") ?? "" });
@@ -14,8 +15,12 @@ export async function respondToCastingOfferAction(formData: FormData): Promise<{
   const { data: offer, error } = await admin.from("casting_offers").select("id,snapshot,project_id,casting_drafts(person_id)").eq("public_token", input.token).maybeSingle();
   if (error || !offer) return { error: "This offer could not be loaded. Please contact production management." };
   const snapshot = offer.snapshot as OfferSnapshot;
+  let conflictWindows;
+  try { conflictWindows = parseConflictResponses(String(formData.get("conflictResponses") ?? "[]"), snapshot.conflict_windows ?? [], input.decision === "accepted"); }
+  catch (conflictError) { return { error: conflictError instanceof Error ? conflictError.message : "Review rehearsal availability." }; }
   const response = { decision: input.decision, typed_name: input.typedName, comments: input.comments, conflicts: input.conflicts, credit_choice: input.creditChoice,
     performance_available: formData.get("performanceAvailable") === "on", electronic_signature: formData.get("electronicSignature") === "on",
+    conflict_windows: conflictWindows,
     acknowledgements: Object.fromEntries(snapshot.sections.filter((section) => section.requires_response).map((section) => [section.key, formData.get(`ack_${section.key}`) === "on"])) };
   const result = await admin.rpc("respond_to_casting_offer", { offer_token: input.token, response });
   if (result.error) return { error: result.error.message };
