@@ -148,3 +148,24 @@ export async function releaseCastingOffersAction(formData: FormData): Promise<{ 
   revalidatePath(`/projects/${parsed.data.projectId}/overview`);
   return { success: `${released} offer${released === 1 ? "" : "s"} released.`, ...(problems.length ? { error: problems.join(" ") } : {}) };
 }
+
+export async function retryCastingOnboardingAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  await requireUser();
+  const parsed = z.object({ projectId: z.string().uuid(), offerId: z.string().uuid() }).safeParse({ projectId: formData.get("projectId"), offerId: formData.get("retryOfferId") });
+  if (!parsed.success) return { error: "Choose a released actor whose onboarding needs attention." };
+  const supabase = await createSupabaseServerClient();
+  const { data: offer, error } = await supabase.from("casting_offers").select("id,status,released_at,acceptance_request_id,snapshot").eq("id", parsed.data.offerId).eq("project_id", parsed.data.projectId).maybeSingle();
+  if (error || !offer) return { error: error?.message ?? "The released offer is unavailable." };
+  if (offer.status !== "accepted" || !offer.released_at || !offer.acceptance_request_id) return { error: "Only a released, accepted offer can resume onboarding." };
+  let warnings: string[] = [];
+  try { warnings = (await completeAcceptedOnboarding(String(offer.acceptance_request_id))).warnings; }
+  catch (failure) { return { error: failure instanceof Error ? failure.message : "Onboarding could not be resumed." }; }
+  const admin = createSupabaseAdminClient();
+  const saved = await admin.from("casting_offers").update({ onboarding_status: warnings.length ? "attention" : "complete", onboarding_error: warnings.join(" ") }).eq("id", offer.id);
+  if (saved.error) return { error: `Onboarding ran, but its result could not be recorded: ${saved.error.message}` };
+  revalidatePath(`/projects/${parsed.data.projectId}/casting`);
+  revalidatePath(`/projects/${parsed.data.projectId}/onboarding`);
+  revalidatePath(`/projects/${parsed.data.projectId}/overview`);
+  const personName = String((offer.snapshot as Record<string, unknown>)?.person_name ?? "Actor");
+  return warnings.length ? { success: `${personName}'s onboarding was checked again.`, error: warnings.join(" ") } : { success: `${personName}'s onboarding is complete.` };
+}

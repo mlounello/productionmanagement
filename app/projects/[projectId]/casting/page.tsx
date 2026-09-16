@@ -39,7 +39,7 @@ export default async function CastingPage({ params }: { params: Promise<{ projec
     allRows((from, to) => supabase.from("project_roles").select("id,name,role_group,allows_multiple_assignments,assignment_capacity").eq("project_id", projectId).order("name").order("id").range(from, to)),
     allRows((from, to) => supabase.from("role_assignments").select("person_id,role_id,status").eq("project_id", projectId).order("id").range(from, to)),
     allRows((from, to) => supabase.from("audition_submissions").select("person_id").eq("project_id", projectId).is("cancelled_at", null).order("id").range(from, to)),
-    allRows((from, to) => supabase.from("casting_offers").select("id,draft_id,project_id,draft_revision,public_token,status,snapshot,answers,expires_at,responded_at,released_at,onboarding_status,onboarding_error,email_job_id,delivery_status,delivery_error,sent_at,provider_message_id").eq("project_id", projectId).order("created_at").order("id").range(from, to)),
+    allRows((from, to) => supabase.from("casting_offers").select("id,draft_id,project_id,draft_revision,public_token,status,snapshot,answers,expires_at,responded_at,released_at,acceptance_request_id,onboarding_status,onboarding_error,email_job_id,delivery_status,delivery_error,sent_at,provider_message_id").eq("project_id", projectId).order("created_at").order("id").range(from, to)),
   ]);
   const error = [drafts, people, roles, assignments, applicants].find((result) => result.error)?.error;
   return <div className="page">

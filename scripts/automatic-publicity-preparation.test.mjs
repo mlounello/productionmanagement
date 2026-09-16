@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../supabase/migrations/202607230300_automatic_assignment_publicity.sql", import.meta.url), "utf8");
+const castingPermissionRepair = readFileSync(new URL("../supabase/migrations/202609160900_casting_publicity_service_role.sql", import.meta.url), "utf8");
 
 test("assignment trigger prepares publicity before the assignment is visible", () => {
   assert.match(migration, /before insert or update of status, project_id, person_id/i);
@@ -18,4 +19,8 @@ test("automatic preparation preserves inactive assignments and existing producti
 test("migration backfills active assignments and marks their onboarding checklist", () => {
   assert.match(migration, /where assignment\.status not in \('declined', 'withdrawn'\)/i);
   assert.match(migration, /jsonb_build_object\('publicity_prepared', true\)/i);
+});
+
+test("casting onboarding can create its missing publicity record", () => {
+  assert.match(castingPermissionRepair, /grant select, insert, update[\s\S]+project_publicity_submissions[\s\S]+to service_role/i);
 });
