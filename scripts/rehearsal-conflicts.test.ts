@@ -19,7 +19,11 @@ test("ranges may end after rehearsal when they overlap",()=>{
   const result=parseConflictResponses(JSON.stringify([{window_id:fixed.id,availability:"partially_available",unavailable_reason:"",unavailable:[{starts_at:"21:30",ends_at:"23:00",reason:"Work"}],preference_enabled:false,preference_start:"",preference_end:"",preference_notes:""}]),[fixed],true);
   assert.equal(result[0].unavailable[0].ends_at,"23:00");
 });
-test("ranges that do not overlap rehearsal are rejected",()=>assert.throws(()=>parseConflictResponses(JSON.stringify([{window_id:fixed.id,availability:"partially_available",unavailable_reason:"",unavailable:[{starts_at:"16:00",ends_at:"17:30",reason:"Class"}],preference_enabled:false,preference_start:"",preference_end:"",preference_notes:""}]),[fixed],true),/must overlap/));
+test("ranges that do not overlap rehearsal are retained for staff review",()=>{
+  const result=parseConflictResponses(JSON.stringify([{window_id:fixed.id,availability:"partially_available",unavailable_reason:"",unavailable:[{starts_at:"16:00",ends_at:"17:30",reason:"Class"}],preference_enabled:false,preference_start:"",preference_end:"",preference_notes:""}]),[fixed],true);
+  assert.equal(result[0].unavailable[0].ends_at,"17:30");
+});
+test("a conflict must end after it begins",()=>assert.throws(()=>parseConflictResponses(JSON.stringify([{window_id:fixed.id,availability:"partially_available",unavailable_reason:"",unavailable:[{starts_at:"20:00",ends_at:"19:00",reason:"Class"}],preference_enabled:false,preference_start:"",preference_end:"",preference_notes:""}]),[fixed],true),/end after/));
 test("preferences are only accepted on configured flexible windows",()=>assert.throws(()=>parseConflictResponses(JSON.stringify([{window_id:fixed.id,availability:"available",unavailable:[],preference_enabled:true,preference_start:"18:00",preference_end:"20:00",preference_notes:""}]),[fixed],true),/preferred time/i));
 test("summary explains flexible maximum call length",()=>assert.match(conflictWindowSummary(flexible),/call lasts no more than 4 hours/));
 test("weekly windows sort Sunday through Saturday",()=>assert.deepEqual(sortConflictWindows([fixed,flexible]).map(row=>row.label),["Sunday window","Monday rehearsal"]));

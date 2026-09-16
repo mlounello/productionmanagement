@@ -82,9 +82,6 @@ const answerSchema = z.object({
 const oneOffSchema = z.object({ window_id: z.string().uuid(), occurrence_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), availability: z.enum(["partially_available", "unavailable"]), unavailable_reason: z.string().trim().min(1).max(500), unavailable: z.array(intervalSchema).max(12) });
 
 function minutes(value: string) { const [hour, minute] = value.slice(0, 5).split(":").map(Number); return hour * 60 + minute; }
-function overlaps(start: number, end: number, windowStart: number, windowEnd: number) {
-  return end > start && start < windowEnd && end > windowStart;
-}
 export function shortTime(value: string) {
   const [hour, minute] = value.slice(0, 5).split(":").map(Number);
   return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`;
@@ -135,7 +132,7 @@ export function parseConflictResponses(raw: string, windows: ConflictWindowSnaps
     if (availability === "partially_available" && !answer.unavailable.length) throw new Error(`Add the times you cannot attend for ${window.label}.`);
     if (availability === "unavailable" && !answer.unavailable_reason) throw new Error(`Explain why you are unavailable for ${window.label}.`);
     for (const interval of answer.unavailable) {
-      if (!overlaps(minutes(interval.starts_at), minutes(interval.ends_at), start, end)) throw new Error(`${window.label} conflict times must overlap the rehearsal window of ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}.`);
+      if (minutes(interval.ends_at) <= minutes(interval.starts_at)) throw new Error(`${window.label} conflict must end after it begins.`);
     }
     if (answer.preference_enabled) {
       if (!window.collect_preferences || !clock.safeParse(answer.preference_start).success || !clock.safeParse(answer.preference_end).success || minutes(answer.preference_start) < start || minutes(answer.preference_end) > end || minutes(answer.preference_end) <= minutes(answer.preference_start)) throw new Error(`${window.label} preferred time must stay between ${shortTime(window.starts_at)} and ${shortTime(window.ends_at)}.`);
@@ -151,6 +148,6 @@ export function parseOneOffConflicts(raw:string, windows:ConflictWindowSnapshot[
   const byId=new Map(windows.map(window=>[window.id,window])), valid=new Set(conflictOccurrences(windows,calendar).map(item=>item.key));
   for(const item of result.data){const window=byId.get(item.window_id);if(!window||!valid.has(`${item.window_id}:${item.occurrence_date}`))throw new Error("A selected rehearsal date is no longer available. Reload and review your one-off conflicts.");
     if(item.availability==="partially_available"&&!item.unavailable.length)throw new Error(`Add the times you cannot attend on ${item.occurrence_date}.`);
-    const start=minutes(window.starts_at),end=minutes(window.ends_at);for(const interval of item.unavailable)if(!overlaps(minutes(interval.starts_at),minutes(interval.ends_at),start,end))throw new Error(`One-off conflict times must overlap the rehearsal window of ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}.`);
+    for(const interval of item.unavailable)if(minutes(interval.ends_at)<=minutes(interval.starts_at))throw new Error("One-off conflict must end after it begins.");
   }return result.data;
 }
