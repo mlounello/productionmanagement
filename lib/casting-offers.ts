@@ -8,6 +8,7 @@ export type OfferSnapshot = {
   schedule: { rehearsals: string; tech_and_dress: string; performances_and_strike: string };
   conflict_windows?: ConflictWindowSnapshot[];
   conflict_calendar?: ConflictCalendarSnapshot;
+  conflict_prefill?: { responses:ConflictWindowAnswer[]; one_off_conflicts:OneOffConflict[]; general_notes:string; source:"audition_submission"; submitted_at:string };
 };
 export type CastingOffer = {
   id: string; draft_id: string; project_id: string; draft_revision: number; public_token: string;

@@ -18,6 +18,32 @@ function format(date:Date){
   return new Intl.DateTimeFormat("en-US",{month:"long",day:"numeric",year:"numeric",timeZone:"UTC"}).format(date);
 }
 
+function iso(date:Date){return date.toISOString().slice(0,10);}
+
+export type SienaScheduleEvent={label:string;event_date:string;starts_at:string;ends_at:string;schedule_category:"designer_run"|"tech"|"dress"|"photo_call"|"performance"|"strike";applies_to:"cast"|"all"};
+
+export function buildSienaProductionEvents(openingOn:string):SienaScheduleEvent[]{
+  const opening=parseDate(openingOn);
+  if(opening.getUTCDay()!==4)throw new Error("The standard Siena production schedule requires a Thursday opening night.");
+  return [
+    ["Designer Run",-8,"18:00","22:00","designer_run","all"],
+    ["Tech 1",-6,"18:00","22:00","tech","all"],
+    ["Tech 2",-5,"10:00","22:00","tech","all"],
+    ["Tech 3",-4,"10:00","22:00","tech","all"],
+    ["Dress 1",-3,"18:00","23:00","dress","all"],
+    ["Dress 2",-2,"18:00","23:00","dress","all"],
+    ["Preview / Photo Call",-1,"18:00","23:00","photo_call","all"],
+    ["Performance 1 (Opening Night)",0,"18:00","23:00","performance","all"],
+    ["Performance 2",1,"18:00","23:00","performance","all"],
+    ["Performance 3",2,"18:00","23:00","performance","all"],
+    ["Performance 4 (Matinee)",3,"13:00","18:00","performance","all"],
+    ["Performance 5",7,"18:00","23:00","performance","all"],
+    ["Performance 6",8,"18:00","23:00","performance","all"],
+    ["Performance 7 (Closing Night)",9,"18:00","23:00","performance","all"],
+    ["Strike",10,"12:00","18:00","strike","all"]
+  ].map(([label,days,starts_at,ends_at,schedule_category,applies_to])=>({label:String(label),event_date:iso(offset(opening,Number(days))),starts_at:String(starts_at),ends_at:String(ends_at),schedule_category:schedule_category as SienaScheduleEvent["schedule_category"],applies_to:applies_to as SienaScheduleEvent["applies_to"]}));
+}
+
 export function isThursdayOpening(value:string){return parseDate(value).getUTCDay()===4;}
 
 export function buildSienaProductionSchedule(openingOn:string){

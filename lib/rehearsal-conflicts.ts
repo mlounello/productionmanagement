@@ -16,6 +16,15 @@ export type ConflictWindowSnapshot = {
   applies_to: "cast" | "crew" | "all";
   required: boolean;
   instructions: string;
+  schedule_category?: ScheduleCategory;
+  location?: string;
+  include_in_audition?: boolean;
+};
+
+export const scheduleCategories = ["rehearsal", "designer_run", "tech", "dress", "photo_call", "performance", "strike", "other"] as const;
+export type ScheduleCategory = typeof scheduleCategories[number];
+export const scheduleCategoryLabels: Record<ScheduleCategory,string> = {
+  rehearsal:"Rehearsal",designer_run:"Designer Run",tech:"Tech",dress:"Dress Rehearsal",photo_call:"Preview / Photo Call",performance:"Performance",strike:"Strike",other:"Other"
 };
 
 export type ConflictInterval = { starts_at: string; ends_at: string; reason: string };
@@ -56,7 +65,8 @@ export function conflictWindowDay(window: ConflictWindowSnapshot) {
 }
 export function conflictWindowSummary(window: ConflictWindowSnapshot) {
   const duration = window.call_type === "flexible" && window.max_call_minutes ? ` · call lasts no more than ${window.max_call_minutes / 60 >= 1 ? `${window.max_call_minutes / 60} hour${window.max_call_minutes === 60 ? "" : "s"}` : `${window.max_call_minutes} minutes`}` : "";
-  return `${conflictWindowDay(window)} · ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}${duration}`;
+  const location=window.location?.trim()?` · ${window.location.trim()}`:"";
+  return `${conflictWindowDay(window)} · ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}${location}${duration}`;
 }
 export function sortConflictWindows<T extends ConflictWindowSnapshot>(windows: T[]) {
   return [...windows].sort((a,b) => {
@@ -73,7 +83,7 @@ export function conflictOccurrences(windows: ConflictWindowSnapshot[], calendar:
   const cursor=new Date(`${calendar.starts_on}T12:00:00Z`), end=new Date(`${calendar.ends_on}T12:00:00Z`);
   for(;cursor<=end;cursor.setUTCDate(cursor.getUTCDate()+1)){
     const date=cursor.toISOString().slice(0,10);if(excluded.has(date))continue;
-    for(const window of windows)if((window.recurrence_type==="weekly"&&window.day_of_week===cursor.getUTCDay())||(window.recurrence_type==="date"&&window.event_date===date))result.push({key:`${window.id}:${date}`,date,window});
+    for(const window of windows)if(window.recurrence_type==="weekly"&&window.day_of_week===cursor.getUTCDay())result.push({key:`${window.id}:${date}`,date,window});
   }
   return result;
 }

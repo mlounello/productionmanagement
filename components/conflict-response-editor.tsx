@@ -6,18 +6,18 @@ import { conflictOccurrences, conflictWindowSummary, sortConflictWindows, type C
 function blank(windowId:string):ConflictWindowAnswer{return{window_id:windowId,availability:"",unavailable_reason:"",unavailable:[{starts_at:"",ends_at:"",reason:""}],preference_enabled:false,preference_start:"",preference_end:"",preference_notes:""};}
 function blankOneOff(key:string,windows:ConflictWindowSnapshot[]):OneOffConflict{const[windowId,date]=key.split(":");const window=windows.find(item=>item.id===windowId);return{window_id:windowId,occurrence_date:date,availability:"unavailable",unavailable_reason:"",unavailable:[{starts_at:window?.starts_at.slice(0,5)??"",ends_at:window?.ends_at.slice(0,5)??"",reason:""}]};}
 
-export function ConflictResponseEditor({windows,calendar,name="conflictResponses"}:{windows:ConflictWindowSnapshot[];calendar?:ConflictCalendarSnapshot;name?:string}){
+export function ConflictResponseEditor({windows,calendar,name="conflictResponses",oneOffName="oneOffConflicts",initialAnswers=[],initialOneOff=[]}:{windows:ConflictWindowSnapshot[];calendar?:ConflictCalendarSnapshot;name?:string;oneOffName?:string;initialAnswers?:ConflictWindowAnswer[];initialOneOff?:OneOffConflict[]}){
   const ordered=useMemo(()=>sortConflictWindows(windows),[windows]);
   const occurrences=useMemo(()=>conflictOccurrences(ordered,calendar??null),[ordered,calendar]);
-  const[answers,setAnswers]=useState<Record<string,ConflictWindowAnswer>>(()=>Object.fromEntries(ordered.map(window=>[window.id,blank(window.id)])));
-  const[oneOff,setOneOff]=useState<OneOffConflict[]>([]);const[selectedOccurrence,setSelectedOccurrence]=useState("");
+  const[answers,setAnswers]=useState<Record<string,ConflictWindowAnswer>>(()=>Object.fromEntries(ordered.map(window=>[window.id,initialAnswers.find(answer=>answer.window_id===window.id)??blank(window.id)])));
+  const[oneOff,setOneOff]=useState<OneOffConflict[]>(initialOneOff);const[selectedOccurrence,setSelectedOccurrence]=useState("");
   const serialized=useMemo(()=>JSON.stringify(Object.values(answers).filter(answer=>answer.availability).map(answer=>({...answer,unavailable:answer.availability==="partially_available"?answer.unavailable:[]}))),[answers]);
   const oneOffSerialized=useMemo(()=>JSON.stringify(oneOff.map(item=>({...item,unavailable:item.availability==="partially_available"?item.unavailable.map(range=>({...range,reason:item.unavailable_reason})):[]}))),[oneOff]);
   const update=(id:string,change:Partial<ConflictWindowAnswer>)=>setAnswers(current=>({...current,[id]:{...current[id],...change}}));
   const addOneOff=()=>{if(!selectedOccurrence||oneOff.some(item=>`${item.window_id}:${item.occurrence_date}`===selectedOccurrence))return;setOneOff(current=>[...current,blankOneOff(selectedOccurrence,ordered)]);setSelectedOccurrence("");};
   return <section className="conflict-response-section">
-    <input type="hidden" name={name} value={serialized}/><input type="hidden" name="oneOffConflicts" value={oneOffSerialized}/>
-    <div><h3>Recurring rehearsal availability</h3><p className="muted">For each day, tell us whether you are fully available, partially available, or unavailable. When entering times, list the times you <strong>cannot attend</strong>—not the times you are free.</p></div>
+    <input type="hidden" name={name} value={serialized}/><input type="hidden" name={oneOffName} value={oneOffSerialized}/>
+    <div><h3>Production schedule availability</h3><p className="muted">Review every recurring rehearsal and dated production call. Tell us whether you are fully available, partially available, or unavailable. When entering times, list the times you <strong>cannot attend</strong>—not the times you are free.</p></div>
     <div className="conflict-window-stack">{ordered.map(window=>{const answer=answers[window.id];return <fieldset className="conflict-window-card" key={window.id}>
       <legend>{window.label}{window.required?" *":""}</legend><p><strong>{conflictWindowSummary(window)}</strong><br/><span className="muted">{window.call_type==="fixed"?"Scheduled rehearsal call":"Flexible rehearsal window"}{window.instructions?` · ${window.instructions}`:""}</span></p>
       <label className="field"><span>My availability</span><select required={window.required} value={answer.availability} onChange={event=>update(window.id,{availability:event.target.value as ConflictWindowAnswer["availability"]})}><option value="">Choose one</option><option value="fully_available">Fully available</option><option value="partially_available">Partially available</option><option value="unavailable">Unavailable for the entire window</option></select></label>

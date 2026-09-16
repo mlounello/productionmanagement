@@ -13,6 +13,7 @@
     "test:casting-email": "node --experimental-strip-types --test scripts/casting-offer-email.test.ts",
     "test:audition-casting-bridge": "node --experimental-strip-types --test scripts/audition-casting-bridge.test.ts",
     "test:rehearsal-conflicts": "node --experimental-strip-types --test scripts/rehearsal-conflicts.test.ts",
+    "test:production-schedule": "node --experimental-strip-types --test scripts/production-schedule.test.ts",
     "test:google-groups": "node --test scripts/google-group-naming.test.mjs",
     "test:google-welcome-policy": "node --experimental-strip-types --test scripts/google-group-welcome-policy.test.ts",
     "test:welcome-email-layout": "node --experimental-strip-types --test scripts/role-group-welcome-email.test.ts",

@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { applyProfileEnrichment, getVerifiedProfile } from "@/lib/profile-intake";
 import { syncAuditionCalendarSlots, syncAuditionSubmissionCalendar } from "@/lib/audition-calendar-sync";
+import { parseConflictResponses, parseOneOffConflicts, type ConflictCalendarSnapshot, type ConflictWindowSnapshot } from "@/lib/rehearsal-conflicts";
 
 const uuid = z.string().uuid();
 
@@ -25,7 +26,7 @@ export async function submitAuditionAction(formData: FormData): Promise<Audition
   } catch {
     return { ok: false, error: "The audition form could not be read. Please refresh the page and try again." };
   }
-  const answers: Record<string, string | string[]> = {};
+  const answers: Record<string, unknown> = {};
   const bookings:Record<string,string>={};
   for (const field of fields) {
     if (field.field_type === "file") continue;
@@ -41,6 +42,16 @@ export async function submitAuditionAction(formData: FormData): Promise<Audition
   const { data: form, error: formError } = await admin.from("audition_forms").select("id, project_id").eq("public_token", token).maybeSingle();
   if(formError){console.error("Audition form verification failed",{token,error:formError.message});return {ok:false,error:"We could not verify this audition form. No submission was created. Please contact production staff."};}
   if (!form) return {ok:false,error:"Audition form is unavailable."};
+  const[{data:rawWindows,error:windowError},{data:rawCalendar,error:calendarError}]=await Promise.all([
+    admin.from("project_conflict_windows").select("id,label,recurrence_type,day_of_week,event_date,starts_at,ends_at,call_type,max_call_minutes,collect_preferences,applies_to,required,instructions,schedule_category,location,include_in_audition").eq("project_id",form.project_id).eq("active",true).eq("include_in_audition",true).in("applies_to",["cast","all"]).order("sort_order").order("event_date").order("starts_at"),
+    admin.from("project_conflict_calendars").select("starts_on,ends_on,excluded_dates").eq("project_id",form.project_id).maybeSingle()
+  ]);
+  if(windowError||calendarError)return{ok:false,error:"The production schedule could not be verified. No submission was created; please try again."};
+  const conflictWindows=(rawWindows??[]) as ConflictWindowSnapshot[],conflictCalendar=(rawCalendar??null) as ConflictCalendarSnapshot;
+  let conflictResponses,oneOffConflicts;
+  try{conflictResponses=parseConflictResponses(String(formData.get("auditionConflictResponses")??"[]"),conflictWindows,true);oneOffConflicts=parseOneOffConflicts(String(formData.get("auditionOneOffConflicts")??"[]"),conflictWindows,conflictCalendar);}
+  catch(conflictError){return{ok:false,error:conflictError instanceof Error?conflictError.message:"Review your production schedule conflicts."};}
+  answers.production_schedule_conflicts={windows_snapshot:conflictWindows,calendar_snapshot:conflictCalendar,responses:conflictResponses,one_off_conflicts:oneOffConflicts};
   const submittedEmail = String(answers.email ?? "").trim().toLowerCase();
   const { data: existingBefore } = submittedEmail ? await admin.from("people").select("id").ilike("email", submittedEmail).limit(1).maybeSingle() : { data: null };
   const verified = await getVerifiedProfile(String(formData.get("profileSession") ?? ""), "audition", String(form.id));
@@ -74,6 +85,7 @@ export async function submitAuditionAction(formData: FormData): Promise<Audition
       console.error("Audition profile enrichment failed", { submissionId: result.submission_id, error: profileError instanceof Error ? profileError.message : "Unknown error" });
     }
   }
+  if(personId&&conflictWindows.length){const saved=await admin.from("rehearsal_conflict_responses").upsert({project_id:form.project_id,person_id:personId,source_type:"audition_submission",source_id:result.submission_id,windows_snapshot:conflictWindows,responses:conflictResponses,one_off_conflicts:oneOffConflicts,general_notes:String(answers.conflicts??""),submitted_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:"source_type,source_id"});if(saved.error)console.error("Audition schedule conflicts were retained in answers but could not be indexed",{submissionId:result.submission_id,error:saved.error.message});}
   let calendarWarning="";
   try{const calendar=await syncAuditionSubmissionCalendar(result.submission_id);calendarWarning=calendar.warnings.join(" ");}catch(error){calendarWarning=error instanceof Error?error.message:"Google Calendar invitations could not be created.";}
   return {ok:true,accessToken:result.access_token,...(calendarWarning?{warning:"Your audition was saved, but the calendar invitation could not be sent yet. Production staff can retry it for you."}:{})};

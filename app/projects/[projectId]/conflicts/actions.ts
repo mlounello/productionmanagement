@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { buildSienaProductionEvents } from "@/lib/siena-production-schedule";
+import { scheduleCategories } from "@/lib/rehearsal-conflicts";
 
 const windowSchema = z.object({
   projectId: z.string().uuid(), id: z.string().uuid().optional(), label: z.string().trim().min(1).max(160),
   recurrenceType: z.enum(["weekly", "date"]), dayOfWeek: z.coerce.number().int().min(0).max(6).optional(), eventDate: z.string().optional(),
   startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), endsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   callType: z.enum(["fixed", "flexible"]), maxCallMinutes: z.coerce.number().int().min(15).max(720).optional(),
-  collectPreferences: z.boolean(), appliesTo: z.enum(["cast", "crew", "all"]), required: z.boolean(), instructions: z.string().trim().max(2000)
+  collectPreferences: z.boolean(), appliesTo: z.enum(["cast", "crew", "all"]), required: z.boolean(), instructions: z.string().trim().max(2000),
+  scheduleCategory:z.enum(scheduleCategories),location:z.string().trim().max(500),includeInAudition:z.boolean()
 });
 function mins(value: string) { const [h,m] = value.split(":").map(Number); return h*60+m; }
 async function manager(projectId: string) {
@@ -23,7 +26,8 @@ export async function saveConflictWindowAction(formData: FormData): Promise<{err
   const parsed=windowSchema.safeParse({
     projectId:formData.get("projectId"),id:formData.get("id")||undefined,label:formData.get("label"),recurrenceType:formData.get("recurrenceType"),
     dayOfWeek:formData.get("recurrenceType")==="weekly"?formData.get("dayOfWeek"):undefined,eventDate:String(formData.get("eventDate")??""),startsAt:formData.get("startsAt"),endsAt:formData.get("endsAt"),callType:formData.get("callType"),
-    maxCallMinutes:formData.get("callType")==="flexible"?formData.get("maxCallMinutes"):undefined,collectPreferences:formData.get("collectPreferences")==="on",appliesTo:formData.get("appliesTo"),required:formData.get("required")==="on",instructions:formData.get("instructions")??""
+    maxCallMinutes:formData.get("callType")==="flexible"?formData.get("maxCallMinutes"):undefined,collectPreferences:formData.get("collectPreferences")==="on",appliesTo:formData.get("appliesTo"),required:formData.get("required")==="on",instructions:formData.get("instructions")??"",
+    scheduleCategory:formData.get("scheduleCategory")??"rehearsal",location:formData.get("location")??"",includeInAudition:formData.get("includeInAudition")==="on"
   });
   if(!parsed.success)return{error:parsed.error.issues[0]?.message??"Review the availability window."};
   const input=parsed.data,duration=mins(input.endsAt)-mins(input.startsAt);
@@ -31,7 +35,7 @@ export async function saveConflictWindowAction(formData: FormData): Promise<{err
   if(input.callType==="flexible"&&(!input.maxCallMinutes||input.maxCallMinutes>duration))return{error:"Maximum call length must fit inside the flexible window."};
   if(input.recurrenceType==="date"&&!/^\d{4}-\d{2}-\d{2}$/.test(input.eventDate??""))return{error:"Choose the specific date."};
   try{
-    const supabase=await manager(input.projectId); const values={project_id:input.projectId,label:input.label,recurrence_type:input.recurrenceType,day_of_week:input.recurrenceType==="weekly"?input.dayOfWeek:null,event_date:input.recurrenceType==="date"?input.eventDate:null,starts_at:input.startsAt,ends_at:input.endsAt,call_type:input.callType,max_call_minutes:input.callType==="flexible"?input.maxCallMinutes:null,collect_preferences:input.callType==="flexible"&&input.collectPreferences,applies_to:input.appliesTo,required:input.required,instructions:input.instructions,active:true};
+    const supabase=await manager(input.projectId); const values={project_id:input.projectId,label:input.label,recurrence_type:input.recurrenceType,day_of_week:input.recurrenceType==="weekly"?input.dayOfWeek:null,event_date:input.recurrenceType==="date"?input.eventDate:null,starts_at:input.startsAt,ends_at:input.endsAt,call_type:input.callType,max_call_minutes:input.callType==="flexible"?input.maxCallMinutes:null,collect_preferences:input.callType==="flexible"&&input.collectPreferences,applies_to:input.appliesTo,required:input.required,instructions:input.instructions,schedule_category:input.scheduleCategory,location:input.location,include_in_audition:input.includeInAudition,active:true};
     const result=input.id?await supabase.from("project_conflict_windows").update(values).eq("id",input.id).eq("project_id",input.projectId):await supabase.from("project_conflict_windows").insert(values);
     if(result.error)return{error:result.error.message}; revalidatePath(`/projects/${input.projectId}/conflicts`); return{success:input.id?"Availability window updated.":"Availability window added."};
   }catch(error){return{error:error instanceof Error?error.message:"Availability window could not be saved."};}
@@ -57,4 +61,15 @@ export async function saveConflictCalendarAction(formData:FormData):Promise<{err
   if(!parsed.success)return{error:"Choose the first and last rehearsal dates."};if(parsed.data.endsOn<parsed.data.startsOn)return{error:"The last rehearsal date must be on or after the first."};
   const excluded=[...new Set(parsed.data.excludedDates.split(/[,\s]+/).map(value=>value.trim()).filter(Boolean))];if(excluded.some(value=>!/^\d{4}-\d{2}-\d{2}$/.test(value)))return{error:"Review the blocked dates."};
   try{const supabase=await manager(parsed.data.projectId);const{error}=await supabase.from("project_conflict_calendars").upsert({project_id:parsed.data.projectId,starts_on:parsed.data.startsOn,ends_on:parsed.data.endsOn,excluded_dates:excluded},{onConflict:"project_id"});if(error)return{error:error.message};revalidatePath(`/projects/${parsed.data.projectId}/conflicts`);return{success:"Rehearsal period and blocked dates saved."};}catch(error){return{error:error instanceof Error?error.message:"Rehearsal period could not be saved."};}
+}
+
+export async function addDatedScheduleEventsAction(formData:FormData):Promise<{error?:string;success?:string}>{
+  const parsed=z.object({projectId:z.string().uuid(),label:z.string().trim().min(1).max(160),category:z.enum(scheduleCategories),dates:z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1).max(40),startsAt:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),endsAt:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),appliesTo:z.enum(["cast","crew","all"]),location:z.string().trim().max(500),required:z.boolean(),includeInAudition:z.boolean(),instructions:z.string().trim().max(2000)}).safeParse({projectId:formData.get("projectId"),label:formData.get("label"),category:formData.get("category"),dates:formData.getAll("dates").map(String).filter(Boolean),startsAt:formData.get("startsAt"),endsAt:formData.get("endsAt"),appliesTo:formData.get("appliesTo"),location:formData.get("location")??"",required:formData.get("required")==="on",includeInAudition:formData.get("includeInAudition")==="on",instructions:formData.get("instructions")??""});
+  if(!parsed.success)return{error:parsed.error.issues[0]?.message??"Review the dated calls."};const input=parsed.data;if(mins(input.endsAt)<=mins(input.startsAt))return{error:"The ending time must be later than the starting time."};
+  try{const supabase=await manager(input.projectId);const dates=[...new Set(input.dates)].sort();const rows=dates.map((date,index)=>({project_id:input.projectId,label:dates.length===1?input.label:`${input.label} ${index+1}`,recurrence_type:"date",day_of_week:null,event_date:date,starts_at:input.startsAt,ends_at:input.endsAt,call_type:"fixed",max_call_minutes:null,collect_preferences:false,applies_to:input.appliesTo,required:input.required,instructions:input.instructions,schedule_category:input.category,location:input.location,include_in_audition:input.includeInAudition,active:true,sort_order:index}));const{error}=await supabase.from("project_conflict_windows").insert(rows);if(error)return{error:error.message};revalidatePath(`/projects/${input.projectId}/conflicts`);revalidatePath(`/projects/${input.projectId}/onboarding`);return{success:`Added ${rows.length} dated production call${rows.length===1?"":"s"}.`};}catch(error){return{error:error instanceof Error?error.message:"Dated calls could not be added."};}
+}
+
+export async function generateStructuredSienaScheduleAction(formData:FormData):Promise<{error?:string;success?:string}>{
+  const parsed=z.object({projectId:z.string().uuid(),openingOn:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(Object.fromEntries(formData));if(!parsed.success)return{error:"Choose a valid opening night."};
+  try{const supabase=await manager(parsed.data.projectId);const events=buildSienaProductionEvents(parsed.data.openingOn);const{data:existing,error:readError}=await supabase.from("project_conflict_windows").select("event_date,schedule_category,label").eq("project_id",parsed.data.projectId).eq("active",true).neq("schedule_category","rehearsal");if(readError)return{error:readError.message};const keys=new Set((existing??[]).map(row=>`${row.event_date}:${row.schedule_category}:${row.label}`));const missing=events.filter(event=>!keys.has(`${event.event_date}:${event.schedule_category}:${event.label}`)).map((event,index)=>({project_id:parsed.data.projectId,...event,recurrence_type:"date",day_of_week:null,call_type:"fixed",max_call_minutes:null,collect_preferences:false,required:true,instructions:"Review this required production call and report any conflict.",location:"",include_in_audition:true,active:true,sort_order:index}));if(!missing.length)return{success:"The standard dated production calls are already present."};const{error}=await supabase.from("project_conflict_windows").insert(missing);if(error)return{error:error.message};await supabase.from("projects").update({opening_on:parsed.data.openingOn}).eq("id",parsed.data.projectId);revalidatePath(`/projects/${parsed.data.projectId}/conflicts`);revalidatePath(`/projects/${parsed.data.projectId}/onboarding`);return{success:`Added ${missing.length} standard tech, dress, performance, photo-call, and strike events.`};}catch(error){return{error:error instanceof Error?error.message:"The standard production schedule could not be generated."};}
 }

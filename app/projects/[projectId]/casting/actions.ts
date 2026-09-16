@@ -60,10 +60,16 @@ export async function prepareCastingOfferAction(formData: FormData): Promise<{ e
   const parsed = z.object({ projectId: z.string().uuid(), id: z.string().uuid(), revision: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Reload this casting draft." };
   const supabase = await createSupabaseServerClient();
-  const { data: draft } = await supabase.from("casting_drafts").select("id").eq("id", parsed.data.id).eq("project_id", parsed.data.projectId).maybeSingle();
+  const { data: draft } = await supabase.from("casting_drafts").select("id,person_id").eq("id", parsed.data.id).eq("project_id", parsed.data.projectId).maybeSingle();
   if (!draft) return { error: "Draft unavailable or casting manager access required." };
   const { error } = await supabase.rpc("prepare_casting_offer", { target_draft: parsed.data.id, expected_revision: parsed.data.revision });
   if (error) return { error: error.message };
+  const admin=createSupabaseAdminClient();
+  const[{data:offer},{data:auditionConflict}]=await Promise.all([
+    admin.from("casting_offers").select("id,snapshot").eq("draft_id",parsed.data.id).eq("draft_revision",parsed.data.revision).maybeSingle(),
+    admin.from("rehearsal_conflict_responses").select("responses,one_off_conflicts,general_notes,windows_snapshot,submitted_at").eq("project_id",parsed.data.projectId).eq("person_id",draft.person_id).eq("source_type","audition_submission").order("submitted_at",{ascending:false}).limit(1).maybeSingle()
+  ]);
+  if(offer&&auditionConflict){const snapshot=offer.snapshot as unknown as Record<string,unknown>;const activeIds=new Set(((snapshot.conflict_windows??[]) as Array<{id?:string}>).map(window=>String(window.id??"")));const responses=((auditionConflict.responses??[]) as Array<{window_id?:string}>).filter(answer=>activeIds.has(String(answer.window_id??"")));const oneOff=((auditionConflict.one_off_conflicts??[]) as Array<{window_id?:string}>).filter(answer=>activeIds.has(String(answer.window_id??"")));await admin.from("casting_offers").update({snapshot:{...snapshot,conflict_prefill:{responses,one_off_conflicts:oneOff,general_notes:auditionConflict.general_notes??"",source:"audition_submission",submitted_at:auditionConflict.submitted_at}}}).eq("id",offer.id).eq("status","prepared");}
   revalidatePath(`/projects/${parsed.data.projectId}/casting`);
   return { success: "Agreement prepared with a secure response link. No email has been sent." };
 }

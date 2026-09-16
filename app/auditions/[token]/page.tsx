@@ -7,6 +7,9 @@ import { AuditionSlotSelector } from "@/components/audition-slot-selector";
 import { AuditionSubmissionForm } from "@/components/audition-submission-form";
 import { PrintButton } from "@/components/print-button";
 import { auditionUploadSizeLabel } from "@/lib/audition-upload";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { ConflictResponseEditor } from "@/components/conflict-response-editor";
+import type { ConflictCalendarSnapshot, ConflictWindowSnapshot } from "@/lib/rehearsal-conflicts";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +46,13 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
       ? await supabase.rpc("get_audition_form_preview",{form_token:token})
       : await supabase.rpc("get_public_audition_form", { form_token: token });
   if (error || !data) notFound();
-  const payload = data as { form: { id: string; title: string; description: string }; project: { title: string }; schedule?: ProjectSchedule; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
+  const payload = data as { form: { id: string; title: string; description: string }; project: { id:string; title: string }; schedule?: ProjectSchedule; sections: Section[]; fields: Field[]; roles: Role[]; slots: Slot[]; sessions: Session[] };
+  const admin=createSupabaseAdminClient();
+  const[{data:scheduleWindows},{data:scheduleCalendar}]=await Promise.all([
+    admin.from("project_conflict_windows").select("id,label,recurrence_type,day_of_week,event_date,starts_at,ends_at,call_type,max_call_minutes,collect_preferences,applies_to,required,instructions,schedule_category,location,include_in_audition").eq("project_id",payload.project.id).eq("active",true).eq("include_in_audition",true).in("applies_to",["cast","all"]).order("sort_order").order("event_date").order("starts_at"),
+    admin.from("project_conflict_calendars").select("starts_on,ends_on,excluded_dates").eq("project_id",payload.project.id).maybeSingle()
+  ]);
+  const auditionConflictWindows=(scheduleWindows??[]) as ConflictWindowSnapshot[];const auditionConflictCalendar=(scheduleCalendar??null) as ConflictCalendarSnapshot;
   const profile = preview?null:await getVerifiedProfile(query?.profile, "audition", payload.form.id);
   const profileValues: Record<string, string | string[]> = profile ? {
     email: profile.email, full_name: profile.full_name, preferred_name: profile.preferred_name, pronouns: profile.pronouns, phone: profile.phone,
@@ -86,7 +95,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
         if (!fields.length) return null;
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
-          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Staff must add it under Project Onboarding before this form can collect a meaningful schedule acknowledgement.</p>}</>:null}
+          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Staff must add it under Schedule &amp; Conflicts before this form can collect meaningful availability.</p>}{auditionConflictWindows.length?<ConflictResponseEditor windows={auditionConflictWindows} calendar={auditionConflictCalendar} name="auditionConflictResponses" oneOffName="auditionOneOffConflicts"/>:null}</>:null}
           <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{fieldHelpText(field) ? <small>{fieldHelpText(field)}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
@@ -97,7 +106,7 @@ export default async function PublicAuditionPage({ params, searchParams }: { par
         if (!fields.length) return null;
         return <section className={`panel audition-form-section ${fields.some((field) => field.sensitivity === "sensitive") ? "sensitive-section" : ""}`} key={section.id}>
           <h2>{section.title}</h2><p className="muted">{section.description}</p>
-          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Please contact production staff before confirming your availability.</p>}</>:null}
+          {section.section_key==="schedule"?<>{hasProjectSchedule(payload.schedule)?<div className="audition-schedule"><p><strong>Review these project dates before confirming your availability.</strong></p><ProjectScheduleDisplay schedule={payload.schedule!}/></div>:<p className="setup-warning">The project schedule has not been configured yet. Please contact production staff before confirming your availability.</p>}{auditionConflictWindows.length?<ConflictResponseEditor windows={auditionConflictWindows} calendar={auditionConflictCalendar} name="auditionConflictResponses" oneOffName="auditionOneOffConflicts"/>:null}</>:null}
           <div className="stacked-form">{fields.map((field) => <label className="field audition-field" key={field.id}><span>{field.label}{field.required ? " *" : ""}</span>{fieldHelpText(field) ? <small>{fieldHelpText(field)}</small> : null}{renderField(field)}</label>)}</div>
         </section>;
       })}
