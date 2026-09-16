@@ -51,3 +51,10 @@ export async function createStandardConflictWindowsAction(formData: FormData): P
     if(!missing.length)return{success:"The standard Siena availability windows are already configured."};const{error}=await supabase.from("project_conflict_windows").insert(missing);if(error)return{error:error.message};revalidatePath(`/projects/${parsed.data.projectId}/conflicts`);return{success:`Added ${missing.length} standard availability window${missing.length===1?"":"s"}.`};
   }catch(error){return{error:error instanceof Error?error.message:"Standard windows could not be added."};}
 }
+
+export async function saveConflictCalendarAction(formData:FormData):Promise<{error?:string;success?:string}>{
+  const parsed=z.object({projectId:z.string().uuid(),startsOn:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),endsOn:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),excludedDates:z.string().max(5000)}).safeParse({projectId:formData.get("projectId"),startsOn:formData.get("startsOn"),endsOn:formData.get("endsOn"),excludedDates:formData.get("excludedDates")??""});
+  if(!parsed.success)return{error:"Choose the first and last rehearsal dates."};if(parsed.data.endsOn<parsed.data.startsOn)return{error:"The last rehearsal date must be on or after the first."};
+  const excluded=[...new Set(parsed.data.excludedDates.split(/[,\s]+/).map(value=>value.trim()).filter(Boolean))];if(excluded.some(value=>!/^\d{4}-\d{2}-\d{2}$/.test(value)))return{error:"Review the blocked dates."};
+  try{const supabase=await manager(parsed.data.projectId);const{error}=await supabase.from("project_conflict_calendars").upsert({project_id:parsed.data.projectId,starts_on:parsed.data.startsOn,ends_on:parsed.data.endsOn,excluded_dates:excluded},{onConflict:"project_id"});if(error)return{error:error.message};revalidatePath(`/projects/${parsed.data.projectId}/conflicts`);return{success:"Rehearsal period and blocked dates saved."};}catch(error){return{error:error instanceof Error?error.message:"Rehearsal period could not be saved."};}
+}

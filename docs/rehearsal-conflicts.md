@@ -17,6 +17,8 @@ Every day can be edited, archived, or replaced. A future production can use diff
 - Editing project windows never changes an agreement that has already been prepared or sent.
 - To use a revised configuration, edit the casting draft and prepare a new offer. The previous link becomes superseded.
 - On acceptance, every required window must be answered. Unavailable and preferred times must stay inside the configured window.
+- Recurring windows display Sunday through Saturday and collect Fully available, Partially available, or Unavailable. Partial and full-window conflicts require a reason.
+- Configure a rehearsal period and blocked dates to enable dated one-off conflicts for trips, appointments, and similar exceptions. Blocked holidays never appear in the actor picker.
 - The original free-text conflict field remains available as **Additional conflict notes**.
 
 ## Stage-management review
@@ -25,4 +27,4 @@ The project page shows each window with the latest submitted availability for ev
 
 ## Installation
 
-Apply `202609160500_rehearsal_conflicts.sql` after the casting and Gmail-delivery migrations. It adds new tables and replaces only the two casting-offer functions needed to freeze and validate conflicts. It does not update or delete people, auditions, assignments, or existing offers.
+Apply `202609160500_rehearsal_conflicts.sql`, followed by `202609160600_rehearsal_conflict_refinements.sql`, after the casting and Gmail-delivery migrations. The second migration adds the rehearsal period, blocked dates, one-off conflicts, and the editable rehearsal-call acknowledgement. It does not update or delete people, auditions, assignments, or existing offers.

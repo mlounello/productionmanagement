@@ -1,4 +1,4 @@
-import type { ConflictWindowAnswer, ConflictWindowSnapshot } from "@/lib/rehearsal-conflicts";
+import type { ConflictCalendarSnapshot, ConflictWindowAnswer, ConflictWindowSnapshot, OneOffConflict } from "@/lib/rehearsal-conflicts";
 
 export type OfferSection = { key: string; title: string; body: string; acknowledgement: string; requires_response: boolean };
 export type OfferSnapshot = {
@@ -7,6 +7,7 @@ export type OfferSnapshot = {
   coverage_type: string; covered_roles: string[]; additional_duties: string; actor_notes: string;
   schedule: { rehearsals: string; tech_and_dress: string; performances_and_strike: string };
   conflict_windows?: ConflictWindowSnapshot[];
+  conflict_calendar?: ConflictCalendarSnapshot;
 };
 export type CastingOffer = {
   id: string; draft_id: string; project_id: string; draft_revision: number; public_token: string;
@@ -14,7 +15,7 @@ export type CastingOffer = {
   snapshot: OfferSnapshot; expires_at: string; responded_at: string | null; released_at: string | null;
   onboarding_status: string; onboarding_error: string;
   email_job_id?: string | null; delivery_status?: "not_sent" | "queued" | "processing" | "sent" | "failed" | "uncertain" | "cancelled"; delivery_error?: string; sent_at?: string | null; provider_message_id?: string | null;
-  answers?: { typed_name?: string; credit_choice?: string; conflicts?: string; comments?: string; conflict_windows?: ConflictWindowAnswer[] };
+  answers?: { typed_name?: string; credit_choice?: string; conflicts?: string; comments?: string; conflict_windows?: ConflictWindowAnswer[]; one_off_conflicts?: OneOffConflict[] };
 };
 export function offerProgress(offers: CastingOffer[]) {
   const current = offers.filter((offer) => offer.status !== "superseded");

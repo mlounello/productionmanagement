@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { offerProgress, type CastingOffer } from "@/lib/casting-offers";
 import { releaseCastingOffersAction, sendCastingOffersAction } from "@/app/projects/[projectId]/casting/actions";
 import { castingOfferEmail } from "@/lib/casting-offer-email";
+import { ConflictResponseSummary } from "@/components/conflict-response-summary";
 
 export function CastingOfferTracker({ projectId, offers, releaseEnabled, siteUrl }: { projectId: string; offers: CastingOffer[]; releaseEnabled: boolean; siteUrl: string }) {
   const progress = offerProgress(offers);
@@ -24,7 +25,7 @@ export function CastingOfferTracker({ projectId, offers, releaseEnabled, siteUrl
       <fieldset disabled={pending} className="casting-fieldset"><div className="compact-list">{offers.filter((row) => row.status !== "superseded").map((offer) => <div className="compact-row" key={offer.id}>
         <label className="check-row"><input type="checkbox" name="offerId" value={offer.id} disabled={!releaseEnabled || offer.status !== "accepted" || Boolean(offer.released_at)}/><span><strong>{offer.snapshot.person_name}</strong><br/>{offer.snapshot.role_name} · {offer.released_at ? "Released" : offer.status === "accepted" ? "Accepted · awaiting your release" : offer.status === "prepared" && new Date(offer.expires_at).getTime() < Date.now() ? "Expired" : offer.status === "discussion" ? "Discussion requested" : offer.status}<br/><small>Email: {offer.delivery_status === "sent" ? `Sent${offer.sent_at ? ` ${new Date(offer.sent_at).toLocaleString()}` : ""}` : offer.delivery_status === "uncertain" ? "Uncertain — check Siena Sent" : offer.delivery_status === "failed" ? `Failed — ${offer.delivery_error || "review required"}` : offer.delivery_status ?? "Not sent"}</small></span></label>
         <a className="button secondary" href={`/casting-offer/${offer.public_token}`} target="_blank" rel="noopener noreferrer">Open agreement</a>
-        {offer.responded_at ? <details><summary>Review response</summary><p>Signed by: {offer.answers?.typed_name}</p><p>Anticipated credits: {offer.answers?.credit_choice || "Not selected"}</p><p style={{ whiteSpace: "pre-wrap" }}>Conflicts: {offer.answers?.conflicts || "None entered"}</p><p style={{ whiteSpace: "pre-wrap" }}>Comments: {offer.answers?.comments || "None entered"}</p></details> : null}
+        {offer.responded_at ? <details><summary>Review response</summary><p>Signed by: {offer.answers?.typed_name}</p><p>Anticipated credits: {offer.answers?.credit_choice || "Not selected"}</p><ConflictResponseSummary windows={offer.snapshot.conflict_windows??[]} answers={offer.answers?.conflict_windows??[]} oneOff={offer.answers?.one_off_conflicts??[]} generalNotes={offer.answers?.conflicts??""}/><p style={{ whiteSpace: "pre-wrap" }}>Comments: {offer.answers?.comments || "None entered"}</p></details> : null}
         {offer.released_at && offer.onboarding_status !== "complete" ? <p className="setup-warning">{offer.onboarding_error || "Onboarding requires verification. Review the Onboarding page before retrying any communications."}</p> : null}
       </div>)}</div>
       {!offers.length ? <p>Prepare an agreement from an actor’s draft to start tracking responses.</p> : null}

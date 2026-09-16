@@ -21,7 +21,8 @@ export type ConflictWindowSnapshot = {
 export type ConflictInterval = { starts_at: string; ends_at: string; reason: string };
 export type ConflictWindowAnswer = {
   window_id: string;
-  availability: "" | "available" | "unavailable";
+  availability: "" | "fully_available" | "partially_available" | "unavailable" | "available";
+  unavailable_reason: string;
   unavailable: ConflictInterval[];
   preference_enabled: boolean;
   preference_start: string;
@@ -29,13 +30,20 @@ export type ConflictWindowAnswer = {
   preference_notes: string;
 };
 
+export type ConflictCalendarSnapshot = { starts_on: string; ends_on: string; excluded_dates: string[] } | null;
+export type OneOffConflict = {
+  window_id: string; occurrence_date: string; availability: "partially_available" | "unavailable";
+  unavailable_reason: string; unavailable: ConflictInterval[];
+};
+
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
-const intervalSchema = z.object({ starts_at: clock, ends_at: clock, reason: z.string().trim().max(500) });
+const intervalSchema = z.object({ starts_at: clock, ends_at: clock, reason: z.string().trim().min(1).max(500) });
 const answerSchema = z.object({
-  window_id: z.string().uuid(), availability: z.enum(["available", "unavailable"]),
-  unavailable: z.array(intervalSchema).max(12), preference_enabled: z.boolean(),
+  window_id: z.string().uuid(), availability: z.enum(["fully_available", "partially_available", "unavailable", "available"]),
+  unavailable_reason: z.string().trim().max(500).default(""), unavailable: z.array(intervalSchema).max(12), preference_enabled: z.boolean(),
   preference_start: z.string().max(5), preference_end: z.string().max(5), preference_notes: z.string().trim().max(1000)
 });
+const oneOffSchema = z.object({ window_id: z.string().uuid(), occurrence_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), availability: z.enum(["partially_available", "unavailable"]), unavailable_reason: z.string().trim().min(1).max(500), unavailable: z.array(intervalSchema).max(12) });
 
 function minutes(value: string) { const [hour, minute] = value.slice(0, 5).split(":").map(Number); return hour * 60 + minute; }
 export function shortTime(value: string) {
@@ -49,6 +57,25 @@ export function conflictWindowDay(window: ConflictWindowSnapshot) {
 export function conflictWindowSummary(window: ConflictWindowSnapshot) {
   const duration = window.call_type === "flexible" && window.max_call_minutes ? ` · call lasts no more than ${window.max_call_minutes / 60 >= 1 ? `${window.max_call_minutes / 60} hour${window.max_call_minutes === 60 ? "" : "s"}` : `${window.max_call_minutes} minutes`}` : "";
   return `${conflictWindowDay(window)} · ${shortTime(window.starts_at)}–${shortTime(window.ends_at)}${duration}`;
+}
+export function sortConflictWindows<T extends ConflictWindowSnapshot>(windows: T[]) {
+  return [...windows].sort((a,b) => {
+    const kind = (a.recurrence_type === "weekly" ? 0 : 1) - (b.recurrence_type === "weekly" ? 0 : 1);
+    if(kind) return kind;
+    if(a.recurrence_type === "weekly") return (a.day_of_week ?? 7) - (b.day_of_week ?? 7) || a.starts_at.localeCompare(b.starts_at) || a.label.localeCompare(b.label);
+    return String(a.event_date).localeCompare(String(b.event_date)) || a.starts_at.localeCompare(b.starts_at) || a.label.localeCompare(b.label);
+  });
+}
+export function normalizedAvailability(value: ConflictWindowAnswer["availability"]) { return value === "available" ? "fully_available" : value; }
+export function conflictOccurrences(windows: ConflictWindowSnapshot[], calendar: ConflictCalendarSnapshot) {
+  if(!calendar?.starts_on || !calendar.ends_on) return [];
+  const excluded=new Set(calendar.excluded_dates??[]), result:Array<{key:string;date:string;window:ConflictWindowSnapshot}>=[];
+  const cursor=new Date(`${calendar.starts_on}T12:00:00Z`), end=new Date(`${calendar.ends_on}T12:00:00Z`);
+  for(;cursor<=end;cursor.setUTCDate(cursor.getUTCDate()+1)){
+    const date=cursor.toISOString().slice(0,10);if(excluded.has(date))continue;
+    for(const window of windows)if((window.recurrence_type==="weekly"&&window.day_of_week===cursor.getUTCDay())||(window.recurrence_type==="date"&&window.event_date===date))result.push({key:`${window.id}:${date}`,date,window});
+  }
+  return result;
 }
 
 export function parseConflictResponses(raw: string, windows: ConflictWindowSnapshot[], requireAll: boolean) {
@@ -64,7 +91,9 @@ export function parseConflictResponses(raw: string, windows: ConflictWindowSnaps
     const window = byId.get(answer.window_id);
     if (!window) throw new Error("The rehearsal schedule changed. Reload this offer before responding.");
     const start = minutes(window.starts_at), end = minutes(window.ends_at);
-    if (answer.availability === "unavailable" && !answer.unavailable.length) throw new Error(`Add an unavailable time for ${window.label}.`);
+    const availability=normalizedAvailability(answer.availability);
+    if (availability === "partially_available" && !answer.unavailable.length) throw new Error(`Add the times you cannot attend for ${window.label}.`);
+    if (availability === "unavailable" && !answer.unavailable_reason) throw new Error(`Explain why you are unavailable for ${window.label}.`);
     for (const interval of answer.unavailable) {
       if (minutes(interval.starts_at) < start || minutes(interval.ends_at) > end || minutes(interval.ends_at) <= minutes(interval.starts_at)) throw new Error(`${window.label} conflict times must stay between ${shortTime(window.starts_at)} and ${shortTime(window.ends_at)}.`);
     }
@@ -76,3 +105,12 @@ export function parseConflictResponses(raw: string, windows: ConflictWindowSnaps
   return result.data;
 }
 
+export function parseOneOffConflicts(raw:string, windows:ConflictWindowSnapshot[], calendar:ConflictCalendarSnapshot){
+  let parsed:unknown;try{parsed=JSON.parse(raw||"[]");}catch{throw new Error("One-off conflicts could not be read.");}
+  const result=z.array(oneOffSchema).max(50).safeParse(parsed);if(!result.success)throw new Error("Review each one-off conflict, including its reason.");
+  const byId=new Map(windows.map(window=>[window.id,window])), valid=new Set(conflictOccurrences(windows,calendar).map(item=>item.key));
+  for(const item of result.data){const window=byId.get(item.window_id);if(!window||!valid.has(`${item.window_id}:${item.occurrence_date}`))throw new Error("A selected rehearsal date is no longer available. Reload and review your one-off conflicts.");
+    if(item.availability==="partially_available"&&!item.unavailable.length)throw new Error(`Add the times you cannot attend on ${item.occurrence_date}.`);
+    const start=minutes(window.starts_at),end=minutes(window.ends_at);for(const interval of item.unavailable)if(minutes(interval.starts_at)<start||minutes(interval.ends_at)>end||minutes(interval.ends_at)<=minutes(interval.starts_at))throw new Error(`One-off conflict times must stay between ${shortTime(window.starts_at)} and ${shortTime(window.ends_at)}.`);
+  }return result.data;
+}
