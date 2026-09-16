@@ -26,6 +26,7 @@ export function ProjectWorkspaceNav({ projectId, active }: { projectId: string; 
       <Link aria-current={active === "onboarding" ? "page" : undefined} className={active === "onboarding" ? "active" : ""} href={`/projects/${projectId}/onboarding`}>Onboarding</Link>
       <Link aria-current={active === "casting" ? "page" : undefined} className={active === "casting" ? "active" : ""} href={`/projects/${projectId}/casting`}>Casting & Offers</Link>
       <Link aria-current={active === "conflicts" ? "page" : undefined} className={active === "conflicts" ? "active" : ""} href={`/projects/${projectId}/conflicts`}>Schedule &amp; Conflicts</Link>
+      <Link aria-current={active === "availability" ? "page" : undefined} className={active === "availability" ? "active" : ""} href={`/projects/${projectId}/availability`}>Company Availability</Link>
       <Link aria-current={active === "auditions" ? "page" : undefined} className={active === "auditions" ? "active" : ""} href={`/projects/${projectId}/auditions`}>Auditions</Link>
       <Link aria-current={active === "google-groups" ? "page" : undefined} className={active === "google-groups" ? "active" : ""} href={`/projects/${projectId}/google-groups`}>Google Groups</Link>
       <Link aria-current={active === "communications" ? "page" : undefined} className={active === "communications" ? "active" : ""} href={`/projects/${projectId}/communications`}>Communications</Link>
