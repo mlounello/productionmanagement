@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-expect-error Node's built-in TypeScript loader requires the extension.
-import { AUTH_CALLBACK_PATH, PROFILE_AUTH_CALLBACK_PATH, safeAuthDestination, shouldNormalizeAuthCallback } from "../lib/auth-callback-routing.ts";
+import { AUTH_CALLBACK_PATH, GMAIL_OAUTH_CALLBACK_PATH, PROFILE_AUTH_CALLBACK_PATH, safeAuthDestination, shouldNormalizeAuthCallback } from "../lib/auth-callback-routing.ts";
 
 test("dedicated cross-device profile callbacks are not intercepted", () => {
   assert.equal(shouldNormalizeAuthCallback(PROFILE_AUTH_CALLBACK_PATH, true), false);
+});
+
+test("Gmail OAuth authorization codes reach the dedicated integration callback", () => {
+  assert.equal(shouldNormalizeAuthCallback(GMAIL_OAUTH_CALLBACK_PATH, true), false);
 });
 
 test("generic callbacks remain in place and stray callback parameters normalize", () => {
