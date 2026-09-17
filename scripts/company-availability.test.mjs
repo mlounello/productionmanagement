@@ -15,6 +15,8 @@ test("availability model expands recurring calls and applies dated exceptions", 
 test("viewer is restricted to project staff and uses active company assignments", () => {
   assert.match(page, /allowed_roles: \["project_manager", "producer", "department_head", "staff"\]/);
   assert.match(page, /role_assignments[\s\S]+eq\("status", "accepted"\)/);
+  assert.match(page, /person\.roleGroups\.includes\("cast"\)/);
+  assert.match(page, /candidates = \[\.\.\.projectPeople\.values\(\)\]/);
   assert.match(page, /createSupabaseAdminClient/);
   assert.match(page, /project_availability_viewers/);
 });
