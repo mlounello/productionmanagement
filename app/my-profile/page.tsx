@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -25,6 +27,7 @@ type PublicitySettings = { project_id: string; bio_due_on: string | null; headsh
 type Assignment = { id: string; status: string; is_guest_artist: boolean; projects: { id: string; title: string; starts_on: string | null; ends_on: string | null } | null; project_roles: { name: string; role_group: string; department: string } | null };
 type Accomplishment = { id: string; title: string; accomplishment_type: string; issuer: string; awarded_on: string | null; description: string; projects: { title: string } | null };
 type VisibleNote = { id: string; note: string; created_at: string; projects: { title: string } | null };
+type AvailabilityAccess = { project_id: string; active: boolean; projects: { id: string; title: string } | null };
 
 function titleCase(value: string) { return value.split("_").map((part) => part.slice(0, 1).toUpperCase() + part.slice(1)).join(" "); }
 function formatDate(value: string | null) {
@@ -52,17 +55,20 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   );
 
   const typedProfile = profile as Profile;
-  const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }] = await Promise.all([
+  const admin = createSupabaseAdminClient();
+  const [{ data: submissions }, { data: assignments }, { data: accomplishments }, { data: notes }, { data: publicitySettings }, { data: availabilityAccess }] = await Promise.all([
     supabase.from("project_publicity_submissions").select("id, project_id, credited_name, bio, headshot_url, status, playbill_submission_status, playbill_locked_at, source_profile_version, bio_required, projects(title)").eq("person_id", typedProfile.id).order("updated_at", { ascending: false }),
     supabase.from("role_assignments").select("id, status, is_guest_artist, projects(id, title, starts_on, ends_on), project_roles(name, role_group, department)").eq("person_id", typedProfile.id).order("created_at", { ascending: false }),
     supabase.from("profile_accomplishments").select("id, title, accomplishment_type, issuer, awarded_on, description, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("awarded_on", { ascending: false }),
     supabase.from("person_notes").select("id, note, created_at, projects(title)").eq("person_id", typedProfile.id).eq("visibility", "client_visible").order("created_at", { ascending: false }),
-    supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on, bio_character_limit")
+    supabase.from("project_publicity_settings").select("project_id, bio_due_on, headshot_due_on, bio_character_limit"),
+    admin.from("project_availability_viewers").select("project_id,active,projects(id,title)").eq("person_id", typedProfile.id).eq("active", true)
   ]);
   const submissionRows = (submissions ?? []) as unknown as Submission[];
   const assignmentRows = (assignments ?? []) as unknown as Assignment[];
   const accomplishmentRows = (accomplishments ?? []) as unknown as Accomplishment[];
   const noteRows = (notes ?? []) as unknown as VisibleNote[];
+  const availabilityRows = (availabilityAccess ?? []) as unknown as AvailabilityAccess[];
   const settingsByProject = new Map(((publicitySettings ?? []) as PublicitySettings[]).map((item) => [item.project_id, item]));
   const rolesByProject = new Map<string, string[]>();
   for (const assignment of assignmentRows) {
@@ -79,6 +85,12 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
       <div className="page-header"><div><p className="eyebrow">My Profile</p><h1>{typedProfile.full_name}</h1><p className="muted">Keep your contact and publicity information current without creating or remembering a password.</p></div></div>
       {query?.error ? <p className="setup-warning">{query.error}</p> : null}
       {query?.success ? <p className="setup-success">{query.success}</p> : null}
+
+      {availabilityRows.length ? <section className="panel workspace-section">
+        <p className="eyebrow">Project Tools</p><h2>Cast availability access</h2>
+        <p className="muted">These read-only project views remain available here after the secure email invitation has been used.</p>
+        <div className="compact-list">{availabilityRows.map((access) => <div className="compact-row" key={access.project_id}><div><strong>{access.projects?.title ?? "Production"}</strong><span>Cast conflicts and availability calendar</span></div><Link className="button" href={`/projects/${access.project_id}/availability`}>View Cast Availability</Link></div>)}</div>
+      </section> : null}
 
       <div className="grid two">
         <section className="panel">

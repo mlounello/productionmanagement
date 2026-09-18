@@ -191,13 +191,13 @@ export async function sendProfileAccessForEmail(email: string) {
   return true;
 }
 
-export async function getProfileAccessLink(token: string) {
+export async function getProfileAccessLink(token: string, options: { includeUsed?: boolean } = {}) {
   const admin = createSupabaseAdminClient();
   const { data } = await admin.from("profile_access_links")
     .select("id, person_id, email, expires_at, used_at, destination_path, people(full_name, preferred_name)")
     .eq("token_hash", hashProfileAccessToken(token))
     .maybeSingle();
-  if (!data || data.used_at || new Date(String(data.expires_at)).getTime() <= Date.now()) return null;
+  if (!data || (!options.includeUsed && data.used_at) || new Date(String(data.expires_at)).getTime() <= Date.now()) return null;
   return data;
 }
 
