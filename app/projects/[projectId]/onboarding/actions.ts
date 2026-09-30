@@ -8,6 +8,17 @@ import { sanitizeRichText } from "@/lib/rich-text";
 import { buildSienaProductionSchedule } from "@/lib/siena-production-schedule";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
+export async function setRoleAcceptanceAutomationAction(formData:FormData){
+  const user=await requireUser();
+  const parsed=z.object({projectId:z.string().uuid(),enabled:z.enum(["true","false"])}).safeParse({projectId:formData.get("projectId"),enabled:formData.get("enabled")});
+  if(!parsed.success)redirect("/projects?error=Role%20acceptance%20automation%20could%20not%20be%20updated.");
+  const supabase=await createSupabaseServerClient();
+  const enabled=parsed.data.enabled==="true";
+  const {error}=await supabase.from("project_role_acceptance_settings").upsert({project_id:parsed.data.projectId,auto_send:enabled,updated_by:user.id},{onConflict:"project_id"});
+  if(error)redirect(`/projects/${parsed.data.projectId}/onboarding?error=${encodeURIComponent(error.message)}#acceptance-automation`);
+  redirect(`/projects/${parsed.data.projectId}/onboarding?success=${encodeURIComponent(`Student role-acceptance automation turned ${enabled?"on":"off"}.`)}#acceptance-automation`);
+}
+
 export async function sendRoleAcceptanceAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));const assignmentId=z.string().uuid().parse(formData.get("assignmentId"));let message="";try{const result=await ensureRoleAcceptanceRequest(projectId,assignmentId,user.id,true);message=result.warnings.length?`Request prepared, but attention is needed: ${result.warnings.join(" ")}`:`Role acceptance ${result.status}.`;}catch(e){redirect(`/projects/${projectId}/onboarding?error=${encodeURIComponent(e instanceof Error?e.message:"Acceptance request failed.")}`);}redirect(`/projects/${projectId}/onboarding?success=${encodeURIComponent(message)}`);}
 
 export async function sendAllRoleAcceptancesAction(formData:FormData){const user=await requireUser();const projectId=z.string().uuid().parse(formData.get("projectId"));const ids=JSON.parse(String(formData.get("assignmentIds")??"[]")) as string[];let sent=0,attention=0;for(const id of ids){try{const result=await ensureRoleAcceptanceRequest(projectId,z.string().uuid().parse(id),user.id,true);if(result.warnings.length)attention++;else if(result.status==="sent")sent++;}catch{attention++;}}redirect(`/projects/${projectId}/onboarding?success=${encodeURIComponent(`${sent} acceptance request${sent===1?"":"s"} sent. ${attention?`${attention} need attention.`:""}`)}`);}
