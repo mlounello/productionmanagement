@@ -132,7 +132,7 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const { data: submission, error: readError } = await supabase
     .from("project_publicity_submissions")
-    .select("id, project_id, person_id, status, bio")
+    .select("id, project_id, person_id, status, bio, bio_required")
     .eq("id", submissionId)
     .maybeSingle();
   if (readError || !submission) redirect(`/my-profile?error=${encodeURIComponent(readError?.message ?? "Submission not found.")}`);
@@ -142,28 +142,22 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
   if (!['draft', 'awaiting_person_approval', 'changes_requested'].includes(String(submission.status))) {
     redirect("/my-profile?error=This%20production%20copy%20is%20not%20awaiting%20your%20approval.");
   }
+  if (submission.bio_required === false) {
+    redirect("/my-profile?error=This%20production%20is%20currently%20marked%20as%20not%20requiring%20a%20bio.%20Restore%20the%20bio%20requirement%20before%20submitting.");
+  }
   const { data: publicitySettings } = await supabase.from("project_publicity_settings")
     .select("bio_character_limit").eq("project_id", submission.project_id).maybeSingle();
   const bioLimit = Number(publicitySettings?.bio_character_limit ?? 350);
-  if (stripRichTextToPlain(String(submission.bio ?? "")).length > bioLimit) {
+  const visibleBio = stripRichTextToPlain(String(submission.bio ?? ""));
+  if (!visibleBio) {
+    redirect("/my-profile?error=Add%20and%20save%20your%20show-specific%20bio%20before%20approving%20it.");
+  }
+  if (visibleBio.length > bioLimit) {
     redirect(`/my-profile?error=${encodeURIComponent(`Shorten this show-specific bio to ${bioLimit} characters before approving it.`)}`);
   }
 
   const { error } = await supabase.rpc("approve_my_project_publicity", { target_submission_id: submissionId });
   if (error) redirect(`/my-profile?error=${encodeURIComponent(error.message)}`);
-  try {
-    const { data: approvingPerson } = await supabase.from("people").select("full_name").eq("id", submission.person_id).maybeSingle();
-    await notifyProjectManagers({
-      projectId: String(submission.project_id),
-      subject: `Bio ready for editorial review: ${approvingPerson?.full_name ?? "Production participant"}`,
-      heading: "A bio is ready for review",
-      message: `${approvingPerson?.full_name ?? "A production participant"} approved their production bio. It is now waiting for final editorial approval.`,
-      actionLabel: "Review publicity",
-      actionPath: `/projects/${submission.project_id}/publicity`,
-      idempotencyKey: `publicity-admin-approved-${submissionId}`
-    });
-  } catch {}
-
   let syncWarning = "";
   try {
     await syncApprovedPublicityToPlaybill(submissionId);
@@ -173,6 +167,26 @@ export async function approveMyPublicitySubmissionAction(formData: FormData) {
       playbill_sync_status: publicitySyncFailureStatus(syncError), playbill_sync_error: syncWarning
     }).eq("id", submissionId);
   }
+
+  try {
+    const [{ data: approvingPerson }, { data: approvedSubmission }] = await Promise.all([
+      supabase.from("people").select("full_name").eq("id", submission.person_id).maybeSingle(),
+      supabase.from("project_publicity_submissions").select("person_approved_at").eq("id", submissionId).maybeSingle()
+    ]);
+    await notifyProjectManagers({
+      projectId: String(submission.project_id),
+      subject: syncWarning
+        ? `Bio approved; Playbill needs attention: ${approvingPerson?.full_name ?? "Production participant"}`
+        : `Bio ready for editorial review: ${approvingPerson?.full_name ?? "Production participant"}`,
+      heading: syncWarning ? "A bio needs sync attention" : "A bio is ready for review",
+      message: syncWarning
+        ? `${approvingPerson?.full_name ?? "A production participant"} approved a saved production bio, but Playbill could not receive it yet: ${syncWarning}`
+        : `${approvingPerson?.full_name ?? "A production participant"} approved their saved production bio. It was submitted to Playbill and is waiting for final editorial approval.`,
+      actionLabel: "Review publicity",
+      actionPath: `/projects/${submission.project_id}/publicity`,
+      idempotencyKey: `publicity-admin-approved-${submissionId}-${approvedSubmission?.person_approved_at ?? "current"}`
+    });
+  } catch {}
 
   revalidatePath("/my-profile");
   revalidatePath(`/projects/${submission.project_id}/publicity`);

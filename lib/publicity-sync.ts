@@ -30,10 +30,12 @@ export async function syncApprovedPublicityToPlaybill(submissionId: string) {
       .select("project_id, person_id, bio, bio_required").eq("id", submissionId).maybeSingle();
     if (submissionError || !submission) throw new Error(submissionError?.message ?? "Publicity submission not found.");
     if (submission.bio_required === false) throw new PublicitySyncError("This person is marked bio not required for this project.", "disabled");
+    const visibleBio = stripRichTextToPlain(String(submission.bio ?? ""));
+    if (!visibleBio) throw new PublicitySyncError("A saved show-specific bio is required before it can be sent to Playbill.");
     const { data: settings } = await supabase.from("project_publicity_settings")
       .select("bio_character_limit").eq("project_id", submission.project_id).maybeSingle();
     const bioLimit = Number(settings?.bio_character_limit ?? 350);
-    if (stripRichTextToPlain(String(submission.bio ?? "")).length > bioLimit) {
+    if (visibleBio.length > bioLimit) {
       throw new Error(`Shorten this show-specific bio to ${bioLimit} characters before sending it to Playbill.`);
     }
 

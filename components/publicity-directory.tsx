@@ -12,6 +12,7 @@ import {
 } from "@/app/projects/[projectId]/publicity/actions";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { stripRichTextToPlain } from "@/lib/rich-text";
 
 export type PublicityDirectoryPerson = {
   personId: string;
@@ -41,7 +42,7 @@ function needsFor(person: PublicityDirectoryPerson) {
   if (!person.submissionId) return ["Publicity record"];
   if (!person.bioRequired || person.playbillStatus === "locked") return [];
   return [
-    !person.bio.trim() ? "Bio" : null,
+    !stripRichTextToPlain(person.bio) ? "Bio" : null,
     !person.headshotUrl.trim() ? "Headshot" : null,
     !["person_approved", "approved"].includes(person.status) ? "Approval" : null
   ].filter(Boolean) as string[];
@@ -76,6 +77,7 @@ export function PublicityDirectory({
   const [filter, setFilter] = useState("attention");
   const [reminderIds, setReminderIds] = useState<Set<string>>(new Set());
   const selected = people.find((person) => person.personId === selectedId) ?? null;
+  const selectedHasBio = Boolean(selected && stripRichTextToPlain(selected.bio));
   const visible = useMemo(() => people.filter((person) => {
     const haystack = [person.name, person.email, ...person.roles, person.status, person.playbillStatus].join(" ").toLowerCase();
     return (!search || haystack.includes(search.toLowerCase())) && filterMatches(person, filter);
@@ -151,7 +153,7 @@ export function PublicityDirectory({
             <span><strong>{person.name}</strong><small>{person.email || "No email on file"}</small></span>
             <span>{person.roles.join(", ") || "Role not listed"}</span>
             <span className="badge-row">{needs.length ? needs.map((need) => <StatusBadge status={need === "Approval" ? "pending" : "missing"} label={need} key={need}/>) : <StatusBadge status={person.bioRequired ? "ready" : "not_required"} label={person.bioRequired ? "Current" : "Not required"}/>}</span>
-            <span><StatusBadge status={person.status} context="publicity"/></span>
+            <span><StatusBadge status={person.status} context="publicity" label={["person_approved", "approved"].includes(person.status) && !stripRichTextToPlain(person.bio) ? "Approval incomplete" : undefined}/></span>
             <span><StatusBadge status={person.playbillStatus} context="playbill"/></span>
           </button>
         </div>;
@@ -170,7 +172,7 @@ export function PublicityDirectory({
 
         {!selected.submissionId ? <section className="drawer-section static"><h3>Publicity record missing</h3><p className="setup-warning">Use “Repair any missing copies” in Publicity settings. Existing production copies will not be overwritten.</p></section> : <>
           {selected.playbillSyncError ? <p className="setup-warning">{selected.playbillSyncError}</p> : null}
-          {!selected.bioRequired ? <section className="drawer-section static"><h3>No bio required</h3><p className="muted">This person is excluded from publicity totals and reminders for this production.</p></section> : selected.playbillStatus === "locked" ? <section className="drawer-section static"><h3>Final production copy</h3><PublicityBioPreview bio={selected.bio} name={selected.creditedName} role={selected.roles.join(", ") || "Production role"}/></section> : <form action={saveProjectPublicityCopyAction} className="stacked-form">
+          {!selected.bioRequired ? <section className="drawer-section static"><h3>No bio required</h3><p className="muted">This person is excluded from publicity totals and reminders for this production.</p>{selectedHasBio ? <><p className="setup-warning">A saved bio exists even though this production is marked “bio not required.” Restore the requirement to review, approve, and send it to Playbill.</p><PublicityBioPreview bio={selected.bio} name={selected.creditedName} role={selected.roles.join(", ") || "Production role"}/></> : <p className="muted">No production bio is currently saved.</p>}</section> : selected.playbillStatus === "locked" ? <section className="drawer-section static"><h3>Final production copy</h3><PublicityBioPreview bio={selected.bio} name={selected.creditedName} role={selected.roles.join(", ") || "Production role"}/></section> : <form action={saveProjectPublicityCopyAction} className="stacked-form">
             <input type="hidden" name="projectId" value={projectId}/><input type="hidden" name="submissionId" value={selected.submissionId}/>
             <label className="field"><span>Credited name</span><input name="creditedName" defaultValue={selected.creditedName} required/></label>
             <PublicityBioField name="bio" label="Production bio" initialValue={selected.bio} previewName={selected.creditedName} previewRole={selected.roles.join(", ") || "Production role"} characterLimit={characterLimit} compact/>

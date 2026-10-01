@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { firstAndLastName } from "@/lib/person-display-name";
+import { stripRichTextToPlain } from "@/lib/rich-text";
 import { ProjectWorkspaceNav } from "@/components/project-workspace-nav";
 import { ProjectContextSwitcher } from "@/components/project-context-switcher";
 import { PublicityDirectory, type PublicityDirectoryPerson } from "@/components/publicity-directory";
@@ -83,7 +84,7 @@ export default async function ProjectPublicityPage({ params, searchParams }: { p
   const publicityRows = (submissions ?? []) as Publicity[];
   const requiredPublicityRows = publicityRows.filter((item) => item.bio_required !== false);
   const exempt = publicityRows.length - requiredPublicityRows.length;
-  const outstanding = requiredPublicityRows.filter((item) => item.playbill_submission_status !== "locked" && (!item.bio.trim() || !item.headshot_url.trim() || !["person_approved", "approved"].includes(item.status)));
+  const outstanding = requiredPublicityRows.filter((item) => item.playbill_submission_status !== "locked" && (!stripRichTextToPlain(item.bio) || !item.headshot_url.trim() || !["person_approved", "approved"].includes(item.status)));
   const submitted = requiredPublicityRows.filter((item) => item.playbill_submission_status === "submitted").length;
   const approved = requiredPublicityRows.filter((item) => item.playbill_submission_status === "approved").length;
   const locked = requiredPublicityRows.filter((item) => item.playbill_submission_status === "locked").length;
