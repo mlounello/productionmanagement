@@ -1,5 +1,5 @@
 export const PRODUCTION_MANAGEMENT_FROM =
-  "Production Management <production-management@mlounello.com>";
+  "Siena Theatre Production Management <mlounello@siena.edu>";
 
 const BRAND_MARKER = 'data-pm-email-brand="siena"';
 

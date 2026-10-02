@@ -9,7 +9,7 @@ Siena does not permit the service-account/domain-wide-delegation approach, and t
 3. Production Management asks that script whether each assigned email is a direct member.
 4. The app marks people **verified**, **missing**, or **unable to check**.
 5. A Google Group manager adds/removes missing people manually and runs the check again.
-6. Custom HTML welcome email remains automated through Resend.
+6. Custom HTML welcome email is sent through the connected Siena Gmail account.
 
 The older service-account instructions remain later in this document for reference only. Do not configure them unless Siena changes its policy.
 
@@ -198,7 +198,7 @@ The app uses:
 
 - **Admin SDK Directory API** to find groups and add/remove members. Group creation is performed manually in Google Admin.
 - **Groups Settings API** to configure external membership, posting, moderation, and spam settings.
-- **Resend**, not Gmail, to send the separate custom HTML welcome message.
+- **Siena Gmail** to send the separate custom HTML welcome message.
 
 ## Before you begin
 
@@ -208,7 +208,7 @@ You will need:
 - Help from a Siena Google Workspace **Super Admin**. Only a Super Admin can approve domain-wide delegation. If that is not you, the guide identifies exactly what to send them.
 - A Siena account that the app can impersonate for group administration. A dedicated account such as `production-automation@siena.edu` is ideal. A normal personal account is not recommended.
 - Access to the Production Management project in Vercel.
-- Access to the Resend account used by Production Management.
+- Access to the connected `mlounello@siena.edu` Gmail account used by Production Management.
 
 Decide who will own the Google Cloud project before continuing. Use an institution-controlled project and ownership group where possible so the integration does not depend on one employee's personal account.
 
@@ -237,7 +237,7 @@ Repeat these steps for both required APIs:
 6. Open the result and click **Enable**.
 7. Open **APIs & Services → Enabled APIs & services** and confirm both names appear.
 
-You do not need to enable the Gmail API for this feature because welcome messages are sent through Resend.
+The Gmail API and Production Management Gmail connection must be configured because welcome messages use the same Siena delivery queue as every other application email.
 
 ## Part 3: Create the service account
 
@@ -392,11 +392,11 @@ After changing Vercel variables, redeploy the current Production deployment so t
 
 Welcome emails are separate from Google Group membership messages.
 
-1. In Resend, create or select the sending domain used by Production Management.
-2. Complete Resend's DNS verification for that domain.
+1. Enable the Gmail API in the Google Cloud project used by Production Management.
+2. Connect and verify `mlounello@siena.edu` under **Settings → Email Delivery**.
 3. Create a restricted API key for this application.
-4. Add the key to Vercel as `RESEND_API_KEY`.
-5. Verify `mlounello.com` in Resend. Production Management enforces the sender `Production Management <production-management@mlounello.com>` for every workflow.
+4. Add the `PM_GMAIL_CLIENT_ID`, `PM_GMAIL_CLIENT_SECRET`, and `PM_GMAIL_ENCRYPTION_KEY` values to Vercel.
+5. Production Management enforces `Siena Theatre Production Management <mlounello@siena.edu>` for every workflow.
 6. Initially keep `DISABLE_OUTBOUND_EMAIL=true`.
 7. Once a test template and recipient are ready, set `DISABLE_OUTBOUND_EMAIL=false` and redeploy.
 
@@ -451,7 +451,7 @@ If synchronization fails, the production assignment remains saved. Read the visi
 
 1. In the role-group Google settings, create an HTML welcome template.
 2. Select the template and enable **Welcome email**.
-3. Confirm `RESEND_API_KEY` and `EMAIL_FROM` are configured.
+3. Confirm the Siena Gmail credentials and saved Gmail connection are configured.
 4. Set `DISABLE_OUTBOUND_EMAIL=false` and redeploy.
 5. Assign an approved test person with an email address.
 6. Confirm exactly one welcome message arrives.
@@ -536,7 +536,7 @@ The app cannot override Siena Workspace policy. Ask IT to review the domain/orga
 
 ### Welcome email fails while group membership succeeds
 
-Google and welcome delivery are intentionally separate. Check `RESEND_API_KEY`, `EMAIL_FROM`, sender-domain verification, `DISABLE_OUTBOUND_EMAIL`, the person's email, and the app audit log.
+Google membership checking and welcome delivery are intentionally separate. Check the Siena Gmail connection, `DISABLE_OUTBOUND_EMAIL`, the person's email, the Email Delivery queue, and the app audit log.
 
 ### The settings page reports a missing table or permission denied
 

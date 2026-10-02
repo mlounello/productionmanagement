@@ -166,14 +166,39 @@ export async function refreshPublicityFromProfileAction(formData: FormData) {
 }
 
 export async function requestPublicityApprovalAction(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const projectId = uuid.parse(String(formData.get("projectId") ?? ""));
   const submissionId = uuid.parse(String(formData.get("submissionId") ?? ""));
+  try { await requirePublicityManager(projectId); }
+  catch (error) { redirect(path(projectId, "error", error instanceof Error ? error.message : "Permission denied.")); }
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("project_publicity_submissions").update({ status: "awaiting_person_approval", person_approved_at: null, person_approved_by: null, editorial_approved_at: null, editorial_approved_by: null, playbill_sync_status: "not_ready", playbill_sync_error: "" }).eq("id", submissionId).eq("project_id", projectId);
-  if (error) redirect(path(projectId, "error", error.message));
+  const { data: before, error: readError } = await supabase.from("project_publicity_submissions")
+    .select("person_id,status,bio,bio_required,playbill_submission_status")
+    .eq("id", submissionId).eq("project_id", projectId).maybeSingle();
+  if (readError || !before) redirect(path(projectId, "error", readError?.message ?? "Publicity record not found."));
+  if (before.bio_required === false) redirect(path(projectId, "error", "Restore the bio requirement before requesting approval."));
+  if (before.playbill_submission_status === "locked") redirect(path(projectId, "error", "This Playbill copy is already final and locked."));
+  if (!stripRichTextToPlain(String(before.bio ?? ""))) redirect(path(projectId, "error", "Add or refresh the production bio before requesting the person's approval."));
+  const { data: requested, error } = await supabase.from("project_publicity_submissions")
+    .update({ status: "awaiting_person_approval", person_approved_at: null, person_approved_by: null, editorial_approved_at: null, editorial_approved_by: null, playbill_sync_status: "not_ready", playbill_sync_error: "" })
+    .eq("id", submissionId).eq("project_id", projectId)
+    .select("updated_at").maybeSingle();
+  if (error || !requested) redirect(path(projectId, "error", error?.message ?? "Approval request could not be saved."));
+  let deliveredTo = "";
+  try {
+    const delivery = await sendPublicityReminder(String(before.person_id), projectId, user.id, {
+      mode: "approval_request",
+      idempotencyKey: `publicity-approval-request-${submissionId}-${requested.updated_at}`
+    });
+    deliveredTo = delivery.email;
+  } catch (sendError) {
+    if (before.status !== "awaiting_person_approval") {
+      await supabase.from("project_publicity_submissions").update({ status: before.status }).eq("id", submissionId).eq("project_id", projectId);
+    }
+    redirect(path(projectId, "error", `Approval request was not sent: ${sendError instanceof Error ? sendError.message : "Unknown email error."}`));
+  }
   revalidatePath(`/projects/${projectId}/publicity`);
-  redirect(path(projectId, "success", "Approval requested. The person can review it under My Profile."));
+  redirect(path(projectId, "success", `Approval request sent through Siena Gmail to ${deliveredTo}.`));
 }
 
 export async function approveAndSyncPublicityAction(formData: FormData) {

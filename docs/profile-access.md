@@ -3,7 +3,7 @@
 Production Management profile access mirrors Playbill contributor access:
 
 1. The app creates an opaque, seven-day access token and stores only its SHA-256 hash.
-2. Resend sends a branded HTML message containing the Production Management access-page URL.
+2. Siena Gmail sends a branded HTML message containing the Production Management access-page URL.
 3. Opening the email does not authenticate the recipient, so link scanners cannot consume the login session.
 4. The recipient presses **Continue** on the access page.
 5. The server creates and directly verifies a one-time Supabase token, stores the session in the app cookie, and sends the recipient to `/my-profile`.
@@ -13,17 +13,16 @@ Production Management profile access mirrors Playbill contributor access:
 
 - `NEXT_PUBLIC_SITE_URL=https://productionmanagement.mlounello.com`
 - `SUPABASE_SERVICE_ROLE_KEY`: the server-only service-role key for the shared Supabase project. Never prefix this variable with `NEXT_PUBLIC_`.
-- `RESEND_API_KEY`: an API key allowed to send from the configured domain.
-- All Production Management delivery is enforced as `Production Management <production-management@mlounello.com>`. Verify `mlounello.com` in Resend; the application does not permit an individual workflow to substitute a different sender.
+- `PM_GMAIL_CLIENT_ID`, `PM_GMAIL_CLIENT_SECRET`, and `PM_GMAIL_ENCRYPTION_KEY`: the protected credentials used by the connected Siena Gmail account.
+- All Production Management delivery is enforced as `Siena Theatre Production Management <mlounello@siena.edu>`; an individual workflow cannot substitute a different sender.
 
 The shared delivery layer wraps every outgoing HTML message in the Siena Theatre Production Management layout. Specialized welcome and publicity layouts carry the same branding marker and are not wrapped twice.
 
-Inbox avatars are controlled by each receiving email client, not by the message HTML or Resend API. For broad logo support, configure BIMI for `mlounello.com`; this requires DMARC enforcement (`p=quarantine` or `p=reject`, `pct=100`) and a compliant hosted SVG/certificate. Until then, individual providers may use a profile image attached to the exact sender address or a Gravatar entry, but display is not guaranteed.
-- `RESEND_MAX_REQUESTS_PER_SECOND=4`: optional safety override. The application will never configure itself above four requests per second, leaving room below Resend's standard five-request team limit.
-- `RESEND_MAX_RETRIES=5`: optional retry count for per-second rate limits and temporary Resend failures. Resend's `Retry-After` and rate-limit reset headers take precedence over the backoff calculation.
+Inbox avatars are controlled by each receiving email client, not by the message HTML or Gmail API. Configure the profile image on `mlounello@siena.edu`; display still depends on the receiving client.
+- `PM_GMAIL_MAX_MESSAGES_PER_24_HOURS=500`: optional application safety cap for the Gmail queue.
 - `DISABLE_OUTBOUND_EMAIL=false`
 
-All email workflows use the same paced sender within an application instance. Campaigns use Resend's batch endpoint in groups of no more than 100 personalized messages, and every provider request uses an idempotency key so an automatic retry does not duplicate delivery. A daily or monthly quota error is not repeatedly retried because pacing cannot fix an exhausted account quota; unsent campaign recipients remain failed and visible so staff can resume them after the quota resets or the Resend plan changes.
+All email workflows use the same durable, paced Siena Gmail queue. Every recipient is stored before Gmail is contacted. Rate-limited jobs remain queued, confirmed failures remain visible for manual retry, and uncertain outcomes are held for review in Siena Sent rather than blindly resent.
 
 Apply `supabase/migrations/202607132200_branded_profile_access_links.sql` before deploying the feature.
 

@@ -109,7 +109,7 @@ Verify expired and superseded offers, amended roles, concurrent capacity claims,
 - `app/projects/[projectId]/actions.ts` and `auditions/actions.ts`: assignment and casting entry points that currently initiate onboarding.
 - `lib/project-admin-notifications.ts`: current recipients inferred from memberships; extend with explicit project recipients and durable notification evidence.
 - `components/project-workspace-page.tsx`: current Overview notification/activity display.
-- `lib/outbound-email.ts`: current shared Resend sender; replace active transport with Google after verification.
+- `lib/outbound-email.ts`: shared Siena Gmail queue entry point for every application workflow.
 - `supabase/migrations/202609150100_multi_person_roles.sql`: existing independent assignment capacity enforcement to preserve.
 - Events reference: `/Users/mikelounello/Documents/events-management/lib/integrations/siena-gmail.ts` and `google-gmail.ts`.
 

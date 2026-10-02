@@ -98,7 +98,7 @@ export async function sendPublicityReminder(
   personId: string,
   projectId: string,
   actorUserId: string | null,
-  options: { mode?: "manual" | "automatic"; idempotencyKey?: string } = {}
+  options: { mode?: "manual" | "automatic" | "approval_request"; idempotencyKey?: string } = {}
 ) {
   const admin = createSupabaseAdminClient();
   const [{ data: person }, { data: project }, { data: submission }, { data: settings }] = await Promise.all([
@@ -108,7 +108,7 @@ export async function sendPublicityReminder(
     admin.from("project_publicity_settings").select("bio_due_on, headshot_due_on, reminders_enabled, bio_character_limit").eq("project_id", projectId).maybeSingle()
   ]);
   if (!person || !project || !submission) throw new Error("The publicity reminder record could not be found.");
-  if (settings && !settings.reminders_enabled) throw new Error("Publicity reminders are disabled for this project.");
+  if (settings && !settings.reminders_enabled && options.mode !== "approval_request") throw new Error("Publicity reminders are disabled for this project.");
   if (submission.bio_required === false) throw new Error("This person is marked bio not required and cannot receive publicity reminders.");
   if (submission.playbill_submission_status === "locked") throw new Error("This submission is locked in Playbill.");
   const email = String(person.email ?? "").trim().toLowerCase();
@@ -154,18 +154,18 @@ export async function sendPublicityReminder(
   catch (error) {
     await admin.from("profile_access_links").delete().eq("id", access.accessId);
     await admin.from("email_messages").insert({
-      project_id: projectId, person_id: personId, message_type: "publicity_reminder", to_email: email,
+      project_id: projectId, person_id: personId, message_type: options.mode === "approval_request" ? "publicity_approval_request" : "publicity_reminder", to_email: email,
       subject, body: html, status: "failed", created_by: actorUserId,
       metadata: { delivery_mode: options.mode ?? "manual" }
     });
     throw error;
   }
-  // Once Resend accepts the message, keep its access token valid even if an
+  // Once Gmail accepts the message, keep its access token valid even if an
   // audit write has a transient issue. The recipient must never receive a dead
   // link merely because bookkeeping failed after delivery.
   try {
     await admin.from("email_messages").insert({
-      project_id: projectId, person_id: personId, message_type: "publicity_reminder", to_email: email,
+      project_id: projectId, person_id: personId, message_type: options.mode === "approval_request" ? "publicity_approval_request" : "publicity_reminder", to_email: email,
       subject, body: html, status: "sent", provider_message_id: delivery.id, sent_at: new Date().toISOString(), created_by: actorUserId,
       metadata: { delivery_mode: options.mode ?? "manual" }
     });

@@ -38,7 +38,7 @@ The project Publicity page shows outstanding, submitted, approved, and locked to
 
 Customize reminder content under **Settings → Email Templates → Publicity reminder**. The safe preview/test drawer shows filled-in tags and sends only to the test address you enter. Project-specific templates take precedence over the global template. Production Management wraps the editable content in a consistent branded layout and always supplies secure instructions to edit, approve and submit, or mark the production bio as not needed.
 
-Automatic reminder settings live under **Project → Publicity → Publicity settings**. The scheduled job runs at the same daily time as Playbill’s reminder job. Delivery is paced through the shared Resend limiter, retries temporary provider failures, and uses both provider idempotency keys and a per-person/day dispatch record to prevent duplicates.
+Automatic reminder settings live under **Project → Publicity → Publicity settings**. The scheduled job runs at the same daily time as Playbill’s reminder job. Delivery is paced through the durable Siena Gmail queue and uses both job idempotency keys and a per-person/day dispatch record to prevent duplicates.
 
 ## Database migration order
 

@@ -32,4 +32,4 @@ Recognition records remain on the durable person profile across productions. **C
 
 ## Delivery configuration
 
-Phase 5 uses the same Resend configuration as the existing branded profile links, publicity reminders, and Google Group welcome emails. `DISABLE_OUTBOUND_EMAIL` remains the master safety switch. Drafting, previews, recognition records, and test preparation still work when outbound delivery is disabled; actual test and campaign sends return a visible error.
+Phase 5 uses the same Siena Gmail queue as branded profile links, publicity reminders, and Google Group welcome emails. `DISABLE_OUTBOUND_EMAIL` remains the master safety switch. Drafting, previews, recognition records, and test preparation still work when outbound delivery is disabled; actual test and campaign sends return a visible error.

@@ -2,7 +2,7 @@
 
 The owner-only **Email Delivery page** at `/settings/email-delivery` connects Siena Gmail, checks authorization, sends a controlled test, displays the durable delivery queue, and can process messages that are ready to retry. Actor records, assignments, existing templates, and existing emails are unchanged.
 
-The Gmail sender is **Siena Theatre Production Management <mlounello@siena.edu>**. Casting offers and their administrator notifications use the Gmail queue after the rollout migration is applied. Keep Resend configured while the remaining application email types are tested; `OUTBOUND_EMAIL_PROVIDER=resend` leaves those existing messages on Resend until the deliberate production-wide cutover.
+The Gmail sender is **Siena Theatre Production Management <mlounello@siena.edu>**. Every application email uses the durable Gmail queue after the rollout migration is applied. There is no Resend fallback.
 
 ## 1. Google Cloud setup
 
@@ -28,7 +28,7 @@ In the Production Management Vercel project's environment settings, add:
 - `PM_GMAIL_ENCRYPTION_KEY`: a newly generated random secret at least 32 characters long, stored in your password manager. This protects the saved refresh token. Do not reuse or copy the Events token. Changing this key requires reconnecting Google.
 - `PM_GMAIL_MAX_MESSAGES_PER_24_HOURS`: the application safety cap; `500` is the recommended starting value.
 - `PM_ADMIN_NOTIFICATION_EMAIL`: the initial administrator notification recipient; use `mlounello@siena.edu` until configurable recipients are enabled for a project.
-- `OUTBOUND_EMAIL_PROVIDER`: keep this as `resend` during casting rollout. Change it to `gmail` only after the complete lifecycle test approves moving every existing application email onto Gmail.
+- No provider selector is required. Production Management always uses the connected Siena Gmail account.
 - Verify `NEXT_PUBLIC_SITE_URL` is exactly `https://productionmanagement.mlounello.com`.
 
 These three `PM_GMAIL_*` secrets must **not** use a `NEXT_PUBLIC_` prefix. Only configure Production initially; avoid giving untrusted preview deployments production mail credentials. Redeploy after changing environment variables.

@@ -6,7 +6,7 @@ import { brandProductionManagementEmail, PRODUCTION_MANAGEMENT_FROM } from "../l
 test("uses the single Production Management sender identity", () => {
   assert.equal(
     PRODUCTION_MANAGEMENT_FROM,
-    "Production Management <production-management@mlounello.com>"
+    "Siena Theatre Production Management <mlounello@siena.edu>"
   );
 });
 
