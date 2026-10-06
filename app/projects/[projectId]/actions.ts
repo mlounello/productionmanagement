@@ -205,6 +205,16 @@ const createBudgetGuestArtistSchema = z.object({
   confirmCreate: z.literal("on")
 });
 
+const guestArtistOffboardingSchema = z.object({
+  projectId: projectIdSchema,
+  assignmentId: z.string().uuid(),
+  contractId: z.string().uuid(),
+  effectiveOn: z.string().date("Choose the effective date."),
+  privateNotes: z.string().trim().min(10, "Add a private record explaining why the engagement ended.").max(4000),
+  markPersonInactive: z.boolean(),
+  confirmOffboarding: z.literal("on")
+});
+
 const runOfShowSchema = z.object({
   projectId: projectIdSchema,
   cueNumber: z.string().trim().max(40).optional(),
@@ -1141,6 +1151,103 @@ export async function deleteRoleAssignmentAction(formData: FormData) {
   redirect(projectAssignmentSuccessPath(input.projectId, googleWarning
     ? `Assignment removed and the linked Playbill role is vacant. Google automation needs attention: ${googleWarning}`
     : "Assignment removed and the linked Playbill role is vacant."));
+}
+
+export async function offboardGuestArtistAction(formData: FormData) {
+  const user = await requireUser();
+  const parsed = guestArtistOffboardingSchema.safeParse({
+    projectId: requiredString(formData.get("projectId")),
+    assignmentId: requiredString(formData.get("assignmentId")),
+    contractId: requiredString(formData.get("contractId")),
+    effectiveOn: requiredString(formData.get("effectiveOn")),
+    privateNotes: requiredString(formData.get("privateNotes")),
+    markPersonInactive: formData.get("markPersonInactive") === "on",
+    confirmOffboarding: formData.get("confirmOffboarding")
+  });
+
+  if (!parsed.success) {
+    const projectId = requiredString(formData.get("projectId"));
+    redirect(projectAssignmentErrorPath(projectId, parsed.error.issues[0]?.message ?? "Invalid guest artist offboarding request.", `assignment-${requiredString(formData.get("assignmentId"))}`));
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: role, error: roleError } = await supabase.rpc("get_user_role");
+  if (roleError || role !== "owner") {
+    redirect(projectAssignmentErrorPath(input.projectId, "Only the Production Management owner can end a guest artist engagement.", `assignment-${input.assignmentId}`));
+  }
+
+  // Capture the manual Google follow-up before the assignment is deliberately
+  // marked as skipped by the atomic offboarding transaction.
+  let googleWarnings: string[] = [];
+  try {
+    const result = await removeAssignmentGoogleAutomation(input.projectId, input.assignmentId, user.id);
+    googleWarnings = result.warnings;
+  } catch (error) {
+    googleWarnings = [error instanceof Error ? error.message : "Google Group removal could not be checked."];
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: result, error: offboardingError } = await admin.rpc("offboard_guest_artist_assignment", {
+    target_project_id: input.projectId,
+    target_assignment_id: input.assignmentId,
+    target_contract_id: input.contractId,
+    effective_on: input.effectiveOn,
+    private_notes: input.privateNotes,
+    mark_person_inactive: input.markPersonInactive,
+    actor_user_id: user.id
+  });
+
+  if (offboardingError) {
+    redirect(projectAssignmentErrorPath(input.projectId, offboardingError.message, `assignment-${input.assignmentId}`));
+  }
+
+  const outcome = (result ?? {}) as {
+    offboarding_id?: string;
+    person_name?: string;
+    paid_amount?: number;
+    released_amount?: number;
+  };
+  const integrationResults: Record<string, unknown> = {
+    google_group: googleWarnings.length ? { status: "needs_attention", warnings: googleWarnings } : { status: "not_required_or_complete" },
+    propared: { status: "manual_review", message: "Remove or disable this person’s Propared access manually if the shared link is still available to them." }
+  };
+  const warnings = [...googleWarnings];
+
+  try {
+    await vacateAssignmentInPlaybill(input.projectId, input.assignmentId);
+    integrationResults.playbill = { status: "vacated" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Playbill could not be vacated.";
+    integrationResults.playbill = { status: "failed", error: message };
+    warnings.push(`Playbill needs attention: ${message}`);
+  }
+
+  if (outcome.offboarding_id) {
+    await admin.from("guest_artist_offboardings").update({
+      status: warnings.length ? "needs_attention" : "completed",
+      integration_results: integrationResults,
+      updated_at: new Date().toISOString()
+    }).eq("id", outcome.offboarding_id);
+  }
+
+  revalidatePath(`/projects/${input.projectId}`);
+  revalidatePath(`/projects/${input.projectId}/roles`);
+  revalidatePath(`/projects/${input.projectId}/people`);
+  revalidatePath(`/projects/${input.projectId}/publicity`);
+  revalidatePath(`/projects/${input.projectId}/onboarding`);
+  revalidatePath(`/projects/${input.projectId}/integrations`);
+
+  const paid = Number(outcome.paid_amount ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const released = Number(outcome.released_amount ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const summary = `${outcome.person_name ?? "Guest artist"} offboarded. Paid history preserved (${paid}); unpaid balance released (${released}).`;
+  redirect(projectAssignmentSuccessPath(
+    input.projectId,
+    warnings.length
+      ? `${summary} Follow-up needed: ${warnings.join(" ")} Review Propared access manually.`
+      : `${summary} Review Propared access manually.`,
+    `assignment-${input.assignmentId}`
+  ));
 }
 
 export async function addPersonNoteAction(formData: FormData) {

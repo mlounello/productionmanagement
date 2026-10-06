@@ -64,6 +64,16 @@ export type TheatreBudgetContractSummary = TheatreBudgetContractStatus & {
   production_project_id: string;
   contract_number: string | null;
   contract_role: string | null;
+  contract_value: number;
+  engagement_status: "active" | "completed" | "terminated";
+  terminated_on: string | null;
+  released_amount: number;
+  installments: Array<{
+    id: string;
+    installment_number: number;
+    installment_amount: number;
+    status: "planned" | "check_request_submitted" | "check_paid" | "cancelled";
+  }>;
   project_name: string;
   project_season: string | null;
   production_project_name: string;
@@ -79,7 +89,7 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
   const { data, error } = await supabase
     .schema("app_theatre_budget")
     .from("contracts")
-    .select("id, project_id, production_project_id, guest_artist_id, contract_number, contract_role, workflow_status, updated_at, accounting_project:projects!contracts_project_id_fkey(name, season), production_project:projects!contracts_production_project_id_fkey(name, season)")
+    .select("id, project_id, production_project_id, guest_artist_id, contract_number, contract_role, contract_value, workflow_status, engagement_status, terminated_on, released_amount, updated_at, contract_installments(id, installment_number, installment_amount, status), accounting_project:projects!contracts_project_id_fkey(name, season), production_project:projects!contracts_production_project_id_fkey(name, season)")
     .in("guest_artist_id", guestArtistIds)
     .order("updated_at", { ascending: false });
   if (error) return { data: [], error: error.message };
@@ -89,6 +99,12 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
       const project = Array.isArray(projectRelation) ? projectRelation[0] : projectRelation;
       const productionProjectRelation = row.production_project as unknown as { name?: string; season?: string | null } | Array<{ name?: string; season?: string | null }> | null;
       const productionProject = Array.isArray(productionProjectRelation) ? productionProjectRelation[0] : productionProjectRelation;
+      const installmentRelation = row.contract_installments as unknown as Array<{
+        id?: string;
+        installment_number?: number;
+        installment_amount?: number;
+        status?: TheatreBudgetContractSummary["installments"][number]["status"];
+      }> | null;
       return {
         id: String(row.id),
         project_id: String(row.project_id),
@@ -96,6 +112,16 @@ export async function fetchTheatreBudgetContractSummaries(guestArtistIds: string
         guest_artist_id: String(row.guest_artist_id),
         contract_number: row.contract_number ? String(row.contract_number) : null,
         contract_role: row.contract_role ? String(row.contract_role) : null,
+        contract_value: Number(row.contract_value ?? 0),
+        engagement_status: (row.engagement_status ?? "active") as TheatreBudgetContractSummary["engagement_status"],
+        terminated_on: row.terminated_on ? String(row.terminated_on) : null,
+        released_amount: Number(row.released_amount ?? 0),
+        installments: (installmentRelation ?? []).map((installment) => ({
+          id: String(installment.id),
+          installment_number: Number(installment.installment_number ?? 0),
+          installment_amount: Number(installment.installment_amount ?? 0),
+          status: String(installment.status ?? "planned") as TheatreBudgetContractSummary["installments"][number]["status"]
+        })).sort((left, right) => left.installment_number - right.installment_number),
         workflow_status: row.workflow_status as TheatreBudgetContractStatus["workflow_status"],
         updated_at: String(row.updated_at),
         project_name: project?.name ? String(project.name) : "Unnamed Theatre Budget project",

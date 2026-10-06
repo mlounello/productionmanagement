@@ -134,9 +134,11 @@ The safe Theatre Budget sync progression is:
 - suggested matches by existing external link, email, and normalized display name
 - explicit manual link from a Production Management role assignment to an existing Theatre Budget guest artist
 - optional creation of a new Theatre Budget guest artist only after a deliberate confirmation flow
-- no contract/payment/vendor/tax-field writes from Production Management
+- no general contract/payment/vendor/tax-field editing from Production Management
 
 If future updates are allowed, they must be reviewed, field-scoped, feature-gated, and auditable. Theatre Budget remains the authority for guest artist financial, contract, vendor, tax, and payment details.
+
+The one narrow cross-app exception is the owner-only guest artist offboarding transaction. It may mark a linked contract engagement terminated, cancel only still-planned installments and their commitments, and preserve both the original contract value and every paid installment. A submitted payment request blocks the transaction until it is resolved in Theatre Budget. The action writes an immutable Production Management offboarding record and audit entry; it does not expose private termination notes to the guest artist or send a termination email.
 
 The confirmed creation flow writes only a new guest artist identity/contact shell (`display_name`, email, phone, vendor number, active status) after duplicate checks. It never writes tax, address, FOAPAL, contract, check-handling, or payment data. Existing Budget guest-artist rows remain read-only from Production Management.
 

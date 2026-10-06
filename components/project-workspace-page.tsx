@@ -23,6 +23,7 @@ import {
   linkPlaybillShowAction,
   linkTheatreBudgetProjectAction,
   linkTheatreBudgetGuestArtistAction,
+  offboardGuestArtistAction,
   removeProjectLocationAction,
   replaceRoleAssignmentPersonAction,
   saveTheatreBudgetDepartmentAccessAction,
@@ -184,6 +185,17 @@ type BudgetAccessRow = {
   status: "pending_account" | "granted" | "exempt";
 };
 
+type GuestArtistOffboarding = {
+  id: string;
+  role_assignment_id: string;
+  effective_on: string;
+  original_contract_value: number;
+  paid_amount: number;
+  released_amount: number;
+  status: string;
+  integration_results: Record<string, unknown>;
+};
+
 type ProjectLocation = {
   id: string;
   location_id: string;
@@ -201,6 +213,10 @@ function titleCase(value: string) {
     .split("_")
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
 function parseDate(value: string | null) {
@@ -390,11 +406,14 @@ export default async function ProjectWorkspacePage({
 }) {
   await requireUser();
   const supabase = await createSupabaseServerClient();
-  const { data: project } = await supabase
-    .from("projects")
-    .select("id, title, project_type, status, starts_on, ends_on, poster_image_url")
-    .eq("id", projectId)
-    .maybeSingle();
+  const [{ data: project }, { data: appRole }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, title, project_type, status, starts_on, ends_on, poster_image_url")
+      .eq("id", projectId)
+      .maybeSingle(),
+    supabase.rpc("get_user_role")
+  ]);
 
   if (!project) {
     notFound();
@@ -465,12 +484,25 @@ export default async function ProjectWorkspacePage({
   const roles = (projectRoles ?? []) as ProjectRole[];
   const peopleRows = (people ?? []) as Person[];
   const assignmentRows = (roleAssignments ?? []) as RoleAssignment[];
+  const { data: guestArtistOffboardings } = workspace === "roles" && appRole === "owner" && assignmentRows.length
+    ? await supabase
+        .from("guest_artist_offboardings")
+        .select("id, role_assignment_id, effective_on, original_contract_value, paid_amount, released_amount, status, integration_results")
+        .in("role_assignment_id", assignmentRows.map((assignment) => assignment.id))
+    : { data: [] };
+  const offboardingByAssignmentId = new Map(
+    ((guestArtistOffboardings ?? []) as GuestArtistOffboarding[]).map((offboarding) => [offboarding.role_assignment_id, offboarding])
+  );
   const { data: projectOptions } = await supabase
     .from("projects")
     .select("id, title")
     .order("title", { ascending: true });
   const reusableRoleProjects = (projectOptions ?? []).filter((project) => project.id !== typedProject.id);
-  const projectPersonIds = Array.from(new Set(assignmentRows.map((assignment) => assignment.person_id)));
+  const projectPersonIds = Array.from(new Set(
+    assignmentRows
+      .filter((assignment) => !["declined", "withdrawn"].includes(assignment.status))
+      .map((assignment) => assignment.person_id)
+  ));
   const { data: personNotes } = workspace === "people" && projectPersonIds.length
     ? await supabase
         .from("person_notes")
@@ -652,7 +684,9 @@ export default async function ProjectWorkspacePage({
   const projectDirectoryPeople: DirectoryPerson[] = sortedProjectPersonIds.flatMap((personId) => {
     const person = peopleById.get(personId);
     if (!person) return [];
-    const personAssignments = assignmentRows.filter((assignment) => assignment.person_id === personId);
+    const personAssignments = assignmentRows.filter(
+      (assignment) => assignment.person_id === personId && !["declined", "withdrawn"].includes(assignment.status)
+    );
     const personNoteRows = notes.filter((note) => note.person_id === personId);
     return [{
       id: person.id,
@@ -1425,6 +1459,16 @@ export default async function ProjectWorkspacePage({
               const linkedGuestArtist = budgetLink ? budgetGuestArtistsById.get(budgetLink.external_id) : null;
               const budgetContract = budgetLink ? budgetContractByGuestArtistId.get(budgetLink.external_id) : null;
               const allBudgetContracts = budgetLink ? budgetContractsByGuestArtistId.get(budgetLink.external_id) ?? [] : [];
+              const offboarding = offboardingByAssignmentId.get(assignment.id);
+              const paidContractAmount = budgetContract?.installments
+                .filter((installment) => installment.status === "check_paid")
+                .reduce((total, installment) => total + installment.installment_amount, 0) ?? 0;
+              const releasableContractAmount = budgetContract?.installments
+                .filter((installment) => installment.status === "planned")
+                .reduce((total, installment) => total + installment.installment_amount, 0) ?? 0;
+              const submittedPaymentAmount = budgetContract?.installments
+                .filter((installment) => installment.status === "check_request_submitted")
+                .reduce((total, installment) => total + installment.installment_amount, 0) ?? 0;
               const departmentAccess = budgetAccessByAssignmentId.get(assignment.id) ?? [];
               const selectedDepartmentIds = new Set(departmentAccess.map((access) => access.production_category_id).filter((id): id is string => Boolean(id)));
               const budgetAccessExempt = departmentAccess.some((access) => access.access_not_required);
@@ -1452,6 +1496,7 @@ export default async function ProjectWorkspacePage({
                       />
                       {!confirmationExempt ? <StatusBadge status={assignment.confirmation_status} label={`Confirmation ${titleCase(assignment.confirmation_status)}`} /> : null}
                       {assignment.is_guest_artist ? <StatusBadge status="guest_artist" label="Guest Artist" /> : null}
+                      {offboarding || budgetContract?.engagement_status === "terminated" ? <StatusBadge status="withdrawn" label="Engagement Ended" /> : null}
                       {person?.is_siena_employee ? <StatusBadge status="linked" label="Siena Employee" /> : null}
                       <StatusBadge status={playbillShowRoleLink ? "linked" : assignment.playbill_sync_status} label={`Playbill ${playbillShowRoleLink ? "Linked" : titleCase(assignment.playbill_sync_status)}`} />
                       {(budgetAccessDecisionRequired || departmentAccess.length) ? <StatusBadge status={budgetAccessExempt ? "disabled" : selectedDepartmentIds.size ? budgetAccessPending ? "pending" : "linked" : "not_ready"} label={budgetAccessExempt ? "Budget Access Not Required" : selectedDepartmentIds.size ? `Budget Access ${budgetAccessPending ? "Invite Needed" : `${selectedDepartmentIds.size} Department${selectedDepartmentIds.size === 1 ? "" : "s"}`}` : "Budget Access Needed"} /> : null}
@@ -1522,6 +1567,7 @@ export default async function ProjectWorkspacePage({
                                   {contract.contract_role ? ` · ${contract.contract_role}` : ""}
                                   {contract.contract_number ? ` · Contract ${contract.contract_number}` : ""}
                                   {` · ${displayStatus(contract.workflow_status)}`}
+                                  {contract.engagement_status !== "active" ? ` · ${displayStatus(contract.engagement_status)}` : ""}
                                 </span>
                               )) : <span>No Theatre Budget contracts are linked to this payee profile yet.</span>}
                             </div>
@@ -1605,6 +1651,59 @@ export default async function ProjectWorkspacePage({
                       ) : null}
                     </div>
                   ) : null}
+                  {assignment.is_guest_artist && appRole === "owner" && budgetContract ? (
+                    <div className="integration-panel">
+                      <div>
+                        <strong>Guest Artist Offboarding</strong>
+                        <p className="muted">Owner-only workflow. It preserves the original contract and paid installments, releases eligible unpaid installments, withdraws the role, stops onboarding/publicity, and records private management notes.</p>
+                      </div>
+                      {offboarding || budgetContract.engagement_status === "terminated" ? (
+                        <div className="linked-record">
+                          <div>
+                            <strong>Engagement ended{offboarding?.effective_on ? ` ${offboarding.effective_on}` : budgetContract.terminated_on ? ` ${budgetContract.terminated_on}` : ""}</strong>
+                            <span>
+                              Original agreement {formatCurrency(offboarding?.original_contract_value ?? budgetContract.contract_value)} · Paid {formatCurrency(offboarding?.paid_amount ?? paidContractAmount)} · Released {formatCurrency(offboarding?.released_amount ?? budgetContract.released_amount)}
+                            </span>
+                            <span>{offboarding?.status === "needs_attention" ? "The financial and assignment changes completed, but an integration follow-up remains." : "Historical record retained. This person is no longer on the active project team."}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <details>
+                          <summary>End this guest artist engagement</summary>
+                          <form action={offboardGuestArtistAction} className="stacked-form">
+                            <input name="projectId" type="hidden" value={typedProject.id} />
+                            <input name="assignmentId" type="hidden" value={assignment.id} />
+                            <input name="contractId" type="hidden" value={budgetContract.id} />
+                            <div className="compact-list">
+                              <strong>Financial preview</strong>
+                              <span>Original contract: {formatCurrency(budgetContract.contract_value)}</span>
+                              <span>Already paid and preserved: {formatCurrency(paidContractAmount)}</span>
+                              <span>Planned unpaid balance eligible to release: {formatCurrency(releasableContractAmount)}</span>
+                              {submittedPaymentAmount ? <span className="setup-warning">Submitted payment awaiting resolution: {formatCurrency(submittedPaymentAmount)}. Offboarding will stop until this is resolved in Theatre Budget.</span> : null}
+                            </div>
+                            <label className="field">
+                              <span>Effective date</span>
+                              <input name="effectiveOn" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                            </label>
+                            <label className="field">
+                              <span>Private management record</span>
+                              <textarea name="privateNotes" rows={5} required placeholder="Document the reason, payment decision, and any follow-up. This is never visible to the guest artist." />
+                              <small>Stored only in restricted management records and the owner audit trail.</small>
+                            </label>
+                            <label className="checkbox-card">
+                              <input name="markPersonInactive" type="checkbox" defaultChecked />
+                              <span><strong>Mark the person inactive if they have no other active assignments</strong><small>The reusable person record and history remain. Other productions are never changed.</small></span>
+                            </label>
+                            <label className="checkbox-card">
+                              <input name="confirmOffboarding" type="checkbox" required />
+                              <span><strong>I understand this ends the live engagement</strong><small>No termination email is sent. Paid history is preserved; planned unpaid installments are cancelled; Playbill is vacated; Google Group and Propared follow-up will be shown.</small></span>
+                            </label>
+                            <button className="button danger" type="submit" disabled={submittedPaymentAmount > 0}>End engagement and release unpaid balance</button>
+                          </form>
+                        </details>
+                      )}
+                    </div>
+                  ) : null}
                   {budgetAccessEligible ? (
                     <div className="integration-panel">
                       <div>
@@ -1647,6 +1746,7 @@ export default async function ProjectWorkspacePage({
                       {selectedDepartmentIds.size && !budgetAccessExempt ? <form action={sendTheatreBudgetDepartmentAccessLinkAction}><input name="projectId" type="hidden" value={typedProject.id}/><input name="assignmentId" type="hidden" value={assignment.id}/><button className="button secondary" type="submit">{budgetAccessPending ? "Send" : "Resend"} Theatre Budget access email</button></form> : null}
                     </div>
                   ) : null}
+                  {!offboarding && budgetContract?.engagement_status !== "terminated" ? <>
                   <form action={replaceRoleAssignmentPersonAction} className="assignment-edit-form">
                     <input name="projectId" type="hidden" value={typedProject.id} />
                     <input name="assignmentId" type="hidden" value={assignment.id} />
@@ -1746,6 +1846,7 @@ export default async function ProjectWorkspacePage({
                       Remove assignment
                     </button>
                   </form>
+                  </> : null}
                 </details>
               );
             })
