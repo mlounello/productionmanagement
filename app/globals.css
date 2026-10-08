@@ -2734,6 +2734,24 @@ a.readiness-main:hover { color: var(--siena-green); }
   margin-bottom: 10px;
 }
 
+.publicity-bio-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: space-between;
+}
+
+.publicity-bio-limit {
+  background: #eaf4ef;
+  border: 1px solid #b9dbc9;
+  border-radius: 999px;
+  color: var(--siena-green);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
 .publicity-bio-guidance span {
   color: var(--muted);
   font-size: 13px;
@@ -2823,14 +2841,25 @@ a.readiness-main:hover { color: var(--siena-green); }
 
 .rich-counter {
   color: var(--muted);
-  font-size: 12px;
-  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.4;
+  margin: 8px 0 0;
   text-align: right;
 }
 
+.rich-counter.near {
+  color: #805d00;
+}
+
 .rich-counter.over {
+  background: #fff1f0;
+  border: 1px solid #f5c2c0;
+  border-radius: 8px;
   color: var(--danger);
+  font-size: 16px;
   font-weight: 800;
+  padding: 10px 12px;
 }
 
 .publicity-bio-preview {

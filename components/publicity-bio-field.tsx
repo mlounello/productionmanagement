@@ -23,6 +23,7 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
   const [restoredDraft, setRestoredDraft] = useState(false);
   const plainLength = useMemo(() => stripRichTextToPlain(value).length, [value]);
   const overLimit = characterLimit ? plainLength > characterLimit : false;
+  const nearLimit = characterLimit ? plainLength >= Math.floor(characterLimit * 0.85) : false;
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value;
@@ -76,7 +77,10 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
   return <div className={`publicity-rich-layout${compact ? " compact" : ""}`}>
     <div>
       <div className="publicity-bio-guidance">
-        <strong>{label}</strong>
+        <div className="publicity-bio-heading">
+          <strong>{label}</strong>
+          {characterLimit ? <span className="publicity-bio-limit">Maximum: {characterLimit} visible characters</span> : null}
+        </div>
         <span>Write only the biography itself. Do not include your name or role—the program adds both automatically.</span>
       </div>
       <div className="rich-toolbar" role="toolbar" aria-label={`${label} formatting`}
@@ -115,7 +119,11 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
         onKeyUp={rememberSelection}
         onMouseUp={rememberSelection}
         onBlur={() => setValue((current) => sanitizeRichText(current))} />
-      {characterLimit ? <p className={overLimit ? "rich-counter over" : "rich-counter"}>{plainLength} / {characterLimit} visible characters</p> : null}
+      {characterLimit ? <p className={`rich-counter${overLimit ? " over" : nearLimit ? " near" : ""}`} role={overLimit ? "alert" : "status"} aria-live="polite">
+        {overLimit
+          ? `${plainLength} of ${characterLimit} visible characters used — ${plainLength - characterLimit} over the limit. Shorten the bio before saving.`
+          : `${plainLength} of ${characterLimit} visible characters used · ${characterLimit - plainLength} remaining`}
+      </p> : null}
       <textarea className="sr-only" aria-hidden name={name} value={value} onChange={() => {}} />
       {restoredDraft ? <p className="setup-success" role="status">Your unsaved bio draft was restored in this browser session.</p> : null}
     </div>
