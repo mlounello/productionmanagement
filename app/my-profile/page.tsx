@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ProfileHeadshotUploader } from "@/components/profile-headshot-uploader";
 import { PublicityBioField, PublicityBioPreview } from "@/components/publicity-bio-field";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { FormDraftPreserver } from "@/components/form-draft-preserver";
 import {
   approveMyPublicitySubmissionAction,
   connectMyProfileAction,
@@ -69,6 +70,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
   const accomplishmentRows = (accomplishments ?? []) as unknown as Accomplishment[];
   const noteRows = (notes ?? []) as unknown as VisibleNote[];
   const availabilityRows = (availabilityAccess ?? []) as unknown as AvailabilityAccess[];
+  const profileFormId = `my-profile-form-${typedProfile.id}`;
   const settingsByProject = new Map(((publicitySettings ?? []) as PublicitySettings[]).map((item) => [item.project_id, item]));
   const rolesByProject = new Map<string, string[]>();
   for (const assignment of assignmentRows) {
@@ -95,7 +97,8 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
       <div className="grid two">
         <section className="panel">
           <p className="eyebrow">Profile Details</p><h2>Your information</h2>
-          <form action={updateMyPublicityProfileAction} className="stacked-form">
+          <form id={profileFormId} action={updateMyPublicityProfileAction} className="stacked-form">
+            <FormDraftPreserver formId={profileFormId} storageKey={`my-profile-fields:${typedProfile.id}`} excludeNames={["personId", "bio"]} clearWhenSuccessIncludes="Profile saved." />
             <input type="hidden" name="personId" value={typedProfile.id} />
             <label className="field"><span>Full name</span><input name="fullName" defaultValue={typedProfile.full_name} required /></label>
             <div className="form-row">
@@ -112,7 +115,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             </div>
             <label className="field"><span>Phone number</span><input name="phone" type="tel" defaultValue={typedProfile.phone} /></label>
             <details className="drawer-section"><summary>Interests, skills, and experience</summary><label className="field"><span>Technical interests (comma separated)</span><textarea name="technicalInterests" rows={3} defaultValue={typedProfile.technical_interests.join(", ")}/></label><label className="field"><span>Performance interests (comma separated)</span><textarea name="performanceInterests" rows={3} defaultValue={typedProfile.performance_interests.join(", ")}/></label><div className="form-row"><label className="field"><span>Vocal range</span><input name="vocalRange" defaultValue={typedProfile.vocal_range}/></label><label className="field"><span>Dance styles (comma separated)</span><input name="danceStyles" defaultValue={typedProfile.dance_styles.join(", ")}/></label></div><label className="field"><span>Instruments and proficiency</span><textarea name="instruments" rows={3} defaultValue={typedProfile.instruments}/></label><label className="field"><span>Special skills</span><textarea name="specialSkills" rows={3} defaultValue={typedProfile.special_skills}/></label><label className="field"><span>Performance experience</span><textarea name="performanceExperience" rows={4} defaultValue={typedProfile.performance_experience}/></label><label className="field"><span>Technical experience</span><textarea name="technicalExperience" rows={4} defaultValue={typedProfile.technical_experience}/></label><label className="field"><span>Dance and movement experience</span><textarea name="danceExperience" rows={3} defaultValue={typedProfile.dance_experience}/></label><label className="field"><span>Certifications and training</span><textarea name="certificationsTraining" rows={3} defaultValue={typedProfile.certifications_training}/></label></details>
-            <PublicityBioField name="bio" label="Overall publicity bio" initialValue={typedProfile.publicity_bio} previewName={typedProfile.preferred_name || typedProfile.full_name} previewRole="Role supplied by each production" characterLimit={350} />
+            <PublicityBioField name="bio" label="Overall publicity bio" initialValue={typedProfile.publicity_bio} previewName={typedProfile.preferred_name || typedProfile.full_name} previewRole="Role supplied by each production" characterLimit={350} draftKey={`my-profile-bio:${typedProfile.id}`} clearDraftWhenSuccessIncludes="Profile saved." />
             <p className="muted">New productions begin with this reusable 350-character bio. Saving it also fills any empty, unlocked show bio; a show-specific bio you already edited is never overwritten.</p>
             <button type="submit">Save my profile</button>
           </form>
@@ -166,7 +169,7 @@ export default async function MyProfilePage({ searchParams }: { searchParams?: P
             <p><strong>Credit:</strong> {submission.credited_name}</p>
             {locked ? <PublicityBioPreview bio={submission.bio} name={submission.credited_name} role={previewRole} /> : <form action={updateMyProjectPublicityBioAction} className="stacked-form">
               <input type="hidden" name="submissionId" value={submission.id} />
-              <PublicityBioField name="bio" label={`Bio for ${submission.projects?.title ?? "this production"}`} initialValue={submission.bio} previewName={submission.credited_name} previewRole={previewRole} characterLimit={settings?.bio_character_limit ?? 350} compact />
+              <PublicityBioField name="bio" label={`Bio for ${submission.projects?.title ?? "this production"}`} initialValue={submission.bio} previewName={submission.credited_name} previewRole={previewRole} characterLimit={settings?.bio_character_limit ?? 350} compact draftKey={`project-publicity-bio:${submission.id}`} clearDraftWhenSuccessIncludes="Show-specific bio saved" />
               <button type="submit" className="secondary">Save show-specific bio</button>
             </form>}
             {submission.headshot_url ? <p><a href={submission.headshot_url} target="_blank" rel="noreferrer">Review production headshot</a></p> : <p className="setup-warning">A headshot is still needed. Upload the reusable headshot above.</p>}

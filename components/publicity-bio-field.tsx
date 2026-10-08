@@ -11,18 +11,45 @@ type Props = {
   label: string;
   characterLimit?: number;
   compact?: boolean;
+  draftKey?: string;
+  clearDraftWhenSuccessIncludes?: string;
 };
 
-export function PublicityBioField({ name, initialValue, previewName, previewRole, label, characterLimit, compact = false }: Props) {
+export function PublicityBioField({ name, initialValue, previewName, previewRole, label, characterLimit, compact = false, draftKey, clearDraftWhenSuccessIncludes }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Range | null>(null);
+  const skipInitialDraftWrite = useRef(true);
   const [value, setValue] = useState(() => sanitizeRichText(initialValue));
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const plainLength = useMemo(() => stripRichTextToPlain(value).length, [value]);
   const overLimit = characterLimit ? plainLength > characterLimit : false;
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value;
   }, [value]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const success = new URLSearchParams(window.location.search).get("success") ?? "";
+    if (clearDraftWhenSuccessIncludes && success.includes(clearDraftWhenSuccessIncludes)) {
+      window.sessionStorage.removeItem(draftKey);
+      return;
+    }
+    const saved = window.sessionStorage.getItem(draftKey);
+    if (saved !== null && saved !== initialValue) {
+      setValue(sanitizeRichText(saved));
+      setRestoredDraft(true);
+    }
+  }, [clearDraftWhenSuccessIncludes, draftKey, initialValue]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    if (skipInitialDraftWrite.current) {
+      skipInitialDraftWrite.current = false;
+      return;
+    }
+    window.sessionStorage.setItem(draftKey, value);
+  }, [draftKey, value]);
 
   function rememberSelection() {
     const selection = window.getSelection();
@@ -90,6 +117,7 @@ export function PublicityBioField({ name, initialValue, previewName, previewRole
         onBlur={() => setValue((current) => sanitizeRichText(current))} />
       {characterLimit ? <p className={overLimit ? "rich-counter over" : "rich-counter"}>{plainLength} / {characterLimit} visible characters</p> : null}
       <textarea className="sr-only" aria-hidden name={name} value={value} onChange={() => {}} />
+      {restoredDraft ? <p className="setup-success" role="status">Your unsaved bio draft was restored in this browser session.</p> : null}
     </div>
     <aside className="publicity-bio-preview">
       <p className="eyebrow">Live Playbill Preview</p>
